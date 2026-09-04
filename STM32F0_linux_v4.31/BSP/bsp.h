@@ -95,7 +95,7 @@
 #define Host_IRQ_GPIO_Port      GPIOA
 
 #define STM32F0_IWDG_ENABLE   (1U)
-#define GET_RADAR_ENABLE      (0U)
+#define GET_RADAR_ENABLE      (1U)
 
 #ifndef TRUE
   #define TRUE  1
