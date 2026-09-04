@@ -264,7 +264,7 @@ void Uart4_int(void)
 
 
     /* Enable TX && RX && RX interrupt function */
-    USART_FuncCmd(USART_UNIT, (USART_RX | USART_INT_RX | USART_RX_TIMEOUT | \
+    USART_FuncCmd(USART_UNIT, (USART_RX | USART_TX | USART_INT_RX | USART_RX_TIMEOUT | \
                                USART_INT_RX_TIMEOUT), ENABLE);
 }
 

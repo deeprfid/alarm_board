@@ -139,6 +139,7 @@ void TMR0_Config(uint16_t u16TimeoutBits);
 void Alarm_On(void);
 void Alarm_Off(void);
 int8_t Get_pdu_data(uint8_t *pdubuff);
+void Send_RadarStatus_to_Master(void);
 void Legal_Tag(void);
 void Check_alarm_state(void);
 void Check_Uart_Pdu(void);
