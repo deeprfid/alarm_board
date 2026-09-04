@@ -1,0 +1,42 @@
+# ============================================================
+# alarm_board 工作区 .gitignore
+# 内容：两个固件工程 + 根目录管理文件（CHANGELOG.md / README.md）
+# 规则：仅忽略“生成物/个人设置/临时文件”，源码头文件一律入库
+# ============================================================
+
+# ---------- Windows / 通用临时文件 ----------
+Thumbs.db
+Desktop.ini
+*.bak
+*.tmp
+*.orig
+*.swp
+
+# ---------- 本仓库只读分析用临时产物（不入库，随时可删） ----------
+_src_utf8/
+_mirror.ps1
+
+# ---------- Keil MDK：用户态文件 ----------
+*.uvguix.*
+*.uvoptx
+EventRecorderStub.scvd
+
+# ---------- STM32F0_linux_v4.31：MDK-ARM 编译输出 ----------
+STM32F0_linux_v4.31/MDK-ARM/STM32F030/
+STM32F0_linux_v4.31/MDK-ARM/DebugConfig/
+
+# ---------- Radar_V4.2_2026_0425_MOS：IDE 用户/构建目录 ----------
+Radar_V4.2_2026_0425_MOS/projects/EWARM/settings/
+Radar_V4.2_2026_0425_MOS/projects/GCC/.settings/
+
+# ---------- 通用编译产物（保险，如散落在工程外的 .o/.axf） ----------
+*.o
+*.axf
+*.map
+*.lst
+*.d
+*.dep
+*.crf
+*.lnp
+*.iex
+*.build_log.htm
