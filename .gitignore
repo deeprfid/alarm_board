@@ -41,3 +41,9 @@ Radar_V4.2_2026_0425_MOS/projects/GCC/.settings/
 *.lnp
 *.iex
 *.build_log.htm
+# ---------- 老版本参照工程备份（只读参考，不入库） ----------
+docs/Radar_backup/
+docs/Radar_V3.2_2025-0430.rar
+_cosmetic.ps1
+_mvp_edits.ps1
+_mirror3.ps1
