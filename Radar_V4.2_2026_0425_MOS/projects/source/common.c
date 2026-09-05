@@ -414,7 +414,7 @@ uint16_t Ucode_read(uint32_t *rngkey, uint16_t *uidkey)
 {
     uint16_t crcdata = 0, crcdata1 = 0;
     uint32_t UniqueID = 0;
-    uint32_t magic_code = 0xA5A55A5A;
+    volatile uint32_t magic_code = 0xA5A55A5A;
     stc_efm_unique_id_t efm_unique_id = {0};
 
     uint8_t Hash_table[HASH_MSG_DIGEST_SIZE];
@@ -433,7 +433,7 @@ uint16_t Ucode_read(uint32_t *rngkey, uint16_t *uidkey)
     magic_code = UniqueID ^ ((crcdata << 16) | (crcdata1));
 
     #if Custom_By_SZBMA
-    return (magic_code == 0xC1A53979) ? 1 : 0;
+    return (magic_code == 0x73CDB9C8) ? 1 : 0;
     #else
     return 1;
 
