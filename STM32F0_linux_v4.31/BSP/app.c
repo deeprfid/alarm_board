@@ -284,6 +284,154 @@ void Broadcast_Get_Radar_Status(void)
 
 uint8_t Chaneel_ID[16]={0};
 
+/* ===== variable-length frame core (0xAA) - channel links only ===== */
+#define FRAME_HDR_AA           (0xAAu)
+#define FRAME_HDR_LEG_GPIO     (0x55u)
+#define FRAME_MAX_PAYLOAD      (251u)
+#define FRAME_VAR_TOTAL_MAX    (257u)
+#define FRAME_EV_NONE          (0)
+#define FRAME_EV_LEGACY        (1)
+#define FRAME_EV_VAR           (2)
+typedef struct
+{
+    uint8_t  state;
+    uint8_t  len;
+    uint16_t idx;
+    uint8_t  buf[FRAME_VAR_TOTAL_MAX];
+} frame_rx_t;
+static uint16_t fr_crc16(const uint8_t *p, uint16_t n)
+{
+    uint16_t crc = 0xFFFFu;
+    uint16_t i, j;
+    for (i = 0u; i < n; i++)
+    {
+        crc ^= (uint16_t)((uint16_t)p[i] << 8);
+        for (j = 0u; j < 8u; j++)
+        {
+            if (crc & 0x8000u) { crc = (uint16_t)((crc << 1) ^ 0x1021u); }
+            else { crc = (uint16_t)(crc << 1); }
+        }
+    }
+    return crc;
+}
+static void frame_rx_init(frame_rx_t *rx)
+{
+    rx->state = 0u; rx->len = 0u; rx->idx = 0u;
+}
+static int frame_rx_feed(frame_rx_t *rx, uint8_t b)
+{
+    uint16_t t;
+    uint16_t c;
+    if (rx->state == 0u)
+    {
+        if (b == FRAME_HDR_LEG_GPIO) { rx->buf[0] = b; rx->idx = 1u; rx->state = 1u; }
+        else if (b == FRAME_HDR_AA)   { rx->buf[0] = b; rx->idx = 1u; rx->state = 2u; }
+        return FRAME_EV_NONE;
+    }
+    if (rx->state == 1u)
+    {
+        rx->buf[rx->idx++] = b;
+        if (rx->idx >= 32u) { rx->state = 0u; rx->idx = 0u; return FRAME_EV_LEGACY; }
+        return FRAME_EV_NONE;
+    }
+    if (rx->state == 2u)
+    {
+        rx->len = b;
+        if ((rx->len < 2u) || (rx->len > (FRAME_MAX_PAYLOAD + 2u))) { rx->state = 0u; rx->idx = 0u; return FRAME_EV_NONE; }
+        rx->buf[rx->idx++] = b;
+        rx->state = 3u;
+        return FRAME_EV_NONE;
+    }
+    rx->buf[rx->idx++] = b;
+    t = (uint16_t)((uint16_t)rx->len + 4u);
+    if (rx->idx >= t)
+    {
+        rx->state = 0u; rx->idx = 0u;
+        c = fr_crc16(rx->buf, (uint16_t)(t - 2u));
+        if (((uint8_t)(c & 0xFFu) == rx->buf[t - 2u]) && ((uint8_t)(c >> 8) == rx->buf[t - 1u]))
+        {
+            return FRAME_EV_VAR;
+        }
+    }
+    return FRAME_EV_NONE;
+}
+/* ===== end frame core part1 ===== */
+
+#define STM_PORT_CNT (5u)
+typedef struct
+{
+    COM_PORT_E port;
+    frame_rx_t rx;
+    uint32_t lastRcvMs;
+    uint8_t  radarVal;
+    uint32_t varCnt;
+    uint8_t  varCmd;
+    uint8_t  varAddr;
+    uint8_t  varPlen;
+} port_rx_t;
+static port_rx_t s_ports[STM_PORT_CNT];
+static const COM_PORT_E s_portCom[STM_PORT_CNT] = { COM6, COM2, COM3, COM4, COM5 };
+static const uint8_t s_portCh[STM_PORT_CNT][2] = { {1,0},{2,3},{4,5},{6,7},{8,0} };
+static int stm_var_send(COM_PORT_E port, uint8_t cmd, uint8_t addr, const uint8_t *pl, uint8_t plen)
+{
+    uint8_t out[FRAME_VAR_TOTAL_MAX];
+    uint8_t lenv;
+    uint16_t total, c;
+    if (plen > FRAME_MAX_PAYLOAD) { return 0; }
+    lenv = (uint8_t)(plen + 2u);
+    total = (uint16_t)lenv + 4u;
+    out[0] = FRAME_HDR_AA; out[1] = lenv; out[2] = cmd; out[3] = addr;
+    if (plen > 0u) { memcpy(&out[4], pl, plen); }
+    c = fr_crc16(out, (uint16_t)(total - 2u));
+    out[total - 2u] = (uint8_t)(c & 0xFFu);
+    out[total - 1u] = (uint8_t)(c >> 8);
+    comSendBuf(port, out, total);
+    return (int)total;
+}
+static void stm_handle_legacy(port_rx_t *pr, uint32_t now)
+{
+    uint16_t c;
+    uint16_t r0;
+    if (pr->rx.buf[0] != GPIOHEAD) { return; }
+    c = ipcCrc(pr->rx.buf, APP_FRAME_LEN_MAX - 2u);
+    if ((uint16_t)(pr->rx.buf[30] | ((uint16_t)pr->rx.buf[31] << 8)) != c) { return; }
+    r0 = (uint16_t)(pr->rx.buf[10] | ((uint16_t)pr->rx.buf[11] << 8));
+    pr->radarVal = (r0 == 1u) ? 1u : 0u;
+    pr->lastRcvMs = now;
+}
+static void stm_handle_var(port_rx_t *pr)
+{
+    pr->varCmd  = pr->rx.buf[2];
+    pr->varAddr = pr->rx.buf[3];
+    pr->varPlen = (uint8_t)(pr->rx.len - 2u);
+    pr->varCnt++;
+}
+static void ping_all(uint8_t idx)
+{
+    static const uint8_t plens[4] = { 0u, 8u, 32u, 80u };
+    uint8_t pl[80];
+    uint8_t plen;
+    uint8_t i;
+    plen = plens[idx & 3u];
+    for (i = 0u; i < plen; i++) { pl[i] = (uint8_t)(0xA0u + i); }
+    for (i = 0u; i < STM_PORT_CNT; i++)
+    {
+        (void)stm_var_send(s_portCom[i], 0x01u, (uint8_t)(i + 1u), pl, plen);
+    }
+}
+static void refresh_chaneel(uint32_t now)
+{
+    uint8_t i, v;
+    memset(Chaneel_ID, 0, sizeof(Chaneel_ID));
+    for (i = 0u; i < STM_PORT_CNT; i++)
+    {
+        v = ((now - s_ports[i].lastRcvMs) <= 150u) ? s_ports[i].radarVal : 0u;
+        Chaneel_ID[s_portCh[i][0]] = v;
+        if (s_portCh[i][1] != 0u) { Chaneel_ID[s_portCh[i][1]] = v; }
+    }
+}
+/* ===== end frame core part2 ===== */
+
 void Send_RadarStatus_to_Master(uint8_t antid)
 {
 	 radar_pdu  report_radar;
@@ -329,31 +477,55 @@ void Check_RadarStatus(COM_PORT_E _ucPort,uint8_t *alarm_done)
 
 void Radar_thread(void)
 {
-	 static uint32_t timeout_get=0,timeout_send=0;
-   uint32_t        now= HAL_GetTick();
-    
-	 if(now-timeout_get > 80  || (now < timeout_get))
-	 {
-	   timeout_get=now;	 
-	 }
-	 
-	 if(now-timeout_send > 50  || (now < timeout_send))
-	 {
-		 timeout_send=now;
-		 memset(Chaneel_ID,0,sizeof(Chaneel_ID)); 
-		 Check_RadarStatus(COM6,&Chaneel_ID[1]);//mainboard CH1
-		 Check_RadarStatus(COM2,&Chaneel_ID[2]);//mainboard CH2
-		 Chaneel_ID[3]=Chaneel_ID[2];
-     Check_RadarStatus(COM3,&Chaneel_ID[4]);//mainboard CH3
-		 Chaneel_ID[5]=Chaneel_ID[4];
-     Check_RadarStatus(COM4,&Chaneel_ID[6]);//mainboard CH4
-		 Chaneel_ID[7]=Chaneel_ID[6];
-     Check_RadarStatus(COM5,&Chaneel_ID[8]);//mainboard CH5
-	   Broadcast_Get_Radar_Status();
-	 
-	 
-	 }
+    static uint32_t last_send = 0u, last_ping = 0u;
+    static uint8_t  ping_idx = 0u;
+    static uint8_t  inited = 0u;
+    uint32_t now = HAL_GetTick();
+    uint8_t b;
+    uint8_t i;
+    int ev;
 
+    if (inited == 0u)
+    {
+        for (i = 0u; i < STM_PORT_CNT; i++)
+        {
+            s_ports[i].port = s_portCom[i];
+            frame_rx_init(&s_ports[i].rx);
+            s_ports[i].lastRcvMs = 0u;
+            s_ports[i].radarVal = 0u;
+            s_ports[i].varCnt = 0u;
+        }
+        inited = 1u;
+    }
 
-}	
+    for (i = 0u; i < STM_PORT_CNT; i++)
+    {
+        while (comGetChar(s_ports[i].port, &b))
+        {
+            ev = frame_rx_feed(&s_ports[i].rx, b);
+            if (ev == FRAME_EV_LEGACY)
+            {
+                stm_handle_legacy(&s_ports[i], now);
+            }
+            else if (ev == FRAME_EV_VAR)
+            {
+                stm_handle_var(&s_ports[i]);
+            }
+        }
+    }
+
+    if ((now - last_send >= 50u) || (now < last_send))
+    {
+        last_send = now;
+        refresh_chaneel(now);
+        Broadcast_Get_Radar_Status();
+    }
+
+    if ((now - last_ping >= 1000u) || (now < last_ping))
+    {
+        last_ping = now;
+        ping_all(ping_idx);
+        ping_idx = (uint8_t)((ping_idx + 1u) & 3u);
+    }
+}
 #endif
