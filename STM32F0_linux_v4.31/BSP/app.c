@@ -278,7 +278,7 @@ void Broadcast_Get_Radar_Status(void)
     comSendBuf(COM3, (uint8_t *)&Get_Radar_Data,sizeof(Get_Radar_Data));	//mainboard CH3
     comSendBuf(COM4, (uint8_t *)&Get_Radar_Data,sizeof(Get_Radar_Data));  //mainboard CH4
     comSendBuf(COM5, (uint8_t *)&Get_Radar_Data,sizeof(Get_Radar_Data));	//mainboard CH5
-    txcnt++;
+    txcnt += 5u;
 
 
 }
@@ -510,10 +510,7 @@ void Check_RadarStatus(COM_PORT_E _ucPort,uint8_t *alarm_done)
 static const COM_PORT_E aa_com[5] = { COM6, COM2, COM3, COM4, COM5 };
 static const uint8_t aa_ch[5][2] = { {1,0},{2,3},{4,5},{6,7},{8,0} };
 static uint32_t aa_next_ms[5];
-static uint32_t aa_pong_cnt[5];
-static uint32_t aa_tx_cnt = 0u;
-static uint32_t aa_rx_cnt = 0u;
-static uint32_t aa_to_cnt = 0u;
+
 static uint8_t  aa_win = 0xFFu;
 static uint32_t aa_win_until = 0u;
 static uint8_t  aa_state = 0u;
@@ -561,7 +558,7 @@ static void aa_open_window(uint8_t idx, uint32_t now)
     out[total - 2u] = (uint8_t)(c & 0xFFu);
     out[total - 1u] = (uint8_t)(c >> 8);
     comSendBuf(aa_com[idx], out, total);
-    aa_tx_cnt++;
+    txcnt++;
     aa_cycle++;
     aa_next_ms[idx] = now + AA_PING_MS;
 }
@@ -589,11 +586,7 @@ static void aa_feed(uint8_t b)
         c = aa_crc16(aa_buf, (uint16_t)(t - 2u));
         if (((uint8_t)(c & 0xFFu) == aa_buf[t - 2u]) && ((uint8_t)(c >> 8) == aa_buf[t - 1u]))
         {
-            if (aa_buf[2] == 0x81u)
-            {
-                aa_rx_cnt++;
-                if (aa_win < 5u) { aa_pong_cnt[aa_win]++; }
-            }
+            if (aa_buf[2] == 0x81u) { rxcnt++; }
             aa_state = 0u; aa_idx = 0u;
             aa_win = 0xFFu;
             return;
@@ -612,7 +605,7 @@ static void aa_broadcast_except(uint8_t skipidx)
     q.crc = ipcCrc((uint8_t *)&q, sizeof(q) - 2u);
     for (i = 0u; i < 5u; i++)
     {
-        if (i != skipidx) { comSendBuf(aa_com[i], (uint8_t *)&q, sizeof(q)); }
+        if (i != skipidx) { comSendBuf(aa_com[i], (uint8_t *)&q, sizeof(q)); txcnt++; }
     }
 }
 /* ===== end AA helpers ===== */
@@ -660,12 +653,10 @@ void Radar_thread(void)
         if ((aa_state != 0u) && ((now - aa_last_ms) > 30u))
         {
             aa_state = 0u; aa_idx = 0u; aa_win = 0xFFu;
-            aa_to_cnt++;
         }
         if ((aa_win < 5u) && (now >= aa_win_until))
         {
             aa_state = 0u; aa_idx = 0u; aa_win = 0xFFu;
-            aa_to_cnt++;
         }
         if (aa_win < 5u) { aa_broadcast_except(aa_win); }
         else             { aa_broadcast_except(0xFFu); }
