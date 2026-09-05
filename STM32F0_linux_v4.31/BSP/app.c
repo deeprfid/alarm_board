@@ -656,7 +656,7 @@ static void aa_broadcast_all(uint32_t now)
     uint16_t c;
     plen = plens[aa_cycle & 3u];
     total = (uint16_t)plen + 6u;
-    for (p = 0u; p < 5u; p++)
+    for (p = 0u; p < 1u; p++)   /* TEMP single-port experiment: only CH1 (aa_com[0]=COM6) */
     {
         out[0] = 0xAAu;
         out[1] = (uint8_t)(plen + 2u);
