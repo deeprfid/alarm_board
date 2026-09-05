@@ -718,12 +718,13 @@ static void UartIRQ(UART_T *_pUart)
     uint32_t ui = uart_idx(_pUart->uart);
 
     /* 处理接收中断  */
-    if ((isrflags & USART_ISR_RXNE) != RESET)
+    while ((isrflags & USART_ISR_RXNE) != RESET)
     {
         /* 从串口接收数据寄存器读取数据存放到接收FIFO */
         uint8_t ch;
 
         ch = READ_REG(_pUart->uart->RDR);
+        isrflags = READ_REG(_pUart->uart->ISR);   /* refresh for RX drain loop */
         _pUart->pRxBuf[_pUart->usRxWrite] = ch;
 
         if (++_pUart->usRxWrite >= _pUart->usRxBufSize)
@@ -874,10 +875,11 @@ void USART2_IRQHandler(void)
 
 void USART3_6_IRQHandler(void)
 {
-    UartIRQ(&g_tUart3);
-    UartIRQ(&g_tUart4);
-    UartIRQ(&g_tUart5);
-    UartIRQ(&g_tUart6);
+    uint32_t fl;
+    fl = USART3->ISR; if ((fl & (USART_ISR_RXNE | USART_ISR_ORE | USART_ISR_TXE | USART_ISR_TC)) != 0u) { UartIRQ(&g_tUart3); }
+    fl = USART4->ISR; if ((fl & (USART_ISR_RXNE | USART_ISR_ORE | USART_ISR_TXE | USART_ISR_TC)) != 0u) { UartIRQ(&g_tUart4); }
+    fl = USART5->ISR; if ((fl & (USART_ISR_RXNE | USART_ISR_ORE | USART_ISR_TXE | USART_ISR_TC)) != 0u) { UartIRQ(&g_tUart5); }
+    fl = USART6->ISR; if ((fl & (USART_ISR_RXNE | USART_ISR_ORE | USART_ISR_TXE | USART_ISR_TC)) != 0u) { UartIRQ(&g_tUart6); }
 }
 
 #endif

@@ -386,6 +386,7 @@ typedef struct
 static port_rx_t s_ports[STM_PORT_CNT];
 static uint32_t s_ping_next[STM_PORT_CNT];
 static uint8_t  s_ping_len[STM_PORT_CNT];
+static uint32_t s_query_next[STM_PORT_CNT];
 static const COM_PORT_E s_portCom[STM_PORT_CNT] = { COM6, COM2, COM3, COM4, COM5 };
 static const uint8_t s_portCh[STM_PORT_CNT][2] = { {1,0},{2,3},{4,5},{6,7},{8,0} };
 static int stm_var_send(COM_PORT_E port, uint8_t cmd, uint8_t addr, const uint8_t *pl, uint8_t plen)
@@ -421,6 +422,16 @@ static void stm_handle_var(port_rx_t *pr)
     pr->varAddr = pr->rx.buf[3];
     pr->varPlen = (uint8_t)(pr->rx.len - 2u);
     pr->varCnt++;
+}
+static void send_legacy_query(COM_PORT_E port)
+{
+    alarm_pdu Get_Radar_Data;
+    memset(&Get_Radar_Data, 0, sizeof(Get_Radar_Data));
+    Get_Radar_Data.FrameHead  = GPIOHEAD;
+    Get_Radar_Data.Pdu_len    = sizeof(Get_Radar_Data);
+    Get_Radar_Data.Radarcfg[0]= 0xFF;
+    Get_Radar_Data.crc = ipcCrc((uint8_t *)&Get_Radar_Data, sizeof(Get_Radar_Data) - 2u);
+    comSendBuf(port, (uint8_t *)&Get_Radar_Data, sizeof(Get_Radar_Data));
 }
 static void ping_one(uint8_t port_idx)
 {
@@ -492,7 +503,6 @@ void Check_RadarStatus(COM_PORT_E _ucPort,uint8_t *alarm_done)
 
 void Radar_thread(void)
 {
-    static uint32_t last_send = 0u;
     static uint8_t  inited = 0u;
     uint32_t now = HAL_GetTick();
     uint8_t b;
@@ -513,6 +523,7 @@ void Radar_thread(void)
             s_ports[i].legCrcFail = 0u;
             s_ping_next[i] = now + (uint32_t)i * 200u;   /* stagger pings 200ms apart */
             s_ping_len[i] = 0u;
+            s_query_next[i] = now + (uint32_t)i * 5u;      /* stagger legacy query 5ms apart */
         }
         inited = 1u;
     }
@@ -540,12 +551,15 @@ void Radar_thread(void)
         }
     }
 
-    if ((now - last_send >= 50u) || (now < last_send))
+    for (i = 0u; i < STM_PORT_CNT; i++)
     {
-        last_send = now;
-        refresh_chaneel(now);
-        Broadcast_Get_Radar_Status();
+        if ((int32_t)(now - s_query_next[i]) >= 0)
+        {
+            send_legacy_query(s_portCom[i]);
+            s_query_next[i] = now + 50u;
+        }
     }
+    refresh_chaneel(now);
 
     for (i = 0u; i < STM_PORT_CNT; i++)
     {
