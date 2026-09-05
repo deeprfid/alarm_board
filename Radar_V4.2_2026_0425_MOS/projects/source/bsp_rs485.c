@@ -4,8 +4,10 @@
  ******************************************************************************/
 #include "main.h"
 
+/* RX DMA window: whole variable frame (0xAA max 257B) fits one block */
+#define RS485_RX_WIN               (512u)
 
-__align(64) uint8_t m_au8RxBuf  [APP_FRAME_LEN_MAX];
+__align(64) uint8_t m_au8RxBuf  [RS485_RX_WIN];
 __align(64) uint8_t AlarmRingBuf[APP_FRAME_LEN_MAX];
 
 stc_ring_buf_t m_stcRingBuf;
@@ -27,7 +29,7 @@ __align(64) uint8_t m_au8DataBuf[RING_BUF_SIZE];
 static void RX_DMA_TC_IrqCallback(void)
 {
     /* variable-length support: push full 32B chunk, re-arm DMA immediately */
-    BUF_Write(&m_stcRingBuf, m_au8RxBuf, APP_FRAME_LEN_MAX);
+    BUF_Write(&m_stcRingBuf, m_au8RxBuf, RS485_RX_WIN);
     AOS_SW_Trigger();
     DMA_ClearTransCompleteStatus(RX_DMA_UNIT, RX_DMA_TC_FLAG);
 }
@@ -38,7 +40,7 @@ static void USART_RxTimeout_IrqCallback(void)
     uint16_t got;
 
     m_u16RxLen = (uint16_t)DMA_GetTransCount(RX_DMA_UNIT, RX_DMA_CH);
-    got = (uint16_t)(APP_FRAME_LEN_MAX - m_u16RxLen);
+    got = (uint16_t)(RS485_RX_WIN - m_u16RxLen);
     if (got > 0u)
     {
         BUF_Write(&m_stcRingBuf, m_au8RxBuf, got);
