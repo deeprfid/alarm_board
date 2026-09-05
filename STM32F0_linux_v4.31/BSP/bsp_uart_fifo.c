@@ -568,9 +568,9 @@ static void UartSend(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen)
         {
             __IO uint16_t usCount;
 
-            CLEAR_BIT(_pUart->uart->CR1, USART_CR1_TXEIE);
+            HAL_NVIC_DisableIRQ(_pUart->uartirq);
             usCount = _pUart->usTxCount;
-            SET_BIT(_pUart->uart->CR1, USART_CR1_TXEIE);
+            HAL_NVIC_EnableIRQ(_pUart->uartirq);
 
             if (usCount < _pUart->usTxBufSize)
             {
@@ -589,7 +589,7 @@ static void UartSend(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen)
         _pUart->pTxBuf[_pUart->usTxWrite] = _ucaBuf[i];
 
         //DISABLE_INT();
-        CLEAR_BIT(_pUart->uart->CR1, USART_CR1_TXEIE);
+        HAL_NVIC_DisableIRQ(_pUart->uartirq);
 
         if (++_pUart->usTxWrite >= _pUart->usTxBufSize)
         {
@@ -598,7 +598,7 @@ static void UartSend(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen)
 
         _pUart->usTxCount++;
         //ENABLE_INT();
-        SET_BIT(_pUart->uart->CR1, USART_CR1_TXEIE);
+        HAL_NVIC_EnableIRQ(_pUart->uartirq);
     }
 
     SET_BIT(_pUart->uart->CR1, USART_CR1_TXEIE);	/* 使能发送中断（缓冲区空） */
