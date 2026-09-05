@@ -284,6 +284,8 @@ void Broadcast_Get_Radar_Status(void)
 
 uint8_t Chaneel_ID[16]={0};
 
+#define FRAME_AA_EN (0u)  /* 1=启用 0xAA 不定长帧扩展(默认关, 用原版接收) */
+#if FRAME_AA_EN
 /* ===== variable-length frame core (0xAA) - channel links only ===== */
 #define FRAME_HDR_AA           (0xAAu)
 #define FRAME_HDR_LEG_GPIO     (0x55u)
@@ -450,6 +452,7 @@ static void refresh_chaneel(uint32_t now)
     }
 }
 /* ===== end frame core part2 ===== */
+#endif /* FRAME_AA_EN */
 
 void Send_RadarStatus_to_Master(uint8_t antid)
 {
@@ -496,71 +499,27 @@ void Check_RadarStatus(COM_PORT_E _ucPort,uint8_t *alarm_done)
 
 void Radar_thread(void)
 {
-    static uint32_t last_broadcast = 0u;
-    static uint8_t  inited = 0u;
+    static uint32_t timeout_get = 0u, timeout_send = 0u;
     uint32_t now = HAL_GetTick();
-    uint8_t b;
-    uint8_t i;
-    int ev;
 
-    if (inited == 0u)
+    if ((now - timeout_get > 80u) || (now < timeout_get))
     {
-        for (i = 0u; i < STM_PORT_CNT; i++)
-        {
-            s_ports[i].port = s_portCom[i];
-            frame_rx_init(&s_ports[i].rx);
-            s_ports[i].lastRcvMs = 0u;
-            s_ports[i].radarVal = 0u;
-            s_ports[i].varCnt = 0u;
-            s_ports[i].rxByteCnt = 0u;
-            s_ports[i].varCrcFail = 0u;
-            s_ports[i].legCrcFail = 0u;
-            s_ping_next[i] = now + (uint32_t)i * 200u;   /* stagger pings 200ms apart */
-            s_ping_len[i] = 0u;
-        }
-        inited = 1u;
+        timeout_get = now;
     }
 
-    for (i = 0u; i < STM_PORT_CNT; i++)
+    if ((now - timeout_send > 50u) || (now < timeout_send))
     {
-        frame_rx_guard(&s_ports[i].rx, now);
-        while (comGetChar(s_ports[i].port, &b))
-        {
-            s_ports[i].rx.lastByteMs = now;
-            s_ports[i].rxByteCnt++;
-            ev = frame_rx_feed(&s_ports[i].rx, b);
-            if (ev == FRAME_EV_LEGACY)
-            {
-                stm_handle_legacy(&s_ports[i], now);
-            }
-            else if (ev == FRAME_EV_VAR)
-            {
-                stm_handle_var(&s_ports[i]);
-            }
-            else if (ev == FRAME_EV_VAR_BAD)
-            {
-                s_ports[i].varCrcFail++;
-            }
-        }
-    }
-
-    if ((now - last_broadcast >= 50u) || (now < last_broadcast))
-    {
-        last_broadcast = now;
+        timeout_send = now;
+        memset(Chaneel_ID, 0, sizeof(Chaneel_ID));
+        Check_RadarStatus(COM6, &Chaneel_ID[1]);   /* mainboard CH1 */
+        Check_RadarStatus(COM2, &Chaneel_ID[2]);   /* mainboard CH2 */
+        Chaneel_ID[3] = Chaneel_ID[2];
+        Check_RadarStatus(COM3, &Chaneel_ID[4]);   /* mainboard CH3 */
+        Chaneel_ID[5] = Chaneel_ID[4];
+        Check_RadarStatus(COM4, &Chaneel_ID[6]);   /* mainboard CH4 */
+        Chaneel_ID[7] = Chaneel_ID[6];
+        Check_RadarStatus(COM5, &Chaneel_ID[8]);   /* mainboard CH5 */
         Broadcast_Get_Radar_Status();
     }
-    refresh_chaneel(now);
-
-#if FRAME_TEST_PING
-    for (i = 0u; i < STM_PORT_CNT; i++)
-    {
-        if ((int32_t)(now - s_ping_next[i]) >= 0)
-        {
-            ping_one(i);
-            s_ping_next[i] = now + 1000u;
-            s_ping_len[i]++;
-        }
-    }
-#endif
 }
 #endif
