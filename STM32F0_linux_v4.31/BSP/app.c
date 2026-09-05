@@ -262,9 +262,10 @@ void Check_Uart_Pdu(void)
 
 
 #if GET_RADAR_ENABLE
-
+static  uint32_t txcnt=0;
 void Broadcast_Get_Radar_Status(void)
 {
+	  
     alarm_pdu Get_Radar_Data;
     memset(&Get_Radar_Data, 0, sizeof(Get_Radar_Data));
     Get_Radar_Data.FrameHead  = GPIOHEAD;
@@ -277,7 +278,7 @@ void Broadcast_Get_Radar_Status(void)
     comSendBuf(COM3, (uint8_t *)&Get_Radar_Data,sizeof(Get_Radar_Data));	//mainboard CH3
     comSendBuf(COM4, (uint8_t *)&Get_Radar_Data,sizeof(Get_Radar_Data));  //mainboard CH4
     comSendBuf(COM5, (uint8_t *)&Get_Radar_Data,sizeof(Get_Radar_Data));	//mainboard CH5
-
+    txcnt++;
 
 
 }
@@ -465,7 +466,7 @@ void Send_RadarStatus_to_Master(uint8_t antid)
 	 report_radar.crc        = ipcCrc((uint8_t *)&report_radar, sizeof(report_radar) - 2);
 	 comSendBuf(COM1,(uint8_t *)&report_radar,sizeof(report_radar));
 }
-
+   static  uint32_t errcnt=0,rxcnt=0;
 void Check_RadarStatus(COM_PORT_E _ucPort,uint8_t *alarm_done)
 {
 
@@ -480,14 +481,17 @@ void Check_RadarStatus(COM_PORT_E _ucPort,uint8_t *alarm_done)
         if((Res_Radar_Data.crc == crcdata) && (Res_Radar_Data.FrameHead == GPIOHEAD) && Res_Radar_Data.Radarcfg[0] == true)
         {
 					  *alarm_done=1;
+					   rxcnt++;
 					
 				}	
 				else if ((Res_Radar_Data.crc == crcdata) && (Res_Radar_Data.FrameHead == GPIOHEAD) && Res_Radar_Data.Radarcfg[0] == false)
 				{
 				    *alarm_done=0;
+					   rxcnt++;
 				}
         else
 				{
+					errcnt++;
 				  comClearRxFifo(_ucPort);
 				}					
 	}
@@ -507,7 +511,7 @@ void Radar_thread(void)
         timeout_get = now;
     }
 
-    if ((now - timeout_send > 50u) || (now < timeout_send))
+    if ((now - timeout_send > 5u) || (now < timeout_send))
     {
         timeout_send = now;
         memset(Chaneel_ID, 0, sizeof(Chaneel_ID));
