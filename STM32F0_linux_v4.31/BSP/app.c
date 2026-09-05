@@ -293,6 +293,7 @@ uint8_t Chaneel_ID[16]={0};
 #define FRAME_EV_NONE          (0)
 #define FRAME_EV_LEGACY        (1)
 #define FRAME_EV_VAR           (2)
+#define FRAME_EV_VAR_BAD       (3)
 typedef struct
 {
     uint8_t  state;
@@ -361,6 +362,7 @@ static int frame_rx_feed(frame_rx_t *rx, uint8_t b)
         {
             return FRAME_EV_VAR;
         }
+        return FRAME_EV_VAR_BAD;
     }
     return FRAME_EV_NONE;
 }
@@ -374,11 +376,16 @@ typedef struct
     uint32_t lastRcvMs;
     uint8_t  radarVal;
     uint32_t varCnt;
+    uint32_t rxByteCnt;
+    uint32_t varCrcFail;
+    uint32_t legCrcFail;
     uint8_t  varCmd;
     uint8_t  varAddr;
     uint8_t  varPlen;
 } port_rx_t;
 static port_rx_t s_ports[STM_PORT_CNT];
+static uint32_t s_ping_next[STM_PORT_CNT];
+static uint8_t  s_ping_len[STM_PORT_CNT];
 static const COM_PORT_E s_portCom[STM_PORT_CNT] = { COM6, COM2, COM3, COM4, COM5 };
 static const uint8_t s_portCh[STM_PORT_CNT][2] = { {1,0},{2,3},{4,5},{6,7},{8,0} };
 static int stm_var_send(COM_PORT_E port, uint8_t cmd, uint8_t addr, const uint8_t *pl, uint8_t plen)
@@ -403,7 +410,7 @@ static void stm_handle_legacy(port_rx_t *pr, uint32_t now)
     uint16_t r0;
     if (pr->rx.buf[0] != GPIOHEAD) { return; }
     c = ipcCrc(pr->rx.buf, APP_FRAME_LEN_MAX - 2u);
-    if ((uint16_t)(pr->rx.buf[30] | ((uint16_t)pr->rx.buf[31] << 8)) != c) { return; }
+    if ((uint16_t)(pr->rx.buf[30] | ((uint16_t)pr->rx.buf[31] << 8)) != c) { pr->legCrcFail++; return; }
     r0 = (uint16_t)(pr->rx.buf[10] | ((uint16_t)pr->rx.buf[11] << 8));
     pr->radarVal = (r0 == 1u) ? 1u : 0u;
     pr->lastRcvMs = now;
@@ -415,18 +422,17 @@ static void stm_handle_var(port_rx_t *pr)
     pr->varPlen = (uint8_t)(pr->rx.len - 2u);
     pr->varCnt++;
 }
-static void ping_all(uint8_t idx)
+static void ping_one(uint8_t port_idx)
 {
     static const uint8_t plens[4] = { 0u, 8u, 32u, 80u };
     uint8_t pl[80];
     uint8_t plen;
+    uint8_t n;
     uint8_t i;
-    plen = plens[idx & 3u];
+    n = (uint8_t)(s_ping_len[port_idx] & 3u);
+    plen = plens[n];
     for (i = 0u; i < plen; i++) { pl[i] = (uint8_t)(0xA0u + i); }
-    for (i = 0u; i < STM_PORT_CNT; i++)
-    {
-        (void)stm_var_send(s_portCom[i], 0x01u, (uint8_t)(i + 1u), pl, plen);
-    }
+    (void)stm_var_send(s_portCom[port_idx], 0x01u, (uint8_t)(port_idx + 1u), pl, plen);
 }
 static void refresh_chaneel(uint32_t now)
 {
@@ -486,8 +492,7 @@ void Check_RadarStatus(COM_PORT_E _ucPort,uint8_t *alarm_done)
 
 void Radar_thread(void)
 {
-    static uint32_t last_send = 0u, last_ping = 0u;
-    static uint8_t  ping_idx = 0u;
+    static uint32_t last_send = 0u;
     static uint8_t  inited = 0u;
     uint32_t now = HAL_GetTick();
     uint8_t b;
@@ -503,6 +508,11 @@ void Radar_thread(void)
             s_ports[i].lastRcvMs = 0u;
             s_ports[i].radarVal = 0u;
             s_ports[i].varCnt = 0u;
+            s_ports[i].rxByteCnt = 0u;
+            s_ports[i].varCrcFail = 0u;
+            s_ports[i].legCrcFail = 0u;
+            s_ping_next[i] = now + (uint32_t)i * 200u;   /* stagger pings 200ms apart */
+            s_ping_len[i] = 0u;
         }
         inited = 1u;
     }
@@ -513,6 +523,7 @@ void Radar_thread(void)
         while (comGetChar(s_ports[i].port, &b))
         {
             s_ports[i].rx.lastByteMs = now;
+            s_ports[i].rxByteCnt++;
             ev = frame_rx_feed(&s_ports[i].rx, b);
             if (ev == FRAME_EV_LEGACY)
             {
@@ -521,6 +532,10 @@ void Radar_thread(void)
             else if (ev == FRAME_EV_VAR)
             {
                 stm_handle_var(&s_ports[i]);
+            }
+            else if (ev == FRAME_EV_VAR_BAD)
+            {
+                s_ports[i].varCrcFail++;
             }
         }
     }
@@ -532,11 +547,14 @@ void Radar_thread(void)
         Broadcast_Get_Radar_Status();
     }
 
-    if ((now - last_ping >= 1000u) || (now < last_ping))
+    for (i = 0u; i < STM_PORT_CNT; i++)
     {
-        last_ping = now;
-        ping_all(ping_idx);
-        ping_idx = (uint8_t)((ping_idx + 1u) & 3u);
+        if ((int32_t)(now - s_ping_next[i]) >= 0)
+        {
+            ping_one(i);
+            s_ping_next[i] = now + 1000u;
+            s_ping_len[i]++;
+        }
     }
 }
 #endif
