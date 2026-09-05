@@ -664,14 +664,17 @@ void Radar_thread(void)
     }
     else
     {
-        Broadcast_Get_Radar_Status();
         for (i = 0u; i < 5u; i++)
         {
             if ((aa_next_ms[i] == 0u) || (now >= aa_next_ms[i]))
             {
-                aa_open_window(i, now);
+                aa_open_window(i, now);   /* ping-only beat: no legacy broadcast this poll */
                 break;
             }
+        }
+        if (aa_win >= 5u)
+        {
+            Broadcast_Get_Radar_Status();
         }
     }
 
