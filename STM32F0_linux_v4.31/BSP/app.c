@@ -501,29 +501,182 @@ void Check_RadarStatus(COM_PORT_E _ucPort,uint8_t *alarm_done)
 
 
 
+
+/* ===== AA variable-length in-poll self-test (10ms cadence, one port per 1s window) ===== */
+#define AA_PING_EN       (1u)
+#define RADAR_POLL_MS    (10u)
+#define AA_PING_MS       (1000u)
+#define AA_MAXBUF        (260u)
+static const COM_PORT_E aa_com[5] = { COM6, COM2, COM3, COM4, COM5 };
+static const uint8_t aa_ch[5][2] = { {1,0},{2,3},{4,5},{6,7},{8,0} };
+static uint32_t aa_next_ms[5];
+static uint32_t aa_pong_cnt[5];
+static uint8_t  aa_win = 0xFFu;
+static uint32_t aa_win_until = 0u;
+static uint8_t  aa_state = 0u;
+static uint8_t  aa_len = 0u;
+static uint16_t aa_idx = 0u;
+static uint8_t  aa_buf[AA_MAXBUF];
+static uint32_t aa_last_ms = 0u;
+static uint8_t  aa_cycle = 0u;
+
+static uint16_t aa_crc16(const uint8_t *p, uint16_t n)
+{
+    uint16_t crc = 0xFFFFu;
+    uint16_t i, j;
+    for (i = 0u; i < n; i++)
+    {
+        crc ^= (uint16_t)((uint16_t)p[i] << 8);
+        for (j = 0u; j < 8u; j++)
+        {
+            if (crc & 0x8000u) { crc = (uint16_t)((crc << 1) ^ 0x1021u); }
+            else { crc = (uint16_t)(crc << 1); }
+        }
+    }
+    return crc;
+}
+static void aa_open_window(uint8_t idx, uint32_t now)
+{
+    static const uint8_t plens[4] = { 0u, 8u, 32u, 80u };
+    uint8_t out[AA_MAXBUF];
+    uint8_t plen;
+    uint8_t i;
+    uint16_t total;
+    uint16_t c;
+    aa_state = 0u; aa_len = 0u; aa_idx = 0u;
+    aa_win = idx;
+    aa_win_until = now + 200u;
+    aa_last_ms = now;
+    plen = plens[aa_cycle & 3u];
+    total = (uint16_t)plen + 6u;
+    out[0] = 0xAAu;
+    out[1] = (uint8_t)(plen + 2u);
+    out[2] = 0x01u;
+    out[3] = (uint8_t)(idx + 1u);
+    for (i = 0u; i < plen; i++) { out[4u + i] = (uint8_t)(0xA0u + i); }
+    c = aa_crc16(out, (uint16_t)(total - 2u));
+    out[total - 2u] = (uint8_t)(c & 0xFFu);
+    out[total - 1u] = (uint8_t)(c >> 8);
+    comSendBuf(aa_com[idx], out, total);
+    aa_cycle++;
+    aa_next_ms[idx] = now + AA_PING_MS;
+}
+static void aa_feed(uint8_t b)
+{
+    uint16_t t;
+    uint16_t c;
+    if (aa_state == 0u)
+    {
+        if (b == 0xAAu) { aa_buf[0] = b; aa_idx = 1u; aa_state = 1u; }
+        return;
+    }
+    if (aa_state == 1u)
+    {
+        aa_len = b;
+        if ((aa_len < 2u) || (aa_len > 251u)) { aa_state = 0u; aa_idx = 0u; return; }
+        aa_buf[aa_idx++] = b;
+        aa_state = 2u;
+        return;
+    }
+    aa_buf[aa_idx++] = b;
+    t = (uint16_t)aa_len + 4u;
+    if (aa_idx >= t)
+    {
+        c = aa_crc16(aa_buf, (uint16_t)(t - 2u));
+        if (((uint8_t)(c & 0xFFu) == aa_buf[t - 2u]) && ((uint8_t)(c >> 8) == aa_buf[t - 1u]))
+        {
+            if (aa_buf[2] == 0x81u) { if (aa_win < 5u) { aa_pong_cnt[aa_win]++; } }
+            aa_state = 0u; aa_idx = 0u;
+            aa_win = 0xFFu;
+            return;
+        }
+        aa_state = 0u; aa_idx = 0u;
+    }
+}
+static void aa_broadcast_except(uint8_t skipidx)
+{
+    alarm_pdu q;
+    uint8_t i;
+    memset(&q, 0, sizeof(q));
+    q.FrameHead = GPIOHEAD;
+    q.Pdu_len = sizeof(q);
+    q.Radarcfg[0] = 0xFF;
+    q.crc = ipcCrc((uint8_t *)&q, sizeof(q) - 2u);
+    for (i = 0u; i < 5u; i++)
+    {
+        if (i != skipidx) { comSendBuf(aa_com[i], (uint8_t *)&q, sizeof(q)); }
+    }
+}
+/* ===== end AA helpers ===== */
 void Radar_thread(void)
 {
-    static uint32_t timeout_get = 0u, timeout_send = 0u;
+    static uint32_t last_poll = 0u;
     uint32_t now = HAL_GetTick();
+    uint8_t i;
+    uint8_t b;
+    uint8_t prev1;
+    uint8_t prev2;
 
-    if ((now - timeout_get > 80u) || (now < timeout_get))
+    if ((now - last_poll) < RADAR_POLL_MS) { return; }
+    last_poll = now;
+
+    prev1 = 0u; prev2 = 0u;
+    if (aa_win < 5u)
     {
-        timeout_get = now;
+        prev1 = Chaneel_ID[aa_ch[aa_win][0]];
+        if (aa_ch[aa_win][1] != 0u) { prev2 = Chaneel_ID[aa_ch[aa_win][1]]; }
+    }
+    memset(Chaneel_ID, 0, sizeof(Chaneel_ID));
+
+    for (i = 0u; i < 5u; i++)
+    {
+        if (i == aa_win) { continue; }
+        switch (i)
+        {
+            case 0u: Check_RadarStatus(COM6, &Chaneel_ID[1]); break;
+            case 1u: Check_RadarStatus(COM2, &Chaneel_ID[2]); Chaneel_ID[3] = Chaneel_ID[2]; break;
+            case 2u: Check_RadarStatus(COM3, &Chaneel_ID[4]); Chaneel_ID[5] = Chaneel_ID[4]; break;
+            case 3u: Check_RadarStatus(COM4, &Chaneel_ID[6]); Chaneel_ID[7] = Chaneel_ID[6]; break;
+            default: Check_RadarStatus(COM5, &Chaneel_ID[8]); break;
+        }
     }
 
-    if ((now - timeout_send > 5u) || (now < timeout_send))
+    if (aa_win < 5u)
     {
-        timeout_send = now;
-        memset(Chaneel_ID, 0, sizeof(Chaneel_ID));
-        Check_RadarStatus(COM6, &Chaneel_ID[1]);   /* mainboard CH1 */
-        Check_RadarStatus(COM2, &Chaneel_ID[2]);   /* mainboard CH2 */
-        Chaneel_ID[3] = Chaneel_ID[2];
-        Check_RadarStatus(COM3, &Chaneel_ID[4]);   /* mainboard CH3 */
-        Chaneel_ID[5] = Chaneel_ID[4];
-        Check_RadarStatus(COM4, &Chaneel_ID[6]);   /* mainboard CH4 */
-        Chaneel_ID[7] = Chaneel_ID[6];
-        Check_RadarStatus(COM5, &Chaneel_ID[8]);   /* mainboard CH5 */
+        while (comGetChar(aa_com[aa_win], &b))
+        {
+            aa_last_ms = now;
+            aa_feed(b);
+            if (aa_win >= 5u) { break; }
+        }
+        if ((aa_state != 0u) && ((now - aa_last_ms) > 30u))
+        {
+            aa_state = 0u; aa_idx = 0u; aa_win = 0xFFu;
+        }
+        if ((aa_win < 5u) && (now >= aa_win_until))
+        {
+            aa_state = 0u; aa_idx = 0u; aa_win = 0xFFu;
+        }
+        if (aa_win < 5u) { aa_broadcast_except(aa_win); }
+        else             { aa_broadcast_except(0xFFu); }
+    }
+    else
+    {
         Broadcast_Get_Radar_Status();
+        for (i = 0u; i < 5u; i++)
+        {
+            if ((aa_next_ms[i] == 0u) || (now >= aa_next_ms[i]))
+            {
+                aa_open_window(i, now);
+                break;
+            }
+        }
+    }
+
+    if (aa_win < 5u)
+    {
+        Chaneel_ID[aa_ch[aa_win][0]] = prev1;
+        if (aa_ch[aa_win][1] != 0u) { Chaneel_ID[aa_ch[aa_win][1]] = prev2; }
     }
 }
 #endif
