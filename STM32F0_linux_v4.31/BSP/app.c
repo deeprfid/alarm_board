@@ -608,15 +608,11 @@ static uint8_t  aa5_len[5];
 static uint16_t aa5_idx[5];
 static uint8_t  aa5_buf[5][AA_MAXBUF];
 static uint32_t aa5_last[5];
-static uint16_t aa_seq[5];   /* per-port frame seq, echoed back by HC32 */
-static uint16_t exp_seq[5] = { 1u, 1u, 1u, 1u, 1u };   /* expected next seq per port (send side starts at 1) */
-volatile uint32_t miss_cnt = 0;   /* count of seq mismatches vs expected */
 
 static void aa5_feed(uint8_t p, uint8_t b)
 {
     uint16_t t;
     uint16_t c;
-    uint16_t sq;
     if (aa5_state[p] == 0u)
     {
         if (b == 0xAAu) { aa5_buf[p][0] = b; aa5_idx[p] = 1u; aa5_state[p] = 1u; }
@@ -637,16 +633,7 @@ static void aa5_feed(uint8_t p, uint8_t b)
         c = aa_crc16(aa5_buf[p], (uint16_t)(t - 2u));
         if (((uint8_t)(c & 0xFFu) == aa5_buf[p][t - 2u]) && ((uint8_t)(c >> 8) == aa5_buf[p][t - 1u]))
         {
-            if (aa5_buf[p][2] == 0x81u)
-            {
-                rxcnt++;
-                if (aa5_len[p] >= 4u)   /* payload len >= 2: seq present */
-                {
-                    sq = (uint16_t)(aa5_buf[p][4]) | ((uint16_t)aa5_buf[p][5] << 8u);
-                    if (sq > exp_seq[p]) { miss_cnt += (uint32_t)(sq - exp_seq[p]); }
-                    exp_seq[p] = (uint16_t)(sq + 1u);
-                }
-            }
+            if (aa5_buf[p][2] == 0x81u) { rxcnt++; }
             aa5_state[p] = 0u; aa5_idx[p] = 0u;
             return;
         }
@@ -656,7 +643,7 @@ static void aa5_feed(uint8_t p, uint8_t b)
 
 static void aa_broadcast_all(uint32_t now)
 {
-    static const uint8_t plens[4] = { 150u, 150u, 150u, 150u };   /* single-150B: every frame carries seq */
+    static const uint8_t plens[4] = { 0u, 8u, 32u, 150u };
     uint8_t out[AA_MAXBUF];
     uint8_t plen;
     uint8_t p;
@@ -671,17 +658,7 @@ static void aa_broadcast_all(uint32_t now)
         out[1] = (uint8_t)(plen + 2u);
         out[2] = 0x01u;
         out[3] = (uint8_t)(p + 1u);
-        aa_seq[p]++;
-        if (plen >= 2u)
-        {
-            out[4u] = (uint8_t)(aa_seq[p] & 0xFFu);
-            out[5u] = (uint8_t)(aa_seq[p] >> 8u);
-            for (i = 2u; i < plen; i++) { out[4u + i] = (uint8_t)(0xA0u + i); }
-        }
-        else
-        {
-            for (i = 0u; i < plen; i++) { out[4u + i] = (uint8_t)(0xA0u + i); }
-        }
+        for (i = 0u; i < plen; i++) { out[4u + i] = (uint8_t)(0xA0u + i); }
         c = aa_crc16(out, (uint16_t)(total - 2u));
         out[total - 2u] = (uint8_t)(c & 0xFFu);
         out[total - 1u] = (uint8_t)(c >> 8);
