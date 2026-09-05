@@ -288,6 +288,7 @@ uint8_t Chaneel_ID[16]={0};
 #define FRAME_HDR_AA           (0xAAu)
 #define FRAME_HDR_LEG_GPIO     (0x55u)
 #define FRAME_MAX_PAYLOAD      (251u)
+#define FRAME_RX_GUARD_MS      (50u)
 #define FRAME_VAR_TOTAL_MAX    (257u)
 #define FRAME_EV_NONE          (0)
 #define FRAME_EV_LEGACY        (1)
@@ -297,6 +298,7 @@ typedef struct
     uint8_t  state;
     uint8_t  len;
     uint16_t idx;
+    uint32_t lastByteMs;
     uint8_t  buf[FRAME_VAR_TOTAL_MAX];
 } frame_rx_t;
 static uint16_t fr_crc16(const uint8_t *p, uint16_t n)
@@ -316,7 +318,14 @@ static uint16_t fr_crc16(const uint8_t *p, uint16_t n)
 }
 static void frame_rx_init(frame_rx_t *rx)
 {
-    rx->state = 0u; rx->len = 0u; rx->idx = 0u;
+    rx->state = 0u; rx->len = 0u; rx->idx = 0u; rx->lastByteMs = 0u;
+}
+static void frame_rx_guard(frame_rx_t *rx, uint32_t now)
+{
+    if ((rx->state != 0u) && ((now - rx->lastByteMs) > FRAME_RX_GUARD_MS))
+    {
+        rx->state = 0u; rx->len = 0u; rx->idx = 0u;
+    }
 }
 static int frame_rx_feed(frame_rx_t *rx, uint8_t b)
 {
@@ -500,8 +509,10 @@ void Radar_thread(void)
 
     for (i = 0u; i < STM_PORT_CNT; i++)
     {
+        frame_rx_guard(&s_ports[i].rx, now);
         while (comGetChar(s_ports[i].port, &b))
         {
+            s_ports[i].rx.lastByteMs = now;
             ev = frame_rx_feed(&s_ports[i].rx, b);
             if (ev == FRAME_EV_LEGACY)
             {
