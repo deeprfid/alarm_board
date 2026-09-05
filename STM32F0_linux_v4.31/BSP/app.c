@@ -504,8 +504,8 @@ void Check_RadarStatus(COM_PORT_E _ucPort,uint8_t *alarm_done)
 
 /* ===== AA variable-length in-poll self-test (10ms cadence, one port per 1s window) ===== */
 #define AA_PING_EN       (1u)
-#define RADAR_POLL_MS    (10u)
-#define AA_PING_MS       (1000u)
+#define RADAR_POLL_MS    (50u)  /* legacy poll cadence */
+#define AA_PING_MS       (500u)
 #define AA_MAXBUF        (260u)
 static const COM_PORT_E aa_com[5] = { COM6, COM2, COM3, COM4, COM5 };
 static const uint8_t aa_ch[5][2] = { {1,0},{2,3},{4,5},{6,7},{8,0} };
