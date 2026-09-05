@@ -504,7 +504,7 @@ void Check_RadarStatus(COM_PORT_E _ucPort,uint8_t *alarm_done)
 
 /* ===== AA variable-length in-poll self-test (10ms cadence, one port per 1s window) ===== */
 #define AA_PING_EN       (1u)
-#define RADAR_POLL_MS    (50u)  /* legacy poll cadence */
+#define RADAR_POLL_MS    (20u)  /* one frame per beat */
 #define AA_PING_MS       (500u)
 #define AA_MAXBUF        (260u)
 static const COM_PORT_E aa_com[5] = { COM6, COM2, COM3, COM4, COM5 };
@@ -594,41 +594,44 @@ static void aa_feed(uint8_t b)
         errcnt++;   /* AA frame CRC fail */
     }
 }
+static void send_legacy_one(uint8_t idx)
+{
+    alarm_pdu q;
+    memset(&q, 0, sizeof(q));
+    q.FrameHead = GPIOHEAD;
+    q.Pdu_len = sizeof(q);
+    q.Radarcfg[0] = 0xFF;
+    q.crc = ipcCrc((uint8_t *)&q, sizeof(q) - 2u);
+    comSendBuf(aa_com[idx], (uint8_t *)&q, sizeof(q));
+    txcnt++;
+}
 /* ===== end AA helpers ===== */
 void Radar_thread(void)
 {
-    static uint32_t last_legacy = 0u;
+    static uint32_t last_beat = 0u;
+    static uint8_t  slot = 0u;
     uint32_t now = HAL_GetTick();
     uint8_t i;
+    uint8_t p;
     uint8_t b;
 
-    if ((now - last_legacy) >= RADAR_POLL_MS)
+    if ((now - last_beat) < RADAR_POLL_MS) { return; }
+    last_beat = now;
+
+    /* receive pass: read legacy replies on ports that are not in an AA window */
+    for (i = 0u; i < 5u; i++)
     {
-        last_legacy = now;
-
-        /* legacy beat: first close any lingering AA window */
-        if (aa_win < 5u)
+        if (i == aa_win) { continue; }
+        switch (i)
         {
-            while (comGetChar(aa_com[aa_win], &b))
-            {
-                aa_last_ms = now;
-                aa_feed(b);
-                if (aa_win >= 5u) { break; }
-            }
-            aa_state = 0u; aa_idx = 0u; aa_win = 0xFFu;
+            case 0u: Check_RadarStatus(COM6, &Chaneel_ID[1]); break;
+            case 1u: Check_RadarStatus(COM2, &Chaneel_ID[2]); Chaneel_ID[3] = Chaneel_ID[2]; break;
+            case 2u: Check_RadarStatus(COM3, &Chaneel_ID[4]); Chaneel_ID[5] = Chaneel_ID[4]; break;
+            case 3u: Check_RadarStatus(COM4, &Chaneel_ID[6]); Chaneel_ID[7] = Chaneel_ID[6]; break;
+            default: Check_RadarStatus(COM5, &Chaneel_ID[8]); break;
         }
-
-        memset(Chaneel_ID, 0, sizeof(Chaneel_ID));
-        Check_RadarStatus(COM6, &Chaneel_ID[1]);
-        Check_RadarStatus(COM2, &Chaneel_ID[2]); Chaneel_ID[3] = Chaneel_ID[2];
-        Check_RadarStatus(COM3, &Chaneel_ID[4]); Chaneel_ID[5] = Chaneel_ID[4];
-        Check_RadarStatus(COM4, &Chaneel_ID[6]); Chaneel_ID[7] = Chaneel_ID[6];
-        Check_RadarStatus(COM5, &Chaneel_ID[8]);
-        Broadcast_Get_Radar_Status();
-        return;
     }
 
-    /* idle beat (between legacy polls): manage AA ping */
     if (aa_win < 5u)
     {
         while (comGetChar(aa_com[aa_win], &b))
@@ -648,13 +651,16 @@ void Radar_thread(void)
         return;
     }
 
-    for (i = 0u; i < 5u; i++)
+    /* send exactly ONE frame per beat: alternate legacy(0..4) / AA(5..9) */
+    p = (uint8_t)(slot % 5u);
+    if (slot < 5u)
     {
-        if ((aa_next_ms[i] == 0u) || (now >= aa_next_ms[i]))
-        {
-            aa_open_window(i, now);
-            break;
-        }
+        send_legacy_one(p);      /* one fixed-length query to port p */
     }
+    else
+    {
+        aa_open_window(p, now);  /* one variable-length ping to port p */
+    }
+    slot = (uint8_t)((slot + 1u) % 10u);
 }
 #endif
