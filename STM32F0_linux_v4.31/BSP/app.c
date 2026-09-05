@@ -610,6 +610,7 @@ static uint8_t  aa5_len[5];
 static uint16_t aa5_idx[5];
 static uint8_t  aa5_buf[5][AA_MAXBUF];
 static uint32_t aa5_last[5];
+volatile uint32_t dbg_aa_partial = 0;  /* half-frame reset by 30ms guard */
 
 static void aa5_feed(uint8_t p, uint8_t b)
 {
@@ -706,6 +707,7 @@ void Radar_thread(void)
             if ((aa5_state[i] != 0u) && ((now - aa5_last[i]) > 30u))
             {
                 aa5_state[i] = 0u; aa5_idx[i] = 0u;
+                dbg_aa_partial++;
             }
         }
     }
