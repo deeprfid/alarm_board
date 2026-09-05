@@ -592,6 +592,7 @@ static void aa_feed(uint8_t b)
             return;
         }
         aa_state = 0u; aa_idx = 0u;
+        errcnt++;   /* AA frame CRC fail */
     }
 }
 static void aa_broadcast_except(uint8_t skipidx)
