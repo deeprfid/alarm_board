@@ -17,15 +17,6 @@
 
 /* diag counters (debug watch): index 0..5 = USART1..USART6 */
 volatile uint32_t dbg_uart_ore[6];
-volatile uint32_t dbg_tx_drop;
-volatile uint32_t dbg_tx_cr1;
-volatile uint32_t dbg_tx_isr;
-volatile uint32_t dbg_tx_iser;
-volatile uint32_t dbg_tx_primask;
-volatile uint16_t dbg_tx_cnt;
-volatile uint8_t  dbg_tx_captured;
-volatile uint32_t dbg_tx_wait;
-volatile uint32_t dbg_tx_wait_port;
 volatile uint32_t dbg_uart_fe[6];
 volatile uint32_t dbg_uart_full[6];
 static uint8_t uart_idx(USART_TypeDef *u)
@@ -85,38 +76,7 @@ UART_HandleTypeDef CH1_huart6;// CHANNEL 1
 
 static void UartVarInit(void);
 static void InitHardUart(void);
-static void UartSend(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen)
-{
-    uint16_t free_space;
-    uint16_t i;
-
-    /* Non-blocking: if the whole frame does not fit into TX FIFO, drop it
-       (counted) instead of waiting - waiting can deadlock when interrupts
-       are masked or in an ISR context. */
-    free_space = (uint16_t)(_pUart->usTxBufSize - _pUart->usTxCount);
-    if (_usLen > free_space)
-    {
-        dbg_tx_drop++;
-        dbg_tx_wait_port = uart_idx(_pUart->uart);
-        return;
-    }
-
-    /* Gate only this UART TXE event source; never disable the shared IRQ (RX stays live) */
-    CLEAR_BIT(_pUart->uart->CR1, USART_CR1_TXEIE);
-
-    for (i = 0u; i < _usLen; i++)
-    {
-        _pUart->pTxBuf[_pUart->usTxWrite] = _ucaBuf[i];
-        if (++_pUart->usTxWrite >= _pUart->usTxBufSize)
-        {
-            _pUart->usTxWrite = 0u;
-        }
-        _pUart->usTxCount++;
-    }
-
-    SET_BIT(_pUart->uart->CR1, USART_CR1_TXEIE);
-}
-
+static void UartSend(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen);
 static uint8_t UartGetChar(UART_T *_pUart, uint8_t *_pByte);
 static void UartIRQ(UART_T *_pUart);
 
@@ -611,6 +571,62 @@ static void InitHardUart(void)
 *	返 回 值: 无
 *********************************************************************************************************
 */
+static void UartSend(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen)
+{
+    uint16_t i;
+
+    for (i = 0; i < _usLen; i++)
+    {
+        /* 如果发送缓冲区已经满了，则等待缓冲区空 */
+        while (1)
+        {
+            __IO uint16_t usCount;
+
+            HAL_NVIC_DisableIRQ(_pUart->uartirq);
+            usCount = _pUart->usTxCount;
+            HAL_NVIC_EnableIRQ(_pUart->uartirq);
+
+            if (usCount < _pUart->usTxBufSize)
+            {
+                break;
+            }
+            else if(usCount == _pUart->usTxBufSize)/* 数据已填满缓冲区 */
+            {
+                if((_pUart->uart->CR1 & USART_CR1_TXEIE) == 0)
+                {
+                    SET_BIT(_pUart->uart->CR1, USART_CR1_TXEIE);
+                }
+            }
+        }
+
+        /* 将新数据填入发送缓冲区 */
+        _pUart->pTxBuf[_pUart->usTxWrite] = _ucaBuf[i];
+
+        //DISABLE_INT();
+        HAL_NVIC_DisableIRQ(_pUart->uartirq);
+
+        if (++_pUart->usTxWrite >= _pUart->usTxBufSize)
+        {
+            _pUart->usTxWrite = 0;
+        }
+
+        _pUart->usTxCount++;
+        //ENABLE_INT();
+        HAL_NVIC_EnableIRQ(_pUart->uartirq);
+    }
+
+    SET_BIT(_pUart->uart->CR1, USART_CR1_TXEIE);	/* 使能发送中断（缓冲区空） */
+}
+
+/*
+*********************************************************************************************************
+*	函 数 名: UartGetChar
+*	功能说明: 从串口接收缓冲区读取1字节数据 （用于主程序调用）
+*	形    参: _pUart : 串口设备
+*			  _pByte : 存放读取数据的指针
+*	返 回 值: 0 表示无数据  1表示读取到数据
+*********************************************************************************************************
+*/
 static uint8_t UartGetChar(UART_T *_pUart, uint8_t *_pByte)
 {
     uint16_t usCount;
@@ -702,13 +718,12 @@ static void UartIRQ(UART_T *_pUart)
     uint32_t ui = uart_idx(_pUart->uart);
 
     /* 处理接收中断  */
-    while ((isrflags & USART_ISR_RXNE) != RESET)
+    if ((isrflags & USART_ISR_RXNE) != RESET)
     {
         /* 从串口接收数据寄存器读取数据存放到接收FIFO */
         uint8_t ch;
 
         ch = READ_REG(_pUart->uart->RDR);
-        isrflags = READ_REG(_pUart->uart->ISR);   /* refresh for RX drain loop */
         _pUart->pRxBuf[_pUart->usRxWrite] = ch;
 
         if (++_pUart->usRxWrite >= _pUart->usRxBufSize)
@@ -859,11 +874,10 @@ void USART2_IRQHandler(void)
 
 void USART3_6_IRQHandler(void)
 {
-    uint32_t fl;
-    fl = USART3->ISR; if ((fl & (USART_ISR_RXNE | USART_ISR_ORE | USART_ISR_TXE | USART_ISR_TC)) != 0u) { UartIRQ(&g_tUart3); }
-    fl = USART4->ISR; if ((fl & (USART_ISR_RXNE | USART_ISR_ORE | USART_ISR_TXE | USART_ISR_TC)) != 0u) { UartIRQ(&g_tUart4); }
-    fl = USART5->ISR; if ((fl & (USART_ISR_RXNE | USART_ISR_ORE | USART_ISR_TXE | USART_ISR_TC)) != 0u) { UartIRQ(&g_tUart5); }
-    fl = USART6->ISR; if ((fl & (USART_ISR_RXNE | USART_ISR_ORE | USART_ISR_TXE | USART_ISR_TC)) != 0u) { UartIRQ(&g_tUart6); }
+    UartIRQ(&g_tUart3);
+    UartIRQ(&g_tUart4);
+    UartIRQ(&g_tUart5);
+    UartIRQ(&g_tUart6);
 }
 
 #endif
