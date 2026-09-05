@@ -18,125 +18,85 @@ extern LED_T Radar_LED;
 extern LED_T Board_LED_1;
 extern LED_T Board_LED_2;
 
+/* Set/clear one indicator LED by presence level (start on active, stop on inactive). */
+static void led_blink_update(LED_T *led, uint8_t id, uint8_t active, uint16_t cadence)
+{
+    if (active) { LED_Start(led, id, cadence, 1, 1); }
+    else        { Led_Stop(led, id); }
+}
+
 en_pin_state_t Radar_Led_update(void)
 {
-
     en_pin_state_t aicamsingal = switch_decoder_pio_read(AI_CAMERA);
+    uint8_t  radar_on  = bsp_get_radar_singal();
+    uint8_t  aicam_on  = (PIN_RESET == aicamsingal) ? 1u : 0u;
+    uint8_t  presence  = (radar_on || aicam_on) ? 1u : 0u;
 
-
-
-    if(R_tLED.ucEnalbe == 1 || G_tLED.ucEnalbe == 1 )
+    /* Alarm active (R/G LED running): reflect presence on Radar_LED */
+    if ((R_tLED.ucEnalbe == 1) || (G_tLED.ucEnalbe == 1))
     {
-        uint8_t	radarsingal = bsp_get_radar_singal();
-
-        if(radarsingal || PIN_RESET == aicamsingal)
-        {
-            LED_Start(&Radar_LED, RADARLED, 100, 1, 1);
-        }
-
+        if (presence) { LED_Start(&Radar_LED, RADARLED, 100, 1, 1); }
         return aicamsingal;
     }
-   if(R_tLED.ucEnalbe == 0 && G_tLED.ucEnalbe == 0 )
+
+    /* Normal mode: behavior selected by installation switches */
     {
+        en_pin_state_t p_Aicammode = switch_decoder_pio_read(AICAM_MODE);
+        en_pin_state_t p_Radarmode = switch_decoder_pio_read(RADAR_MODE);
+        en_pin_state_t p_Easmode   = switch_decoder_pio_read(EAS_MODE);
+        en_pin_state_t p_light     = switch_decoder_pio_read(LIGHT_ON);
 
-        en_pin_state_t p_Aicammode   = switch_decoder_pio_read(AICAM_MODE);
-        en_pin_state_t p_Radarmode   = switch_decoder_pio_read(RADAR_MODE);
-        en_pin_state_t p_Easmode     = switch_decoder_pio_read(EAS_MODE);
-        en_pin_state_t p_light       = switch_decoder_pio_read(LIGHT_ON);
-
-        uint8_t	radarsingal = bsp_get_radar_singal();
-
-
-        if(p_Aicammode == PIN_RESET && p_Radarmode == PIN_RESET)	 //BLUE LED controled by CAM & Radar
+        /* Mode: AICAM + Radar both drive the presence LED */
+        if ((p_Aicammode == PIN_RESET) && (p_Radarmode == PIN_RESET))
         {
-            if(radarsingal || PIN_RESET == aicamsingal)
+            led_blink_update(&Radar_LED, RADARLED, presence, 100);
+            led_blink_update(&B_tLED, LED_BLED, presence, 100);
+            return aicamsingal;
+        }
+
+        /* Mode: AICAM only drives the presence LED */
+        if ((p_Aicammode == PIN_RESET) && (p_Radarmode == PIN_SET))
+        {
+            led_blink_update(&Radar_LED, RADARLED, aicam_on, 100);
+            led_blink_update(&B_tLED, LED_BLED, aicam_on, 100);
+            return aicamsingal;
+        }
+
+        /* Mode: Radar only drives the presence LED (radar_on==0 means nobody) */
+        if ((p_Radarmode == PIN_RESET) && (p_Aicammode == PIN_SET))
+        {
+            led_blink_update(&Radar_LED, RADARLED, radar_on, 300);
+            led_blink_update(&B_tLED, LED_BLED, radar_on, 300);
+            return aicamsingal;
+        }
+
+        /* Mode: EAS only (AICAM/Radar not installed). Legacy: B blinks while selected,
+           presence additionally lights Radar_LED. Kept as-is. */
+        if ((p_Easmode == PIN_RESET) && (p_Aicammode == PIN_SET) && (p_Radarmode == PIN_SET))
+        {
+            LED_Start(&B_tLED, LED_BLED, 100, 1, 1);
+            if (presence)
             {
-							// if(B_tLED.ucEnalbe ==0)
-							 { 
                 LED_Start(&Radar_LED, RADARLED, 100, 1, 1);
-                LED_Start(&B_tLED, LED_BLED   , 100, 1, 1);
-							 }	 
+                LED_Start(&B_tLED, LED_BLED, 100, 1, 1);
             }
-						else
-						{
-						    Led_Stop(&Radar_LED, RADARLED);
-							  Led_Stop(&B_tLED   , LED_BLED);
-						}	
             return aicamsingal;
         }
 
-        if( p_Aicammode == PIN_RESET && p_Radarmode == PIN_SET)    //BLUE LED trig by AICAM ONLY
+        /* Mode: Light control only. Legacy kept as-is (mirrors EAS mode). */
+        if ((p_light == PIN_RESET) && (p_Aicammode == PIN_SET) && (p_Radarmode == PIN_SET))
         {
-            if(PIN_RESET == aicamsingal)
+            LED_Start(&B_tLED, LED_BLED, 100, 1, 1);
+            if (presence)
             {
-							// if(B_tLED.ucEnalbe ==0)
-							 { 
-               LED_Start(&Radar_LED, RADARLED, 100, 1, 1);
-               LED_Start(&B_tLED, LED_BLED   , 100, 1, 1);
-							 }	 
+                LED_Start(&Radar_LED, RADARLED, 100, 1, 1);
+                LED_Start(&B_tLED, LED_BLED, 100, 1, 1);
             }
-						else
-						{
-						    Led_Stop(&Radar_LED, RADARLED);
-							  Led_Stop(&B_tLED   , LED_BLED);
-						}	
             return aicamsingal;
         }
-        if( p_Radarmode == PIN_RESET && p_Aicammode == PIN_SET)   //BLUE LED trig by Radar ONLY
-        {
-            if(radarsingal)
-            {
-               // if(B_tLED.ucEnalbe ==0)
-							 { 
-                LED_Start(&Radar_LED, RADARLED, 300, 1, 1);
-                LED_Start(&B_tLED, LED_BLED   , 300, 1, 1);
-							 }	 
-						}	
-
-            return aicamsingal;
-        }
-
-        if((p_Easmode == PIN_RESET) &&  ((p_Aicammode == PIN_SET) && (p_Radarmode == PIN_SET))) // EAS ONLY,CAM & Radar NOT INSTALLED
-        {
-             LED_Start(&B_tLED, LED_BLED   , 100, 1, 1); //
-
-            if(radarsingal || PIN_RESET == aicamsingal)
-            {
-             //  if(B_tLED.ucEnalbe ==0)
-							 { 
-                LED_Start(&Radar_LED, RADARLED, 100, 1, 1);
-                LED_Start(&B_tLED, LED_BLED   , 100, 1, 1);
-							 }	 
-						}	
-
-
-            return aicamsingal;
-        }
-
-        if((p_light == PIN_RESET) &&  ((p_Aicammode == PIN_SET) && (p_Radarmode == PIN_SET)))
-        {
-           LED_Start(&B_tLED, LED_BLED   , 100, 1, 1);
-					
-           if(radarsingal || PIN_RESET == aicamsingal)
-            {
-              // if(B_tLED.ucEnalbe ==0)
-							 { 
-                LED_Start(&Radar_LED, RADARLED, 100, 1, 1);
-                LED_Start(&B_tLED, LED_BLED   , 100, 1, 1);
-							 }	 
-						}	
-						
-
-            return aicamsingal;
-
-        }
-
     }
 
-
-
     return aicamsingal;
-
 }
 
 static void EXTINT_IrqCallback(void)
