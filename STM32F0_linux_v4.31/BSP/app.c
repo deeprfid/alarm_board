@@ -605,62 +605,121 @@ static void send_legacy_one(uint8_t idx)
     comSendBuf(aa_com[idx], (uint8_t *)&q, sizeof(q));
     txcnt++;
 }
+static uint8_t  aa5_state[5];
+static uint8_t  aa5_len[5];
+static uint16_t aa5_idx[5];
+static uint8_t  aa5_buf[5][AA_MAXBUF];
+static uint32_t aa5_last[5];
+
+static void aa5_feed(uint8_t p, uint8_t b)
+{
+    uint16_t t;
+    uint16_t c;
+    if (aa5_state[p] == 0u)
+    {
+        if (b == 0xAAu) { aa5_buf[p][0] = b; aa5_idx[p] = 1u; aa5_state[p] = 1u; }
+        return;
+    }
+    if (aa5_state[p] == 1u)
+    {
+        aa5_len[p] = b;
+        if ((aa5_len[p] < 2u) || (aa5_len[p] > 251u)) { aa5_state[p] = 0u; aa5_idx[p] = 0u; return; }
+        aa5_buf[p][aa5_idx[p]++] = b;
+        aa5_state[p] = 2u;
+        return;
+    }
+    aa5_buf[p][aa5_idx[p]++] = b;
+    t = (uint16_t)aa5_len[p] + 4u;
+    if (aa5_idx[p] >= t)
+    {
+        c = aa_crc16(aa5_buf[p], (uint16_t)(t - 2u));
+        if (((uint8_t)(c & 0xFFu) == aa5_buf[p][t - 2u]) && ((uint8_t)(c >> 8) == aa5_buf[p][t - 1u]))
+        {
+            if (aa5_buf[p][2] == 0x81u) { rxcnt++; }
+            aa5_state[p] = 0u; aa5_idx[p] = 0u;
+            return;
+        }
+        aa5_state[p] = 0u; aa5_idx[p] = 0u;
+        errcnt++;
+    }
+}
+
+static void aa_broadcast_all(uint32_t now)
+{
+    static const uint8_t plens[4] = { 0u, 8u, 32u, 80u };
+    uint8_t out[AA_MAXBUF];
+    uint8_t plen;
+    uint8_t p;
+    uint8_t i;
+    uint16_t total;
+    uint16_t c;
+    plen = plens[aa_cycle & 3u];
+    total = (uint16_t)plen + 6u;
+    for (p = 0u; p < 5u; p++)
+    {
+        out[0] = 0xAAu;
+        out[1] = (uint8_t)(plen + 2u);
+        out[2] = 0x01u;
+        out[3] = (uint8_t)(p + 1u);
+        for (i = 0u; i < plen; i++) { out[4u + i] = (uint8_t)(0xA0u + i); }
+        c = aa_crc16(out, (uint16_t)(total - 2u));
+        out[total - 2u] = (uint8_t)(c & 0xFFu);
+        out[total - 1u] = (uint8_t)(c >> 8);
+        comSendBuf(aa_com[p], out, total);
+        txcnt++;
+        aa5_state[p] = 0u; aa5_idx[p] = 0u;
+        aa5_last[p] = now;
+    }
+    aa_cycle++;
+}
 /* ===== end AA helpers ===== */
 void Radar_thread(void)
 {
     static uint32_t last_beat = 0u;
-    static uint8_t  slot = 0u;
+    static uint8_t  prev_type = 1u;   /* what we sent last: 0=legacy, 1=AA */
     uint32_t now = HAL_GetTick();
     uint8_t i;
-    uint8_t p;
     uint8_t b;
 
     if ((now - last_beat) < RADAR_POLL_MS) { return; }
     last_beat = now;
 
-    /* receive pass: read legacy replies on ports that are not in an AA window */
-    for (i = 0u; i < 5u; i++)
+    /* 1) collect replies of the previous broadcast */
+    if (prev_type == 0u)
     {
-        if (i == aa_win) { continue; }
-        switch (i)
-        {
-            case 0u: Check_RadarStatus(COM6, &Chaneel_ID[1]); break;
-            case 1u: Check_RadarStatus(COM2, &Chaneel_ID[2]); Chaneel_ID[3] = Chaneel_ID[2]; break;
-            case 2u: Check_RadarStatus(COM3, &Chaneel_ID[4]); Chaneel_ID[5] = Chaneel_ID[4]; break;
-            case 3u: Check_RadarStatus(COM4, &Chaneel_ID[6]); Chaneel_ID[7] = Chaneel_ID[6]; break;
-            default: Check_RadarStatus(COM5, &Chaneel_ID[8]); break;
-        }
-    }
-
-    if (aa_win < 5u)
-    {
-        while (comGetChar(aa_com[aa_win], &b))
-        {
-            aa_last_ms = now;
-            aa_feed(b);
-            if (aa_win >= 5u) { break; }
-        }
-        if ((aa_state != 0u) && ((now - aa_last_ms) > 30u))
-        {
-            aa_state = 0u; aa_idx = 0u; aa_win = 0xFFu;
-        }
-        if ((aa_win < 5u) && (now >= aa_win_until))
-        {
-            aa_state = 0u; aa_idx = 0u; aa_win = 0xFFu;
-        }
-        return;
-    }
-
-    /* send exactly ONE frame per beat: alternate legacy(0..4) / AA(5..9) */
-    p = (uint8_t)(slot % 5u);
-    if (slot < 5u)
-    {
-        send_legacy_one(p);      /* one fixed-length query to port p */
+        memset(Chaneel_ID, 0, sizeof(Chaneel_ID));
+        Check_RadarStatus(COM6, &Chaneel_ID[1]);
+        Check_RadarStatus(COM2, &Chaneel_ID[2]); Chaneel_ID[3] = Chaneel_ID[2];
+        Check_RadarStatus(COM3, &Chaneel_ID[4]); Chaneel_ID[5] = Chaneel_ID[4];
+        Check_RadarStatus(COM4, &Chaneel_ID[6]); Chaneel_ID[7] = Chaneel_ID[6];
+        Check_RadarStatus(COM5, &Chaneel_ID[8]);
     }
     else
     {
-        aa_open_window(p, now);  /* one variable-length ping to port p */
+        for (i = 0u; i < 5u; i++)
+        {
+            while (comGetChar(aa_com[i], &b))
+            {
+                aa5_last[i] = now;
+                aa5_feed(i, b);
+            }
+            if ((aa5_state[i] != 0u) && ((now - aa5_last[i]) > 30u))
+            {
+                aa5_state[i] = 0u; aa5_idx[i] = 0u;
+            }
+        }
     }
-    slot = (uint8_t)((slot + 1u) % 10u);
+
+    /* 2) broadcast the other type this beat */
+    if (prev_type == 0u)
+    {
+        aa_broadcast_all(now);          /* variable-length broadcast to all 5 */
+        prev_type = 1u;
+    }
+    else
+    {
+        Broadcast_Get_Radar_Status();   /* fixed-length broadcast to all 5 */
+        prev_type = 0u;
+    }
 }
 #endif
