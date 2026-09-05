@@ -466,7 +466,7 @@ void Send_RadarStatus_to_Master(uint8_t antid)
 	 report_radar.crc        = ipcCrc((uint8_t *)&report_radar, sizeof(report_radar) - 2);
 	 comSendBuf(COM1,(uint8_t *)&report_radar,sizeof(report_radar));
 }
-   static  uint32_t errcnt=0,rxcnt=0;
+   static  uint32_t rxcnt=0;
 void Check_RadarStatus(COM_PORT_E _ucPort,uint8_t *alarm_done)
 {
 
@@ -491,7 +491,6 @@ void Check_RadarStatus(COM_PORT_E _ucPort,uint8_t *alarm_done)
 				}
         else
 				{
-					errcnt++;
 				  comClearRxFifo(_ucPort);
 				}					
 	}
@@ -591,7 +590,6 @@ static void aa_feed(uint8_t b)
             return;
         }
         aa_state = 0u; aa_idx = 0u;
-        errcnt++;   /* AA frame CRC fail */
     }
 }
 static void send_legacy_one(uint8_t idx)
@@ -640,7 +638,6 @@ static void aa5_feed(uint8_t p, uint8_t b)
             return;
         }
         aa5_state[p] = 0u; aa5_idx[p] = 0u;
-        errcnt++;
     }
 }
 
