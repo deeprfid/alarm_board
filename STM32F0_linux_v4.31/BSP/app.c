@@ -508,7 +508,6 @@ void Check_RadarStatus(COM_PORT_E _ucPort,uint8_t *alarm_done)
 #define AA_PING_MS       (500u)
 #define AA_MAXBUF        (260u)
 static const COM_PORT_E aa_com[5] = { COM6, COM2, COM3, COM4, COM5 };
-static const uint8_t aa_ch[5][2] = { {1,0},{2,3},{4,5},{6,7},{8,0} };
 static uint32_t aa_next_ms[5];
 
 static uint8_t  aa_win = 0xFFu;
@@ -595,54 +594,41 @@ static void aa_feed(uint8_t b)
         errcnt++;   /* AA frame CRC fail */
     }
 }
-static void aa_broadcast_except(uint8_t skipidx)
-{
-    alarm_pdu q;
-    uint8_t i;
-    memset(&q, 0, sizeof(q));
-    q.FrameHead = GPIOHEAD;
-    q.Pdu_len = sizeof(q);
-    q.Radarcfg[0] = 0xFF;
-    q.crc = ipcCrc((uint8_t *)&q, sizeof(q) - 2u);
-    for (i = 0u; i < 5u; i++)
-    {
-        if (i != skipidx) { comSendBuf(aa_com[i], (uint8_t *)&q, sizeof(q)); txcnt++; }
-    }
-}
 /* ===== end AA helpers ===== */
 void Radar_thread(void)
 {
-    static uint32_t last_poll = 0u;
+    static uint32_t last_legacy = 0u;
     uint32_t now = HAL_GetTick();
     uint8_t i;
     uint8_t b;
-    uint8_t prev1;
-    uint8_t prev2;
 
-    if ((now - last_poll) < RADAR_POLL_MS) { return; }
-    last_poll = now;
-
-    prev1 = 0u; prev2 = 0u;
-    if (aa_win < 5u)
+    if ((now - last_legacy) >= RADAR_POLL_MS)
     {
-        prev1 = Chaneel_ID[aa_ch[aa_win][0]];
-        if (aa_ch[aa_win][1] != 0u) { prev2 = Chaneel_ID[aa_ch[aa_win][1]]; }
-    }
-    memset(Chaneel_ID, 0, sizeof(Chaneel_ID));
+        last_legacy = now;
 
-    for (i = 0u; i < 5u; i++)
-    {
-        if (i == aa_win) { continue; }
-        switch (i)
+        /* legacy beat: first close any lingering AA window */
+        if (aa_win < 5u)
         {
-            case 0u: Check_RadarStatus(COM6, &Chaneel_ID[1]); break;
-            case 1u: Check_RadarStatus(COM2, &Chaneel_ID[2]); Chaneel_ID[3] = Chaneel_ID[2]; break;
-            case 2u: Check_RadarStatus(COM3, &Chaneel_ID[4]); Chaneel_ID[5] = Chaneel_ID[4]; break;
-            case 3u: Check_RadarStatus(COM4, &Chaneel_ID[6]); Chaneel_ID[7] = Chaneel_ID[6]; break;
-            default: Check_RadarStatus(COM5, &Chaneel_ID[8]); break;
+            while (comGetChar(aa_com[aa_win], &b))
+            {
+                aa_last_ms = now;
+                aa_feed(b);
+                if (aa_win >= 5u) { break; }
+            }
+            aa_state = 0u; aa_idx = 0u; aa_win = 0xFFu;
         }
+
+        memset(Chaneel_ID, 0, sizeof(Chaneel_ID));
+        Check_RadarStatus(COM6, &Chaneel_ID[1]);
+        Check_RadarStatus(COM2, &Chaneel_ID[2]); Chaneel_ID[3] = Chaneel_ID[2];
+        Check_RadarStatus(COM3, &Chaneel_ID[4]); Chaneel_ID[5] = Chaneel_ID[4];
+        Check_RadarStatus(COM4, &Chaneel_ID[6]); Chaneel_ID[7] = Chaneel_ID[6];
+        Check_RadarStatus(COM5, &Chaneel_ID[8]);
+        Broadcast_Get_Radar_Status();
+        return;
     }
 
+    /* idle beat (between legacy polls): manage AA ping */
     if (aa_win < 5u)
     {
         while (comGetChar(aa_com[aa_win], &b))
@@ -659,29 +645,16 @@ void Radar_thread(void)
         {
             aa_state = 0u; aa_idx = 0u; aa_win = 0xFFu;
         }
-        if (aa_win < 5u) { aa_broadcast_except(aa_win); }
-        else             { aa_broadcast_except(0xFFu); }
-    }
-    else
-    {
-        for (i = 0u; i < 5u; i++)
-        {
-            if ((aa_next_ms[i] == 0u) || (now >= aa_next_ms[i]))
-            {
-                aa_open_window(i, now);   /* ping-only beat: no legacy broadcast this poll */
-                break;
-            }
-        }
-        if (aa_win >= 5u)
-        {
-            Broadcast_Get_Radar_Status();
-        }
+        return;
     }
 
-    if (aa_win < 5u)
+    for (i = 0u; i < 5u; i++)
     {
-        Chaneel_ID[aa_ch[aa_win][0]] = prev1;
-        if (aa_ch[aa_win][1] != 0u) { Chaneel_ID[aa_ch[aa_win][1]] = prev2; }
+        if ((aa_next_ms[i] == 0u) || (now >= aa_next_ms[i]))
+        {
+            aa_open_window(i, now);
+            break;
+        }
     }
 }
 #endif
