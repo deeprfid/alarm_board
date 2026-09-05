@@ -13,6 +13,102 @@ uint8_t rgb_led_status = 0, EAS_switch = 0, offline_flag = 0;
 __align(64) alarm_confirm_package  HC32_RS485_corfirm_PDU;
 extern stc_ring_buf_t m_stcRingBuf;
 extern stc_ring_buf_t g_AlarmRing;
+/* ===== variable-length frame core (0xAA) + legacy scan ===== */
+#define FRAME_HDR_AA           (0xAAu)
+#define FRAME_HDR_LEG_PDU      (0xFFu)
+#define FRAME_HDR_LEG_GPIO     (0x55u)
+#define FRAME_MAX_PAYLOAD      (251u)
+#define FRAME_VAR_TOTAL_MAX    (257u)
+#define FRAME_EV_NONE          (0)
+#define FRAME_EV_LEGACY        (1)
+#define FRAME_EV_VAR           (2)
+typedef struct
+{
+    uint8_t  state;
+    uint8_t  len;
+    uint16_t idx;
+    uint8_t  buf[FRAME_VAR_TOTAL_MAX];
+} frame_rx_t;
+static frame_rx_t s_hc32_rx;
+static uint16_t fr_crc16(const uint8_t *p, uint16_t n)
+{
+    uint16_t crc = 0xFFFFu;
+    uint16_t i, j;
+    for (i = 0u; i < n; i++)
+    {
+        crc ^= (uint16_t)((uint16_t)p[i] << 8);
+        for (j = 0u; j < 8u; j++)
+        {
+            if (crc & 0x8000u) { crc = (uint16_t)((crc << 1) ^ 0x1021u); }
+            else { crc = (uint16_t)(crc << 1); }
+        }
+    }
+    return crc;
+}
+static void frame_rx_init(frame_rx_t *rx)
+{
+    rx->state = 0u; rx->len = 0u; rx->idx = 0u;
+}
+static int frame_rx_feed(frame_rx_t *rx, uint8_t b)
+{
+    uint16_t t;
+    uint16_t c;
+    if (rx->state == 0u)
+    {
+        if ((b == FRAME_HDR_LEG_PDU) || (b == FRAME_HDR_LEG_GPIO))
+        {
+            rx->buf[0] = b; rx->idx = 1u; rx->state = 1u;
+        }
+        else if (b == FRAME_HDR_AA)
+        {
+            rx->buf[0] = b; rx->idx = 1u; rx->state = 2u;
+        }
+        return FRAME_EV_NONE;
+    }
+    if (rx->state == 1u)
+    {
+        rx->buf[rx->idx++] = b;
+        if (rx->idx >= 32u) { rx->state = 0u; rx->idx = 0u; return FRAME_EV_LEGACY; }
+        return FRAME_EV_NONE;
+    }
+    if (rx->state == 2u)
+    {
+        rx->len = b;
+        if ((rx->len < 2u) || (rx->len > FRAME_MAX_PAYLOAD + 2u)) { rx->state = 0u; rx->idx = 0u; return FRAME_EV_NONE; }
+        rx->buf[rx->idx++] = b;
+        rx->state = 3u;
+        return FRAME_EV_NONE;
+    }
+    rx->buf[rx->idx++] = b;
+    t = (uint16_t)((uint16_t)rx->len + 4u);
+    if (rx->idx >= t)
+    {
+        rx->state = 0u; rx->idx = 0u;
+        c = fr_crc16(rx->buf, (uint16_t)(t - 2u));
+        if ((uint8_t)(c & 0xFFu) == rx->buf[t - 2u] && (uint8_t)(c >> 8) == rx->buf[t - 1u])
+        {
+            return FRAME_EV_VAR;
+        }
+    }
+    return FRAME_EV_NONE;
+}
+static int frame_var_send(uint8_t cmd, uint8_t addr, const uint8_t *pl, uint8_t plen)
+{
+    uint8_t out[FRAME_VAR_TOTAL_MAX];
+    uint8_t lenv;
+    uint16_t total, c;
+    if (plen > FRAME_MAX_PAYLOAD) { return 0; }
+    lenv = (uint8_t)(plen + 2u);
+    total = (uint16_t)lenv + 4u;
+    out[0] = FRAME_HDR_AA; out[1] = lenv; out[2] = cmd; out[3] = addr;
+    if (plen > 0u) { memcpy(&out[4], pl, plen); }
+    c = fr_crc16(out, (uint16_t)(total - 2u));
+    out[total - 2u] = (uint8_t)(c & 0xFFu);
+    out[total - 1u] = (uint8_t)(c >> 8);
+    USART_UART_Trans(USART_UNIT, out, total, 100);
+    return (int)total;
+}
+
 /*******************************************************************************
  * Function implementation - global ('extern') and local ('static')
  ******************************************************************************/
@@ -200,60 +296,85 @@ uint8_t bsp_get_radar_singal(void)
     return flag;
 }
 
-void Check_Uart_Pdu(void)
+static void hc32_handle_legacy_frame(void)
 {
+    uint8_t alarm_databuf[APP_FRAME_LEN_MAX];
+    uint8_t radarsingal = bsp_get_radar_singal();
+    en_pin_state_t p_Easmode   = switch_decoder_pio_read(EAS_MODE);
+    en_pin_state_t aicamsingal = switch_decoder_pio_read(AI_CAMERA);
+    int8_t pduflag;
 
-    if (BUF_UsedSize(&m_stcRingBuf) >= APP_FRAME_LEN_MAX)
+    memcpy(alarm_databuf, s_hc32_rx.buf, APP_FRAME_LEN_MAX);
+    pduflag = Get_pdu_data(alarm_databuf);
+
+    if (pduflag >= 0)
     {
-        uint8_t alarm_databuf[APP_FRAME_LEN_MAX];
-        uint8_t	radarsingal = bsp_get_radar_singal();
-        BUF_Read(&m_stcRingBuf, alarm_databuf, APP_FRAME_LEN_MAX);
-        en_pin_state_t p_Easmode   = switch_decoder_pio_read(EAS_MODE);
-        en_pin_state_t aicamsingal	= switch_decoder_pio_read(AI_CAMERA);
-        int8_t pduflag = Get_pdu_data(alarm_databuf);
-
-        if(pduflag >= 0)
-        {
-            LED_Start(&Board_LED_1, BOARDLED1, 2, 1, 1);
-        }
-
-        if((LL_OK == pduflag) &&  ((p_Easmode == PIN_RESET) || (radar_range == 0)) )
-        {
-            uint8_t intid = MSG_485_TAG_RTU;
-            radar_range = 0xFF;
-            BUF_Write(&g_AlarmRing, &intid, 1);
-            return;
-
-        }
-
-        if(LL_OK == pduflag && (radarsingal || PIN_RESET == aicamsingal )) //&& EAS_switch==AUX_EAS_CODE
-        {
-            uint8_t intid = MSG_485_TAG_RTU;
-            BUF_Write(&g_AlarmRing, &intid, 1);
-            return;
-        }
-
-        if((1 == pduflag) && (offline_flag == 1) )
-        {
-            uint8_t intid = MSG_NETWORK_OFFLINE;
-            offline_flag = 0;
-            BUF_Write(&g_AlarmRing, &intid, 1);
-            return;
-
-        }
-
-        if((2 == pduflag) && (offline_flag == 2) )
-        {
-            uint8_t intid = MSG_LEDTEST;
-            offline_flag = 0;
-            BUF_Write(&g_AlarmRing, &intid, 1);
-            return;
-
-        }
-
+        LED_Start(&Board_LED_1, BOARDLED1, 2, 1, 1);
     }
 
+    if ((LL_OK == pduflag) && ((p_Easmode == PIN_RESET) || (radar_range == 0)))
+    {
+        uint8_t intid = MSG_485_TAG_RTU;
+        radar_range = 0xFF;
+        BUF_Write(&g_AlarmRing, &intid, 1);
+        return;
+    }
 
+    if (LL_OK == pduflag && (radarsingal || PIN_RESET == aicamsingal))
+    {
+        uint8_t intid = MSG_485_TAG_RTU;
+        BUF_Write(&g_AlarmRing, &intid, 1);
+        return;
+    }
+
+    if ((1 == pduflag) && (offline_flag == 1))
+    {
+        uint8_t intid = MSG_NETWORK_OFFLINE;
+        offline_flag = 0;
+        BUF_Write(&g_AlarmRing, &intid, 1);
+        return;
+    }
+
+    if ((2 == pduflag) && (offline_flag == 2))
+    {
+        uint8_t intid = MSG_LEDTEST;
+        offline_flag = 0;
+        BUF_Write(&g_AlarmRing, &intid, 1);
+        return;
+    }
+}
+
+static void hc32_handle_var_frame(void)
+{
+    uint8_t plen;
+
+    if (s_hc32_rx.buf[2] != 0x01u) { return; }
+    plen = (uint8_t)(s_hc32_rx.len - 2u);
+    if (plen > FRAME_MAX_PAYLOAD) { return; }
+    (void)frame_var_send(0x81u, s_hc32_rx.buf[3], &s_hc32_rx.buf[4], plen);
+}
+
+void Check_Uart_Pdu(void)
+{
+    uint8_t b;
+    int ev;
+    static uint8_t inited = 0u;
+
+    if (inited == 0u) { frame_rx_init(&s_hc32_rx); inited = 1u; }
+
+    while (BUF_UsedSize(&m_stcRingBuf) > 0u)
+    {
+        BUF_Read(&m_stcRingBuf, &b, 1);
+        ev = frame_rx_feed(&s_hc32_rx, b);
+        if (ev == FRAME_EV_LEGACY)
+        {
+            hc32_handle_legacy_frame();
+        }
+        else if (ev == FRAME_EV_VAR)
+        {
+            hc32_handle_var_frame();
+        }
+    }
 }
 
 void Relay_status_check(void)

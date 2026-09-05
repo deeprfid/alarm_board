@@ -28,6 +28,14 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
   - `Get_pdu_data()` 的 GPIOHEAD 分支由空转改为调用上述应答（`common.c`），`bsp_rs485.h` 增加原型。
 - `[stm32f0]` **feat**: `GET_RADAR_ENABLE` 0→1（`BSP/bsp.h`）：启用既有 50ms 周期雷达状态轮询（`Broadcast_Get_Radar_Status` 广播 GPIOHEAD 查询）、应答缓存（`Chaneel_ID[]`）与按 AntID 查询应答（`Send_RadarStatus_to_Master`/`radar_pdu`）——拉取式上传链路打通，用于验证；
 - 备注：MVP 保留老 50ms 周期与“每问必答 0/1”语义；周期压缩、STM32→Linux 聚合帧 `[0x7E][mask]`、0x55/0xAA 推送等优化放下一迭代（设计文档 v0.2 暂缓执行）。
+- `[hc32f460]` **feat**: STM32↔HC32 链路支持不定长(0xAA)帧收发（老格式冻结不变）：
+  - `bsp_rs485.c`：UART4 RX DMA 满 32B 的 TC 立即上抛并 `AOS_SW_Trigger()` 重挂（连续字节流可跨 32B 块），空闲超时只补推实际尾部字节（`got = 32 - count`，>0 才写）——支持 >32B/不定长连续接收；
+  - `common.c`：新增帧核心（0xAA：AA+Len+Cmd+Addr+Payload+CRC16，Len=Addr+Cmd+Payload；老 0xFF/0x55 按 32B 帧扫描），`Check_Uart_Pdu` 改为逐字节泵；老帧解析/GPIOHEAD 应答/报警判定逻辑不变；0xAA cmd 0x01 回 0x81 回显（变长验证用）。
+- `[stm32f0]` **feat**: 通道口(COM2..6) 不定长(0xAA)收发（IPC/COM1 Linux 段未动）：
+  - `app.c` 新增同款帧核心与每口解析泵（仅 GET_RADAR_ENABLE=1 时编译）；legacy GPIOHEAD 应答更新 `Chaneel_ID[]`，改为“150ms 无新帧才清”（带迟滞，防误判无人）；
+  - 每 1s 向 5 口发 cmd 0x01 变长 ping（负载 0/8/32/80B 轮换），HC32 回 0x81 验证双向变长收发；
+  - 50ms 老 GPIOHEAD 轮询保留。
+
 - **docs**：新增《Boot/OTA 设计稿 v0.1》（`docs/ota_boot_design.md`）：**A/B 双槽即运行区、无搬运**；选择器标志（双份+CRC）为选槽唯一真值，版本号不参与选槽；Boot 只做“读标志→校验(Magic/ImageLen/整包CRC32/TargetSlot)→跳槽”，TRIAL 试运行窗口(3s)+失败计数自动回退；按槽分别编译两份镜像（STM32 M0 无 VTOR 需向量表重映射，HC32 用 VTOR）；下载期页粒度擦写非活动槽，掉电矩阵任意时刻不砖；含 Linux→STM32→HC32 中继与内存布局（STM32 Boot16K/A64/B64/标志4K；HC32 Boot32K/A128/B128/标志8K）。**未改动任何固件代码**。
 
 - **docs**：新增《设计定稿备忘 2026-09-04》（`docs/decisions_2026-09-04.md`）：汇总当日决策——老格式冻结(0xFF/0x55)+0xAA 变长新帧(Len+Cmd+Addr+Payload+CRC16)、按帧头分流的状态机接收引擎与三判决点/滑窗重同步、实时性=事件+周期+迟滞、流水线轮询、OTA A/B 槽/代理缓存、已确认产品口径与明天开工顺序。未改动任何固件代码。

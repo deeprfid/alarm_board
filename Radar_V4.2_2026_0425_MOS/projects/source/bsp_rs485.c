@@ -26,15 +26,23 @@ __align(64) uint8_t m_au8DataBuf[RING_BUF_SIZE];
  */
 static void RX_DMA_TC_IrqCallback(void)
 {
+    /* variable-length support: push full 32B chunk, re-arm DMA immediately */
+    BUF_Write(&m_stcRingBuf, m_au8RxBuf, APP_FRAME_LEN_MAX);
+    AOS_SW_Trigger();
     DMA_ClearTransCompleteStatus(RX_DMA_UNIT, RX_DMA_TC_FLAG);
 }
 
 static void USART_RxTimeout_IrqCallback(void)
 {
     __IO uint16_t m_u16RxLen;
+    uint16_t got;
 
     m_u16RxLen = (uint16_t)DMA_GetTransCount(RX_DMA_UNIT, RX_DMA_CH);
-    BUF_Write(&m_stcRingBuf, m_au8RxBuf, APP_FRAME_LEN_MAX);
+    got = (uint16_t)(APP_FRAME_LEN_MAX - m_u16RxLen);
+    if (got > 0u)
+    {
+        BUF_Write(&m_stcRingBuf, m_au8RxBuf, got);
+    }
     AOS_SW_Trigger();
     TMR0_Stop(TMR0_UNIT, TMR0_CH);
     USART_ClearStatus(USART_UNIT, USART_FLAG_RX_TIMEOUT);
