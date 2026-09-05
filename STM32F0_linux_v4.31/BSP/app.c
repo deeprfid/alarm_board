@@ -646,7 +646,7 @@ static void aa5_feed(uint8_t p, uint8_t b)
 
 static void aa_broadcast_all(uint32_t now)
 {
-    static const uint8_t plens[4] = { 0u, 8u, 32u, 65u };
+    static const uint8_t plens[4] = { 0u, 8u, 32u, 128u };
     uint8_t out[AA_MAXBUF];
     uint8_t plen;
     uint8_t p;
