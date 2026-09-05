@@ -610,7 +610,6 @@ static uint8_t  aa5_len[5];
 static uint16_t aa5_idx[5];
 static uint8_t  aa5_buf[5][AA_MAXBUF];
 static uint32_t aa5_last[5];
-volatile uint32_t dbg_aa_partial = 0;  /* half-frame reset by 30ms guard */
 
 static void aa5_feed(uint8_t p, uint8_t b)
 {
@@ -656,7 +655,7 @@ static void aa_broadcast_all(uint32_t now)
     uint16_t c;
     plen = plens[aa_cycle & 3u];
     total = (uint16_t)plen + 6u;
-    for (p = 0u; p < 1u; p++)   /* TEMP single-port experiment: only CH1 (aa_com[0]=COM6) */
+    for (p = 0u; p < 5u; p++)
     {
         out[0] = 0xAAu;
         out[1] = (uint8_t)(plen + 2u);
@@ -707,7 +706,6 @@ void Radar_thread(void)
             if ((aa5_state[i] != 0u) && ((now - aa5_last[i]) > 30u))
             {
                 aa5_state[i] = 0u; aa5_idx[i] = 0u;
-                dbg_aa_partial++;
             }
         }
     }
