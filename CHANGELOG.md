@@ -39,6 +39,12 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 
 - `[hc32f460]` `[stm32f0]` **feat**: 不定长帧接收增加**超时复位（RX_GUARD=50ms）**：解析器新增 `lastByteMs` 时间戳与 `frame_rx_guard()`，用系统 tick 差值判定半包悬挂（不新增定时器/不阻塞），超时即回 IDLE 防死锁；HC32 在 `Check_Uart_Pdu` 开头调用（`m_u32Tickms`），STM32 在 `Radar_thread` 逐口 pump 前调用（`HAL_GetTick`）。
 
+- **验证记录（定长/不定长广播收发，驱动未改）**：交替广播模型（一拍只广播一类包：定长 0x55 ↔ AA 0xAA，负载档 0/8/32/N 轮换，收端 Check/aa5 分别计 rxcnt）：
+  - 50ms 拍 + 50B：txcnt=rxcnt、errcnt=0（0 丢包，~4min）；
+  - 50ms 拍 + 128B(134B帧)：24600/24598、errcnt=0（丢2包 0.008%，~4min）；
+  - 20ms 拍 + 128B：55160/55153、errcnt=0（丢7包 0.013%）；
+  - 结论：链路无 CRC 错；偶发整帧丢失率随 广播频率×帧长 轻微上升，机理为收端共享中断(USART3_6)在 5 口同时回显高峰偶发溢出整帧丢弃（非主循环/FIFO 满）。业务 ≤50B@50ms 实测 0 丢；>50B/高并发如需 0 丢 → 大包逐口发或 RX-DMA（未实施，备选）。
+
 - `[hc32f460]` **refactor**: 重构 `Radar_Led_update`（`bsp_exint.c`）：新增统一助手 `led_blink_update(有效则Start/无效则Stop)`，按“报警中 / 安装模式(C1 AICAM+Radar / C2 AICAM / C3 Radar / C4 EAS / C5 Light)”分组，逻辑清晰化；**修复 C3(仅雷达)缺失的停止分支**——`bsp_get_radar_singal()==false`(无人)时停止 Radar_LED/B 灯（节拍 300）；C4/C5 原“B 灯选中即闪”行为按遗留保持。
 
 - `[hc32f460]` **feat**: STM32↔HC32 链路支持不定长(0xAA)帧收发（老格式冻结不变）：
