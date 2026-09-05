@@ -503,7 +503,7 @@ void Check_RadarStatus(COM_PORT_E _ucPort,uint8_t *alarm_done)
 
 /* ===== AA variable-length in-poll self-test (10ms cadence, one port per 1s window) ===== */
 #define AA_PING_EN       (1u)
-#define RADAR_POLL_MS    (25u)
+#define RADAR_POLL_MS    (20u)  /* one frame per beat */
 #define AA_PING_MS       (500u)
 #define AA_MAXBUF        (260u)
 static const COM_PORT_E aa_com[5] = { COM6, COM2, COM3, COM4, COM5 };
@@ -641,56 +641,33 @@ static void aa5_feed(uint8_t p, uint8_t b)
     }
 }
 
-static void aa_send_one(uint8_t p, uint8_t plen, uint32_t now)
-{
-    uint8_t out[AA_MAXBUF];
-    uint8_t i;
-    uint16_t total;
-    uint16_t c;
-    total = (uint16_t)plen + 6u;
-    out[0] = 0xAAu;
-    out[1] = (uint8_t)(plen + 2u);
-    out[2] = 0x01u;
-    out[3] = (uint8_t)(p + 1u);
-    for (i = 0u; i < plen; i++) { out[4u + i] = (uint8_t)(0xA0u + i); }
-    c = aa_crc16(out, (uint16_t)(total - 2u));
-    out[total - 2u] = (uint8_t)(c & 0xFFu);
-    out[total - 1u] = (uint8_t)(c >> 8);
-    comSendBuf(aa_com[p], out, total);
-    txcnt++;
-    aa5_state[p] = 0u; aa5_idx[p] = 0u;
-    aa5_last[p] = now;
-}
-
-static uint8_t  aa_round_on = 0u;
-static uint8_t  aa_round_plen = 0u;
-static uint8_t  aa_round_p = 0u;
-static uint32_t aa_round_at = 0u;
-
 static void aa_broadcast_all(uint32_t now)
 {
     static const uint8_t plens[4] = { 0u, 8u, 32u, 150u };
-    aa_round_plen = plens[aa_cycle & 3u];
-    aa_round_on = 1u;
-    aa_round_p = 0u;
-    aa_round_at = now;
-}
-
-static void aa_round_poll(uint32_t now)
-{
-    if (aa_round_on == 0u) { return; }
-    if ((int32_t)(now - aa_round_at) < 0) { return; }
-    aa_send_one(aa_round_p, aa_round_plen, now);
-    aa_round_p++;
-    if (aa_round_p >= 5u)
+    uint8_t out[AA_MAXBUF];
+    uint8_t plen;
+    uint8_t p;
+    uint8_t i;
+    uint16_t total;
+    uint16_t c;
+    plen = plens[aa_cycle & 3u];
+    total = (uint16_t)plen + 6u;
+    for (p = 0u; p < 5u; p++)
     {
-        aa_round_on = 0u;
-        aa_cycle++;
+        out[0] = 0xAAu;
+        out[1] = (uint8_t)(plen + 2u);
+        out[2] = 0x01u;
+        out[3] = (uint8_t)(p + 1u);
+        for (i = 0u; i < plen; i++) { out[4u + i] = (uint8_t)(0xA0u + i); }
+        c = aa_crc16(out, (uint16_t)(total - 2u));
+        out[total - 2u] = (uint8_t)(c & 0xFFu);
+        out[total - 1u] = (uint8_t)(c >> 8);
+        comSendBuf(aa_com[p], out, total);
+        txcnt++;
+        aa5_state[p] = 0u; aa5_idx[p] = 0u;
+        aa5_last[p] = now;
     }
-    else
-    {
-        aa_round_at += 5u;
-    }
+    aa_cycle++;
 }
 /* ===== end AA helpers ===== */
 void Radar_thread(void)
@@ -700,8 +677,6 @@ void Radar_thread(void)
     uint32_t now = HAL_GetTick();
     uint8_t i;
     uint8_t b;
-
-    aa_round_poll(now);      /* non-blocking staggered AA sends, 5ms apart */
 
     if ((now - last_beat) < RADAR_POLL_MS) { return; }
     last_beat = now;
