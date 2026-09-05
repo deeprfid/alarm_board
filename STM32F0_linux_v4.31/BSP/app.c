@@ -610,6 +610,9 @@ static uint8_t  aa5_buf[5][AA_MAXBUF];
 static uint32_t aa5_last[5];
 static uint16_t aa_seq[5];   /* per-port frame seq, echoed back by HC32 */
 static uint16_t rx_seq[5];   /* last seq seen in received 0x81 echo */
+static uint16_t exp_seq[5];   /* expected next seq per port */
+static uint8_t  exp_ok[5];    /* first 0x81 received per port */
+volatile uint32_t miss_cnt = 0;   /* total missing seq count */
 
 static void aa5_feed(uint8_t p, uint8_t b)
 {
@@ -641,6 +644,12 @@ static void aa5_feed(uint8_t p, uint8_t b)
                 if (aa5_len[p] >= 4u)   /* payload len >= 2: seq present */
                 {
                     rx_seq[p] = (uint16_t)(aa5_buf[p][4]) | ((uint16_t)aa5_buf[p][5] << 8u);
+                    if (exp_ok[p])
+                    {
+                        if (rx_seq[p] > exp_seq[p]) { miss_cnt += (uint32_t)(rx_seq[p] - exp_seq[p]); }
+                    }
+                    exp_seq[p] = (uint16_t)(rx_seq[p] + 1u);
+                    exp_ok[p] = 1u;
                 }
             }
             aa5_state[p] = 0u; aa5_idx[p] = 0u;
