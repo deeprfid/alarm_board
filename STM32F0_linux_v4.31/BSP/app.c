@@ -666,6 +666,7 @@ static void aa_broadcast_all(uint32_t now)
         txcnt++;
         aa5_state[p] = 0u; aa5_idx[p] = 0u;
         aa5_last[p] = now;
+        HAL_Delay(5u);   /* stagger AA sends 5ms apart, echoes no longer simultaneous */
     }
     aa_cycle++;
 }
