@@ -15,20 +15,6 @@
 
 #include "bsp.h"
 
-/* diag counters (debug watch): index 0..5 = USART1..USART6 */
-volatile uint32_t dbg_uart_ore[6];
-volatile uint32_t dbg_uart_fe[6];
-volatile uint32_t dbg_uart_full[6];
-static uint8_t uart_idx(USART_TypeDef *u)
-{
-    if (u == USART1) { return 0u; }
-    if (u == USART2) { return 1u; }
-    if (u == USART3) { return 2u; }
-    if (u == USART4) { return 3u; }
-    if (u == USART5) { return 4u; }
-    return 5u;
-}
-
 
 /* 定义每个串口结构体变量 */
 #if UART1_FIFO_EN == 1
@@ -715,7 +701,6 @@ static void UartIRQ(UART_T *_pUart)
     uint32_t isrflags   = READ_REG(_pUart->uart->ISR);
     uint32_t cr1its     = READ_REG(_pUart->uart->CR1);
     uint32_t cr3its     = READ_REG(_pUart->uart->CR3);
-    uint32_t ui = uart_idx(_pUart->uart);
 
     /* 处理接收中断  */
     if ((isrflags & USART_ISR_RXNE) != RESET)
@@ -734,10 +719,6 @@ static void UartIRQ(UART_T *_pUart)
         if (_pUart->usRxCount < _pUart->usRxBufSize)
         {
             _pUart->usRxCount++;
-        }
-        else
-        {
-            dbg_uart_full[ui]++;
         }
 
         /* 回调函数,通知应用程序收到新数据,一般是发送1个消息或者设置一个标记 */
@@ -819,8 +800,6 @@ static void UartIRQ(UART_T *_pUart)
     }
 
     /* 清除中断标志 */
-    if ((isrflags & USART_ISR_ORE) != RESET) { dbg_uart_ore[ui]++; }
-    if ((isrflags & USART_ISR_FE) != RESET) { dbg_uart_fe[ui]++; }
     SET_BIT(_pUart->uart->ICR, UART_CLEAR_PEF);
     SET_BIT(_pUart->uart->ICR, UART_CLEAR_FEF);
     SET_BIT(_pUart->uart->ICR, UART_CLEAR_NEF);
