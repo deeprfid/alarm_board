@@ -609,6 +609,7 @@ static uint16_t aa5_idx[5];
 static uint8_t  aa5_buf[5][AA_MAXBUF];
 static uint32_t aa5_last[5];
 static uint16_t aa_seq[5];   /* per-port frame seq, echoed back by HC32 */
+static uint16_t rx_seq[5];   /* last seq seen in received 0x81 echo */
 
 static void aa5_feed(uint8_t p, uint8_t b)
 {
@@ -634,7 +635,14 @@ static void aa5_feed(uint8_t p, uint8_t b)
         c = aa_crc16(aa5_buf[p], (uint16_t)(t - 2u));
         if (((uint8_t)(c & 0xFFu) == aa5_buf[p][t - 2u]) && ((uint8_t)(c >> 8) == aa5_buf[p][t - 1u]))
         {
-            if (aa5_buf[p][2] == 0x81u) { rxcnt++; }
+            if (aa5_buf[p][2] == 0x81u)
+            {
+                rxcnt++;
+                if (aa5_len[p] >= 4u)   /* payload len >= 2: seq present */
+                {
+                    rx_seq[p] = (uint16_t)(aa5_buf[p][4]) | ((uint16_t)aa5_buf[p][5] << 8u);
+                }
+            }
             aa5_state[p] = 0u; aa5_idx[p] = 0u;
             return;
         }
