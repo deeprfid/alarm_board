@@ -18,6 +18,7 @@ extern stc_ring_buf_t g_AlarmRing;
 #define FRAME_HDR_LEG_PDU      (0xFFu)
 #define FRAME_HDR_LEG_GPIO     (0x55u)
 #define FRAME_MAX_PAYLOAD      (251u)
+#define FRAME_RX_GUARD_MS      (50u)
 #define FRAME_VAR_TOTAL_MAX    (257u)
 #define FRAME_EV_NONE          (0)
 #define FRAME_EV_LEGACY        (1)
@@ -27,6 +28,7 @@ typedef struct
     uint8_t  state;
     uint8_t  len;
     uint16_t idx;
+    uint32_t lastByteMs;
     uint8_t  buf[FRAME_VAR_TOTAL_MAX];
 } frame_rx_t;
 static frame_rx_t s_hc32_rx;
@@ -47,7 +49,14 @@ static uint16_t fr_crc16(const uint8_t *p, uint16_t n)
 }
 static void frame_rx_init(frame_rx_t *rx)
 {
-    rx->state = 0u; rx->len = 0u; rx->idx = 0u;
+    rx->state = 0u; rx->len = 0u; rx->idx = 0u; rx->lastByteMs = 0u;
+}
+static void frame_rx_guard(frame_rx_t *rx, uint32_t now)
+{
+    if ((rx->state != 0u) && ((now - rx->lastByteMs) > FRAME_RX_GUARD_MS))
+    {
+        rx->state = 0u; rx->len = 0u; rx->idx = 0u;
+    }
 }
 static int frame_rx_feed(frame_rx_t *rx, uint8_t b)
 {
@@ -356,15 +365,19 @@ static void hc32_handle_var_frame(void)
 
 void Check_Uart_Pdu(void)
 {
+    extern uint32_t m_u32Tickms;
     uint8_t b;
     int ev;
     static uint8_t inited = 0u;
 
     if (inited == 0u) { frame_rx_init(&s_hc32_rx); inited = 1u; }
 
+    frame_rx_guard(&s_hc32_rx, m_u32Tickms);
+
     while (BUF_UsedSize(&m_stcRingBuf) > 0u)
     {
         BUF_Read(&m_stcRingBuf, &b, 1);
+        s_hc32_rx.lastByteMs = m_u32Tickms;
         ev = frame_rx_feed(&s_hc32_rx, b);
         if (ev == FRAME_EV_LEGACY)
         {
