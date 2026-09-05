@@ -28,6 +28,8 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
   - `Get_pdu_data()` 的 GPIOHEAD 分支由空转改为调用上述应答（`common.c`），`bsp_rs485.h` 增加原型。
 - `[stm32f0]` **feat**: `GET_RADAR_ENABLE` 0→1（`BSP/bsp.h`）：启用既有 50ms 周期雷达状态轮询（`Broadcast_Get_Radar_Status` 广播 GPIOHEAD 查询）、应答缓存（`Chaneel_ID[]`）与按 AntID 查询应答（`Send_RadarStatus_to_Master`/`radar_pdu`）——拉取式上传链路打通，用于验证；
 - 备注：MVP 保留老 50ms 周期与“每问必答 0/1”语义；周期压缩、STM32→Linux 聚合帧 `[0x7E][mask]`、0x55/0xAA 推送等优化放下一迭代（设计文档 v0.2 暂缓执行）。
+- `[stm32f0]` **fix**: 恢复 `Radar_thread` 原版 50ms 广播节奏（每 50ms 调 `Broadcast_Get_Radar_Status()`，与出厂一致）；删除逐口错峰 `send_legacy_query/s_query_next` 与 0xAA 自检 ping（`FRAME_TEST_PING=0`，代码 `#if` 保留开关）；保留逐口帧解析泵、RX_GUARD、诊断计数与 `refresh_chaneel`（150ms 新鲜度）。0xAA 接收能力保留、不再主动并发探活。
+
 - `[stm32f0]` **fix**: 定位并缓解 4 号口(USART5)持续丢回显——根因 **RX 溢出(ORE)**：
 
 - `[stm32f0]` **fix**: `UartSend` 不再用 `HAL_NVIC_DisableIRQ(uartirq)` 屏蔽整个共享中断来写 TX FIFO，改为**只清/置本口 `USART_CR1_TXEIE`**（TX 事件源门控）——消除“发一个口时把 USART3..6 四个口的 RXNE 一起关窗”造成的 ORE；TX FIFO 容量等待改为无锁读 `usTxCount`（ISR 只减不增，读旧值只会多等不会溢出）。
