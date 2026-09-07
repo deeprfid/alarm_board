@@ -598,14 +598,14 @@ static void InitHardUart(void)
 static void UartSendBlocking(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen)
 {
     uint16_t i;
-    /* blocking: poll TXE then write TDR; no TXE interrupt used */
+    /* disable IRQ-driven TX so nothing else writes TDR */
+    CLEAR_BIT(_pUart->uart->CR1, USART_CR1_TXEIE);
+    CLEAR_BIT(_pUart->uart->CR1, USART_CR1_TCIE);
     for (i = 0u; i < _usLen; i++)
     {
         while ((_pUart->uart->ISR & USART_ISR_TXE) == 0u) { }
         _pUart->uart->TDR = _ucaBuf[i];
     }
-    /* do NOT wait TC: shared-ISR flag-clear (on RX IDLE) resets it -> deadlock */
-    while ((_pUart->uart->ISR & USART_ISR_TXE) == 0u) { }
 }
 
 static void UartSend(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen)
