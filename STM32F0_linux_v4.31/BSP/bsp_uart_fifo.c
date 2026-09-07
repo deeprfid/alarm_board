@@ -577,7 +577,8 @@ static void UartSendBlocking(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen)
         while ((_pUart->uart->ISR & USART_ISR_TXE) == 0u) { }
         _pUart->uart->TDR = _ucaBuf[i];
     }
-    while ((_pUart->uart->ISR & USART_ISR_TC) == 0u) { }
+    /* do NOT wait TC: shared-ISR flag-clear (on RX IDLE) resets it -> deadlock */
+    while ((_pUart->uart->ISR & USART_ISR_TXE) == 0u) { }
 }
 
 static void UartSend(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen)
