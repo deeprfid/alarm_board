@@ -603,9 +603,11 @@ static void send_legacy_one(uint8_t idx)
     comSendBuf(aa_com[idx], (uint8_t *)&q, sizeof(q));
     txcnt++;
 }
-volatile uint32_t uart3_tx=0, uart3_rx=0, uart3_d=0;
-volatile uint32_t uart4_tx=0, uart4_rx=0, uart4_d=0;
-volatile uint32_t uart5_tx=0, uart5_rx=0, uart5_d=0;
+volatile uint32_t uart3_tx=0, uart3_rx=0, uart3_d=0, uart3_miss=0;
+volatile uint32_t uart4_tx=0, uart4_rx=0, uart4_d=0, uart4_miss=0;
+volatile uint32_t uart5_tx=0, uart5_rx=0, uart5_d=0, uart5_miss=0;
+static uint16_t aa_seq[5];
+static uint16_t exp_seq[5] = { 1u, 1u, 1u, 1u, 1u };
 static uint8_t  aa5_state[5];
 static uint8_t  aa5_len[5];
 static uint16_t aa5_idx[5];
@@ -638,10 +640,21 @@ static void aa5_feed(uint8_t p, uint8_t b)
         {
             if (aa5_buf[p][2] == 0x81u)
             {
+                uint16_t sq;
                 rxcnt++;
-                if (p == 2u) { uart3_rx++; uart3_d = uart3_tx - uart3_rx; }
-                else if (p == 3u) { uart4_rx++; uart4_d = uart4_tx - uart4_rx; }
-                else if (p == 4u) { uart5_rx++; uart5_d = uart5_tx - uart5_rx; }
+                if (p == 2u || p == 3u || p == 4u)
+                {
+                    sq = (uint16_t)(aa5_buf[p][4]) | ((uint16_t)aa5_buf[p][5] << 8u);
+                    if (sq > exp_seq[p]) {
+                        if (p == 2u) { uart3_miss += (uint32_t)(sq - exp_seq[p]); }
+                        else if (p == 3u) { uart4_miss += (uint32_t)(sq - exp_seq[p]); }
+                        else if (p == 4u) { uart5_miss += (uint32_t)(sq - exp_seq[p]); }
+                    }
+                    exp_seq[p] = (uint16_t)(sq + 1u);
+                    if (p == 2u) { uart3_rx++; uart3_d = uart3_tx - uart3_rx; }
+                    else if (p == 3u) { uart4_rx++; uart4_d = uart4_tx - uart4_rx; }
+                    else if (p == 4u) { uart5_rx++; uart5_d = uart5_tx - uart5_rx; }
+                }
             }
             aa5_state[p] = 0u; aa5_idx[p] = 0u;
             return;
@@ -667,7 +680,17 @@ static void aa_broadcast_all(uint32_t now)
         out[1] = (uint8_t)(plen + 2u);
         out[2] = 0x01u;
         out[3] = (uint8_t)(p + 1u);
-        for (i = 0u; i < plen; i++) { out[4u + i] = (uint8_t)(0xA0u + i); }
+        aa_seq[p]++;
+        if (plen >= 2u)
+        {
+            out[4u] = (uint8_t)(aa_seq[p] & 0xFFu);
+            out[5u] = (uint8_t)(aa_seq[p] >> 8u);
+            for (i = 2u; i < plen; i++) { out[4u + i] = (uint8_t)(0xA0u + i); }
+        }
+        else
+        {
+            for (i = 0u; i < plen; i++) { out[4u + i] = (uint8_t)(0xA0u + i); }
+        }
         c = aa_crc16(out, (uint16_t)(total - 2u));
         out[total - 2u] = (uint8_t)(c & 0xFFu);
         out[total - 1u] = (uint8_t)(c >> 8);
