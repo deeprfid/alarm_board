@@ -63,6 +63,7 @@ UART_HandleTypeDef CH1_huart6;// CHANNEL 1
 static void UartVarInit(void);
 static void InitHardUart(void);
 static void UartSend(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen);
+static void UartSendBlocking(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen);
 static uint8_t UartGetChar(UART_T *_pUart, uint8_t *_pByte);
 static void UartIRQ(UART_T *_pUart);
 
@@ -242,6 +243,16 @@ void comSendBuf(COM_PORT_E _ucPort, uint8_t *_ucaBuf, uint16_t _usLen)
     {
         return;
     }
+
+#if (UART3_FIFO_EN == 1 && UART3_DMA_RX == 1) || (UART4_FIFO_EN == 1 && UART4_DMA_RX == 1) || (UART5_FIFO_EN == 1 && UART5_DMA_RX == 1)
+    if ((pUart->uart == USART3 && UART3_DMA_RX == 1) ||
+        (pUart->uart == USART4 && UART4_DMA_RX == 1) ||
+        (pUart->uart == USART5 && UART5_DMA_RX == 1))
+    {
+        UartSendBlocking(pUart, _ucaBuf, _usLen);
+        return;
+    }
+#endif
 
 //	if (pUart->SendBefor != 0)
 //	{
@@ -557,6 +568,18 @@ static void InitHardUart(void)
 *	·µ »Ø Öµ: ÎÞ
 *********************************************************************************************************
 */
+static void UartSendBlocking(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen)
+{
+    uint16_t i;
+    /* blocking: poll TXE then write TDR; no TXE interrupt used */
+    for (i = 0u; i < _usLen; i++)
+    {
+        while ((_pUart->uart->ISR & USART_ISR_TXE) == 0u) { }
+        _pUart->uart->TDR = _ucaBuf[i];
+    }
+    while ((_pUart->uart->ISR & USART_ISR_TC) == 0u) { }
+}
+
 static void UartSend(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen)
 {
     uint16_t i;
