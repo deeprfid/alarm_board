@@ -255,6 +255,13 @@ void comSendBuf(COM_PORT_E _ucPort, uint8_t *_ucaBuf, uint16_t _usLen)
         return;
     }
 
+#if UART3_FIFO_EN == 1
+    if (pUart->uart == USART3)
+    {
+        UartSendBlocking(pUart, _ucaBuf, _usLen);
+        return;
+    }
+#endif
 #if UART4_FIFO_EN == 1
     if (pUart->uart == USART4)
     {
@@ -606,6 +613,9 @@ static void UartSendBlocking(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen)
         while ((_pUart->uart->ISR & USART_ISR_TXE) == 0u) { }
         _pUart->uart->TDR = _ucaBuf[i];
     }
+    /* HAL-style: wait TC (last byte fully shifted out) */
+    while ((_pUart->uart->ISR & USART_ISR_TC) == 0u) { }
+    SET_BIT(_pUart->uart->ICR, USART_ICR_TCCF);
 }
 
 static void UartSend(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen)
@@ -1055,8 +1065,8 @@ static void UartIRQ(UART_T *_pUart)
     SET_BIT(_pUart->uart->ICR, UART_CLEAR_OREF);
 #if !((UART3_FIFO_EN == 1 && UART3_DMA_RX == 1) || (UART4_FIFO_EN == 1 && UART4_DMA_RX == 1) || (UART5_FIFO_EN == 1 && UART5_DMA_RX == 1))
     SET_BIT(_pUart->uart->ICR, UART_CLEAR_IDLEF);
-#endif
     SET_BIT(_pUart->uart->ICR, UART_CLEAR_TCF);
+#endif
     SET_BIT(_pUart->uart->ICR, UART_CLEAR_CTSF);
     SET_BIT(_pUart->uart->ICR, UART_CLEAR_CMF);
 
