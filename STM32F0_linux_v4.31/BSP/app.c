@@ -603,9 +603,10 @@ static void send_legacy_one(uint8_t idx)
     comSendBuf(aa_com[idx], (uint8_t *)&q, sizeof(q));
     txcnt++;
 }
-volatile uint32_t uart3_tx=0, uart3_rx=0, uart3_d=0, uart3_miss=0;
-volatile uint32_t uart4_tx=0, uart4_rx=0, uart4_d=0, uart4_miss=0;
-volatile uint32_t uart5_tx=0, uart5_rx=0, uart5_d=0, uart5_miss=0;
+static volatile uint32_t uart3_tx=0, uart3_rx=0, uart3_d=0, uart3_miss=0;
+static volatile uint32_t uart4_tx=0, uart4_rx=0, uart4_d=0, uart4_miss=0;
+static volatile uint32_t uart6_tx=0, uart6_rx=0;
+static volatile uint32_t uart5_tx=0, uart5_rx=0, uart5_d=0, uart5_miss=0;
 static uint16_t aa_seq[5];
 static uint16_t exp_seq[5] = { 1u, 1u, 1u, 1u, 1u };
 static uint8_t  aa5_state[5];
@@ -642,7 +643,8 @@ static void aa5_feed(uint8_t p, uint8_t b)
             {
                 uint16_t sq;
                 rxcnt++;
-                if (p == 2u || p == 3u || p == 4u)
+                if (p == 0u) { uart6_rx++; }
+                else if (p == 2u || p == 3u || p == 4u)
                 {
                     sq = (uint16_t)(aa5_buf[p][4]) | ((uint16_t)aa5_buf[p][5] << 8u);
                     if (sq > exp_seq[p]) {
@@ -695,7 +697,8 @@ static void aa_broadcast_all(uint32_t now)
         out[total - 2u] = (uint8_t)(c & 0xFFu);
         out[total - 1u] = (uint8_t)(c >> 8);
         comSendBuf(aa_com[p], out, total);
-        if (p == 2u) { uart3_tx++; uart3_d = uart3_tx - uart3_rx; }
+        if (p == 0u) { uart6_tx++; }
+        else if (p == 2u) { uart3_tx++; uart3_d = uart3_tx - uart3_rx; }
         else if (p == 3u) { uart4_tx++; uart4_d = uart4_tx - uart4_rx; }
         else if (p == 4u) { uart5_tx++; uart5_d = uart5_tx - uart5_rx; }
         txcnt++;
