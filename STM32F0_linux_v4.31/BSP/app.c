@@ -503,7 +503,7 @@ void Check_RadarStatus(COM_PORT_E _ucPort,uint8_t *alarm_done)
 
 /* ===== AA variable-length in-poll self-test (10ms cadence, one port per 1s window) ===== */
 #define AA_PING_EN       (1u)
-#define RADAR_POLL_MS    (50u)  /* one frame per beat (blocking TX on UART3/4/5 needs headroom) */
+#define RADAR_POLL_MS    (30u)  /* one frame per beat (blocking TX on UART3/4/5 needs headroom) */
 #define AA_PING_MS       (500u)
 #define AA_MAXBUF        (260u)
 static const COM_PORT_E aa_com[5] = { COM6, COM2, COM3, COM4, COM5 };
@@ -674,9 +674,13 @@ static void aa_broadcast_all(uint32_t now)
     uint8_t i;
     uint16_t total;
     uint16_t c;
+    static const uint8_t tx_order[5] = { 2u, 0u, 1u, 3u, 4u };   /* UART3 first */
+    uint8_t k;
     plen = plens[aa_cycle & 3u];
     total = (uint16_t)plen + 6u;
-    for (p = 0u; p < 5u; p++)
+    for (k = 0u; k < 5u; k++)
+    {
+        p = tx_order[k];
     {
         out[0] = 0xAAu;
         out[1] = (uint8_t)(plen + 2u);
