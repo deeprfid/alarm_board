@@ -503,7 +503,7 @@ void Check_RadarStatus(COM_PORT_E _ucPort,uint8_t *alarm_done)
 
 /* ===== AA variable-length in-poll self-test (10ms cadence, one port per 1s window) ===== */
 #define AA_PING_EN       (1u)
-#define RADAR_POLL_MS    (30u)  /* one frame per beat (blocking TX on UART3/4/5 needs headroom) */
+#define RADAR_POLL_MS    (20u)  /* one frame per beat */
 #define AA_PING_MS       (500u)
 #define AA_MAXBUF        (260u)
 static const COM_PORT_E aa_com[5] = { COM6, COM2, COM3, COM4, COM5 };
@@ -603,12 +603,6 @@ static void send_legacy_one(uint8_t idx)
     comSendBuf(aa_com[idx], (uint8_t *)&q, sizeof(q));
     txcnt++;
 }
-static volatile uint32_t uart3_tx=0, uart3_rx=0, uart3_d=0, uart3_miss=0;
-static volatile uint32_t uart4_tx=0, uart4_rx=0, uart4_d=0, uart4_miss=0;
-static volatile uint32_t uart6_tx=0, uart6_rx=0;
-static volatile uint32_t uart5_tx=0, uart5_rx=0, uart5_d=0, uart5_miss=0;
-static uint16_t aa_seq[5];
-static uint16_t exp_seq[5] = { 1u, 1u, 1u, 1u, 1u };
 static uint8_t  aa5_state[5];
 static uint8_t  aa5_len[5];
 static uint16_t aa5_idx[5];
@@ -639,25 +633,7 @@ static void aa5_feed(uint8_t p, uint8_t b)
         c = aa_crc16(aa5_buf[p], (uint16_t)(t - 2u));
         if (((uint8_t)(c & 0xFFu) == aa5_buf[p][t - 2u]) && ((uint8_t)(c >> 8) == aa5_buf[p][t - 1u]))
         {
-            if (aa5_buf[p][2] == 0x81u)
-            {
-                uint16_t sq;
-                rxcnt++;
-                if (p == 0u) { uart6_rx++; }
-                else if (p == 2u || p == 3u || p == 4u)
-                {
-                    sq = (uint16_t)(aa5_buf[p][4]) | ((uint16_t)aa5_buf[p][5] << 8u);
-                    if (sq > exp_seq[p]) {
-                        if (p == 2u) { uart3_miss += (uint32_t)(sq - exp_seq[p]); }
-                        else if (p == 3u) { uart4_miss += (uint32_t)(sq - exp_seq[p]); }
-                        else if (p == 4u) { uart5_miss += (uint32_t)(sq - exp_seq[p]); }
-                    }
-                    exp_seq[p] = (uint16_t)(sq + 1u);
-                    if (p == 2u) { uart3_rx++; uart3_d = uart3_tx - uart3_rx; }
-                    else if (p == 3u) { uart4_rx++; uart4_d = uart4_tx - uart4_rx; }
-                    else if (p == 4u) { uart5_rx++; uart5_d = uart5_tx - uart5_rx; }
-                }
-            }
+            if (aa5_buf[p][2] == 0x81u) { rxcnt++; }
             aa5_state[p] = 0u; aa5_idx[p] = 0u;
             return;
         }
@@ -674,36 +650,19 @@ static void aa_broadcast_all(uint32_t now)
     uint8_t i;
     uint16_t total;
     uint16_t c;
-    static const uint8_t tx_order[5] = { 2u, 0u, 1u, 3u, 4u };   /* UART3 first */
-    uint8_t k;
     plen = plens[aa_cycle & 3u];
     total = (uint16_t)plen + 6u;
-    for (k = 0u; k < 5u; k++)
+    for (p = 0u; p < 5u; p++)
     {
-        p = tx_order[k];
         out[0] = 0xAAu;
         out[1] = (uint8_t)(plen + 2u);
         out[2] = 0x01u;
         out[3] = (uint8_t)(p + 1u);
-        aa_seq[p]++;
-        if (plen >= 2u)
-        {
-            out[4u] = (uint8_t)(aa_seq[p] & 0xFFu);
-            out[5u] = (uint8_t)(aa_seq[p] >> 8u);
-            for (i = 2u; i < plen; i++) { out[4u + i] = (uint8_t)(0xA0u + i); }
-        }
-        else
-        {
-            for (i = 0u; i < plen; i++) { out[4u + i] = (uint8_t)(0xA0u + i); }
-        }
+        for (i = 0u; i < plen; i++) { out[4u + i] = (uint8_t)(0xA0u + i); }
         c = aa_crc16(out, (uint16_t)(total - 2u));
         out[total - 2u] = (uint8_t)(c & 0xFFu);
         out[total - 1u] = (uint8_t)(c >> 8);
         comSendBuf(aa_com[p], out, total);
-        if (p == 0u) { uart6_tx++; }
-        else if (p == 2u) { uart3_tx++; uart3_d = uart3_tx - uart3_rx; }
-        else if (p == 3u) { uart4_tx++; uart4_d = uart4_tx - uart4_rx; }
-        else if (p == 4u) { uart5_tx++; uart5_d = uart5_tx - uart5_rx; }
         txcnt++;
         aa5_state[p] = 0u; aa5_idx[p] = 0u;
         aa5_last[p] = now;
@@ -714,6 +673,7 @@ static void aa_broadcast_all(uint32_t now)
 void Radar_thread(void)
 {
     static uint32_t last_beat = 0u;
+    static uint8_t  prev_type = 1u;   /* what we sent last: 0=legacy, 1=AA */
     uint32_t now = HAL_GetTick();
     uint8_t i;
     uint8_t b;
@@ -721,21 +681,42 @@ void Radar_thread(void)
     if ((now - last_beat) < RADAR_POLL_MS) { return; }
     last_beat = now;
 
-    /* collect AA replies of previous broadcast (legacy poll disabled) */
-    for (i = 0u; i < 5u; i++)
+    /* 1) collect replies of the previous broadcast */
+    if (prev_type == 0u)
     {
-        while (comGetChar(aa_com[i], &b))
+        memset(Chaneel_ID, 0, sizeof(Chaneel_ID));
+        Check_RadarStatus(COM6, &Chaneel_ID[1]);
+        Check_RadarStatus(COM2, &Chaneel_ID[2]); Chaneel_ID[3] = Chaneel_ID[2];
+        Check_RadarStatus(COM3, &Chaneel_ID[4]); Chaneel_ID[5] = Chaneel_ID[4];
+        Check_RadarStatus(COM4, &Chaneel_ID[6]); Chaneel_ID[7] = Chaneel_ID[6];
+        Check_RadarStatus(COM5, &Chaneel_ID[8]);
+    }
+    else
+    {
+        for (i = 0u; i < 5u; i++)
         {
-            aa5_last[i] = now;
-            aa5_feed(i, b);
-        }
-        if ((aa5_state[i] != 0u) && ((now - aa5_last[i]) > 30u))
-        {
-            aa5_state[i] = 0u; aa5_idx[i] = 0u;
+            while (comGetChar(aa_com[i], &b))
+            {
+                aa5_last[i] = now;
+                aa5_feed(i, b);
+            }
+            if ((aa5_state[i] != 0u) && ((now - aa5_last[i]) > 30u))
+            {
+                aa5_state[i] = 0u; aa5_idx[i] = 0u;
+            }
         }
     }
 
-    /* broadcast AA to all 5 every beat */
-    aa_broadcast_all(now);
+    /* 2) broadcast the other type this beat */
+    if (prev_type == 0u)
+    {
+        aa_broadcast_all(now);          /* variable-length broadcast to all 5 */
+        prev_type = 1u;
+    }
+    else
+    {
+        Broadcast_Get_Radar_Status();   /* fixed-length broadcast to all 5 */
+        prev_type = 0u;
+    }
 }
 #endif
