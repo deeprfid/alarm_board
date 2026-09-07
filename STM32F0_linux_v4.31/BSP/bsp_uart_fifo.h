@@ -61,12 +61,14 @@ typedef enum
 	#define UART4_BAUD			460800
 	#define UART4_TX_BUF_SIZE	1*512
 	#define UART4_RX_BUF_SIZE	1*512
+	#define UART4_DMA_RX		1	/* 1=UART4 RX via DMA1 CH1 circular + IDLE */
 #endif
 
 #if UART5_FIFO_EN == 1
 	#define UART5_BAUD			460800
 	#define UART5_TX_BUF_SIZE	1*512
 	#define UART5_RX_BUF_SIZE	1*512
+	#define UART5_DMA_RX		1	/* 1=UART5 RX via DMA1 CH5 circular + IDLE */
 #endif
 
 #if UART6_FIFO_EN == 1
