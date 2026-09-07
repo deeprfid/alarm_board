@@ -60,13 +60,6 @@ UART_HandleTypeDef CH4_huart4;// CHANNEL 4
 UART_HandleTypeDef CH5_huart5;// CHANNEL 5
 UART_HandleTypeDef CH1_huart6;// CHANNEL 1
 
-/* --- DMA TX persistent buffers (UART4=CH4, UART6=CH2) --- */
-#define UART_TX_DMA_BUF (600u)
-static uint8_t  g_txbuf4[UART_TX_DMA_BUF];
-static volatile uint8_t g_txbusy4 = 0u;
-static uint8_t  g_txbuf6[UART_TX_DMA_BUF];
-static volatile uint8_t g_txbusy6 = 0u;
-
 static void UartVarInit(void);
 static void InitHardUart(void);
 static void UartSend(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen);
@@ -853,6 +846,13 @@ static void uart_dma_rx_cfg(DMA_Channel_TypeDef *ch, uint32_t cselr_msk, uint32_
     SET_BIT(uart->CR3, USART_CR3_DMAR);
     SET_BIT(uart->CR1, USART_CR1_IDLEIE);
 }
+
+/* --- DMA TX (UART4=CH4, UART6=CH2) --- */
+#define UART_TX_DMA_BUF (600u)
+static uint8_t  g_txbuf4[UART_TX_DMA_BUF];
+static volatile uint8_t g_txbusy4 = 0u;
+static uint8_t  g_txbuf6[UART_TX_DMA_BUF];
+static volatile uint8_t g_txbusy6 = 0u;
 
 /* start DMA TX on one uart: copy to persistent buf, configure, launch, return */
 static void uart_dma_tx_start(USART_TypeDef *uart, DMA_Channel_TypeDef *ch, uint32_t cselr_msk, uint32_t cselr_val,
