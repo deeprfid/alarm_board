@@ -696,11 +696,82 @@ uint8_t UartTxEmpty(COM_PORT_E _ucPort)
 *	返 回 值: 无
 *********************************************************************************************************
 */
+#if UART3_FIFO_EN == 1 && UART3_DMA_RX == 1
+/* --- UART3 RX DMA circular (single-port experiment) --- */
+#define UART3_DMA_LEN   (512u)
+static uint8_t  g_u3dma[UART3_DMA_LEN];
+static uint16_t g_u3dma_last = 0u;   /* bytes already moved into ring */
+
+static void uart3_dma_rx_move(uint32_t now)
+{
+    uint16_t cur;
+    uint16_t got;
+    uint16_t i;
+    uint16_t w;
+
+    /* remaining count in circular buffer => bytes received so far */
+    cur = (uint16_t)(UART3_DMA_LEN - (uint16_t)READ_REG(DMA1->CNDTR3));
+    if (cur >= g_u3dma_last)
+    {
+        got = (uint16_t)(cur - g_u3dma_last);
+        for (i = 0u; i < got; i++)
+        {
+            w = g_tUart3.usRxWrite;
+            g_tUart3.pRxBuf[w] = g_u3dma[(g_u3dma_last + i) & (UART3_DMA_LEN - 1u)];
+            if (++w >= g_tUart3.usRxBufSize) { w = 0u; }
+            g_tUart3.usRxWrite = w;
+            if (g_tUart3.usRxCount < g_tUart3.usRxBufSize) { g_tUart3.usRxCount++; }
+        }
+    }
+    else
+    {
+        /* wrapped: tail + head */
+        got = (uint16_t)(UART3_DMA_LEN - g_u3dma_last);
+        for (i = 0u; i < got; i++)
+        {
+            w = g_tUart3.usRxWrite;
+            g_tUart3.pRxBuf[w] = g_u3dma[(g_u3dma_last + i) & (UART3_DMA_LEN - 1u)];
+            if (++w >= g_tUart3.usRxBufSize) { w = 0u; }
+            g_tUart3.usRxWrite = w;
+            if (g_tUart3.usRxCount < g_tUart3.usRxBufSize) { g_tUart3.usRxCount++; }
+        }
+        got = cur;
+        for (i = 0u; i < got; i++)
+        {
+            w = g_tUart3.usRxWrite;
+            g_tUart3.pRxBuf[w] = g_u3dma[i];
+            if (++w >= g_tUart3.usRxBufSize) { w = 0u; }
+            g_tUart3.usRxWrite = w;
+            if (g_tUart3.usRxCount < g_tUart3.usRxBufSize) { g_tUart3.usRxCount++; }
+        }
+    }
+    g_u3dma_last = cur;
+    (void)now;
+}
+#endif
 static void UartIRQ(UART_T *_pUart)
 {
     uint32_t isrflags   = READ_REG(_pUart->uart->ISR);
     uint32_t cr1its     = READ_REG(_pUart->uart->CR1);
     uint32_t cr3its     = READ_REG(_pUart->uart->CR3);
+
+#if UART3_FIFO_EN == 1 && UART3_DMA_RX == 1
+    /* UART3 uses DMA RX: on IDLE move received bytes from DMA buf into ring */
+    if (_pUart->uart == USART3)
+    {
+        if ((isrflags & USART_ISR_IDLE) != RESET)
+        {
+            SET_BIT(USART3->ICR, USART_ICR_IDLECF);
+            uart3_dma_rx_move(0u);
+        }
+        /* clear all flags, do NOT touch RXNE (DMA owns it) */
+        SET_BIT(USART3->ICR, UART_CLEAR_PEF);
+        SET_BIT(USART3->ICR, UART_CLEAR_FEF);
+        SET_BIT(USART3->ICR, UART_CLEAR_NEF);
+        SET_BIT(USART3->ICR, UART_CLEAR_OREF);
+        return;
+    }
+#endif
 
     /* 处理接收中断  */
     if ((isrflags & USART_ISR_RXNE) != RESET)
@@ -1003,7 +1074,29 @@ static void MX_USART3_UART_Init(void)
 
     SET_BIT(USART3->ICR, USART_ICR_TCCF);	/* 清除TC发送完成标志 */
     SET_BIT(USART3->RQR, USART_RQR_RXFRQ);/* 清除RXNE接收标志 */
+
+#if UART3_FIFO_EN == 1 && UART3_DMA_RX == 1
+    /* UART3 RX via DMA1 CH3 circular + IDLE frame boundary */
+    __HAL_RCC_DMA1_CLK_ENABLE();
+
+    /* CSELR: channel 3 <- USART3_RX */
+    DMA1->CSELR = (DMA1->CSELR & ~DMA1_CSELR_CH3_USART3_RX_Msk) | DMA1_CSELR_CH3_USART3_RX;
+
+    DMA1_Channel3->CCR = 0u;
+    DMA1_Channel3->CMAR = (uint32_t)g_u3dma;
+    DMA1_Channel3->CPAR = (uint32_t)&USART3->RDR;
+    DMA1_Channel3->CNDTR = UART3_DMA_LEN;
+    /* MEM2PER=0(per2mem), MINC=1, PINC=0, PSIZE/MSIZE=00(byte),
+       CIRC=1(circular), no TC/HT interrupt (we use IDLE) */
+    DMA1_Channel3->CCR = DMA_CCR_MINC | DMA_CCR_CIRC | DMA_CCR_EN;
+
+    g_u3dma_last = 0u;
+    CLEAR_BIT(USART3->CR1, USART_CR1_RXNEIE);   /* DMA owns RX now */
+    SET_BIT(USART3->CR3, USART_CR3_DMAR);       /* enable DMA receiver */
+    SET_BIT(USART3->CR1, USART_CR1_IDLEIE);     /* frame done = idle line */
+#else
     SET_BIT(USART3->CR1, USART_CR1_RXNEIE);	/* 使能PE. RX接受中断 */
+#endif
 
 }
 
