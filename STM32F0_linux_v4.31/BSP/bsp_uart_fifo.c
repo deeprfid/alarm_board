@@ -255,13 +255,6 @@ void comSendBuf(COM_PORT_E _ucPort, uint8_t *_ucaBuf, uint16_t _usLen)
         return;
     }
 
-#if UART3_FIFO_EN == 1
-    if (pUart->uart == USART3)
-    {
-        UartSendBlocking(pUart, _ucaBuf, _usLen);
-        return;
-    }
-#endif
 #if UART4_FIFO_EN == 1
     if (pUart->uart == USART4)
     {
