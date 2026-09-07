@@ -501,21 +501,10 @@ void Check_RadarStatus(COM_PORT_E _ucPort,uint8_t *alarm_done)
 
 
 
-/* ===== AA variable-length in-poll self-test (10ms cadence, one port per 1s window) ===== */
-#define AA_PING_EN       (1u)
+/* ===== AA variable-length 5-port broadcast self-test (one frame per beat) ===== */
 #define RADAR_POLL_MS    (50u)  /* one frame per beat (blocking TX on UART3/4/5 needs headroom) */
-#define AA_PING_MS       (500u)
 #define AA_MAXBUF        (260u)
 static const COM_PORT_E aa_com[5] = { COM6, COM2, COM3, COM4, COM5 };
-static uint32_t aa_next_ms[5];
-
-static uint8_t  aa_win = 0xFFu;
-static uint32_t aa_win_until = 0u;
-static uint8_t  aa_state = 0u;
-static uint8_t  aa_len = 0u;
-static uint16_t aa_idx = 0u;
-static uint8_t  aa_buf[AA_MAXBUF];
-static uint32_t aa_last_ms = 0u;
 static uint8_t  aa_cycle = 0u;
 
 static uint16_t aa_crc16(const uint8_t *p, uint16_t n)
@@ -532,76 +521,6 @@ static uint16_t aa_crc16(const uint8_t *p, uint16_t n)
         }
     }
     return crc;
-}
-static void aa_open_window(uint8_t idx, uint32_t now)
-{
-    static const uint8_t plens[4] = { 0u, 8u, 32u, 80u };
-    uint8_t out[AA_MAXBUF];
-    uint8_t plen;
-    uint8_t i;
-    uint16_t total;
-    uint16_t c;
-    aa_state = 0u; aa_len = 0u; aa_idx = 0u;
-    aa_win = idx;
-    aa_win_until = now + 200u;
-    aa_last_ms = now;
-    plen = plens[aa_cycle & 3u];
-    total = (uint16_t)plen + 6u;
-    out[0] = 0xAAu;
-    out[1] = (uint8_t)(plen + 2u);
-    out[2] = 0x01u;
-    out[3] = (uint8_t)(idx + 1u);
-    for (i = 0u; i < plen; i++) { out[4u + i] = (uint8_t)(0xA0u + i); }
-    c = aa_crc16(out, (uint16_t)(total - 2u));
-    out[total - 2u] = (uint8_t)(c & 0xFFu);
-    out[total - 1u] = (uint8_t)(c >> 8);
-    comSendBuf(aa_com[idx], out, total);
-    txcnt++;
-    aa_cycle++;
-    aa_next_ms[idx] = now + AA_PING_MS;
-}
-static void aa_feed(uint8_t b)
-{
-    uint16_t t;
-    uint16_t c;
-    if (aa_state == 0u)
-    {
-        if (b == 0xAAu) { aa_buf[0] = b; aa_idx = 1u; aa_state = 1u; }
-        return;
-    }
-    if (aa_state == 1u)
-    {
-        aa_len = b;
-        if ((aa_len < 2u) || (aa_len > 251u)) { aa_state = 0u; aa_idx = 0u; return; }
-        aa_buf[aa_idx++] = b;
-        aa_state = 2u;
-        return;
-    }
-    aa_buf[aa_idx++] = b;
-    t = (uint16_t)aa_len + 4u;
-    if (aa_idx >= t)
-    {
-        c = aa_crc16(aa_buf, (uint16_t)(t - 2u));
-        if (((uint8_t)(c & 0xFFu) == aa_buf[t - 2u]) && ((uint8_t)(c >> 8) == aa_buf[t - 1u]))
-        {
-            if (aa_buf[2] == 0x81u) { rxcnt++; }
-            aa_state = 0u; aa_idx = 0u;
-            aa_win = 0xFFu;
-            return;
-        }
-        aa_state = 0u; aa_idx = 0u;
-    }
-}
-static void send_legacy_one(uint8_t idx)
-{
-    alarm_pdu q;
-    memset(&q, 0, sizeof(q));
-    q.FrameHead = GPIOHEAD;
-    q.Pdu_len = sizeof(q);
-    q.Radarcfg[0] = 0xFF;
-    q.crc = ipcCrc((uint8_t *)&q, sizeof(q) - 2u);
-    comSendBuf(aa_com[idx], (uint8_t *)&q, sizeof(q));
-    txcnt++;
 }
 static volatile uint32_t uart3_tx=0, uart3_rx=0;
 static volatile uint32_t uart4_tx=0, uart4_rx=0;
