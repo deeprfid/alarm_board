@@ -68,6 +68,9 @@ static volatile uint8_t g_u4txbusy = 0u;
 #define UART6_TX_DMA_BUF (600u)
 static uint8_t  g_u6txbuf[UART6_TX_DMA_BUF];
 static volatile uint8_t g_u6txbusy = 0u;
+volatile uint32_t u6_dma_start = 0u;
+volatile uint32_t u6_dma_cplt = 0u;
+volatile uint32_t u6_dma_skip = 0u;
 
 static void UartVarInit(void);
 static void InitHardUart(void);
@@ -584,12 +587,12 @@ static void InitHardUart(void)
     MX_USART6_UART_Init();
 #if UART6_FIFO_EN == 1
     __HAL_RCC_DMA1_CLK_ENABLE();
-    HAL_NVIC_SetPriority(DMA1_Channel2_3_IRQn, 2, 0);
+    HAL_NVIC_SetPriority(DMA1_Channel2_3_IRQn, 0, 0);
     HAL_NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
 #endif
 #if UART4_FIFO_EN == 1
     __HAL_RCC_DMA1_CLK_ENABLE();
-    HAL_NVIC_SetPriority(DMA1_Channel4_5_IRQn, 2, 0);
+    HAL_NVIC_SetPriority(DMA1_Channel4_5_IRQn, 0, 0);
     HAL_NVIC_EnableIRQ(DMA1_Channel4_5_IRQn);
 #endif
 }
@@ -669,9 +672,10 @@ static void UartSend(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen)
 static void uart6_dma_tx_start(const uint8_t *src, uint16_t len)
 {
     uint16_t i;
-    if (g_u6txbusy != 0u) { return; }
+    if (g_u6txbusy != 0u) { u6_dma_skip++; return; }
     if (len > UART6_TX_DMA_BUF) { return; }
     for (i = 0u; i < len; i++) { g_u6txbuf[i] = src[i]; }
+    u6_dma_start++;
     /* stop interrupt-driven TX on USART6 so DMA owns TDR */
     CLEAR_BIT(USART6->CR1, USART_CR1_TXEIE);
     CLEAR_BIT(USART6->CR1, USART_CR1_TCIE);
@@ -694,6 +698,7 @@ void DMA1_Channel2_3_IRQHandler(void)
         CLEAR_BIT(USART6->CR3, USART_CR3_DMAT);
         SET_BIT(USART6->ICR, USART_ICR_TCCF);
         g_u6txbusy = 0u;
+        u6_dma_cplt++;
     }
 #if UART3_FIFO_EN == 1 && UART3_DMA_RX == 1
     if ((DMA1->ISR & DMA_ISR_TCIF3) != 0u)
