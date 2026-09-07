@@ -932,12 +932,14 @@ static void UartIRQ(UART_T *_pUart)
         }
     }
 
-    /* 清除中断标志 */
+    /* clear flags; DMA-RX uarts already cleared IDLE in their branch, skip IDLEF here */
     SET_BIT(_pUart->uart->ICR, UART_CLEAR_PEF);
     SET_BIT(_pUart->uart->ICR, UART_CLEAR_FEF);
     SET_BIT(_pUart->uart->ICR, UART_CLEAR_NEF);
     SET_BIT(_pUart->uart->ICR, UART_CLEAR_OREF);
+#if !((UART3_FIFO_EN == 1 && UART3_DMA_RX == 1) || (UART4_FIFO_EN == 1 && UART4_DMA_RX == 1) || (UART5_FIFO_EN == 1 && UART5_DMA_RX == 1))
     SET_BIT(_pUart->uart->ICR, UART_CLEAR_IDLEF);
+#endif
     SET_BIT(_pUart->uart->ICR, UART_CLEAR_TCF);
     SET_BIT(_pUart->uart->ICR, UART_CLEAR_CTSF);
     SET_BIT(_pUart->uart->ICR, UART_CLEAR_CMF);
