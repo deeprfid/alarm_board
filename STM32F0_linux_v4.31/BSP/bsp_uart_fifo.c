@@ -244,15 +244,7 @@ void comSendBuf(COM_PORT_E _ucPort, uint8_t *_ucaBuf, uint16_t _usLen)
         return;
     }
 
-#if (UART3_FIFO_EN == 1 && UART3_DMA_RX == 1) || (UART4_FIFO_EN == 1 && UART4_DMA_RX == 1) || (UART5_FIFO_EN == 1 && UART5_DMA_RX == 1)
-    if ((pUart->uart == USART3 && UART3_DMA_RX == 1) ||
-        (pUart->uart == USART4 && UART4_DMA_RX == 1) ||
-        (pUart->uart == USART5 && UART5_DMA_RX == 1))
-    {
-        UartSendBlocking(pUart, _ucaBuf, _usLen);
-        return;
-    }
-#endif
+    /* TX via FIFO + TXE interrupt (same as factory); DMA only on RX side */
 
 //	if (pUart->SendBefor != 0)
 //	{
