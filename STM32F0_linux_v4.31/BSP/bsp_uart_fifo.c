@@ -710,7 +710,7 @@ static void uart3_dma_rx_move(uint32_t now)
     uint16_t w;
 
     /* remaining count in circular buffer => bytes received so far */
-    cur = (uint16_t)(UART3_DMA_LEN - (uint16_t)READ_REG(DMA1->CNDTR3));
+    cur = (uint16_t)(UART3_DMA_LEN - (uint16_t)READ_REG(DMA1_Channel3->CNDTR));
     if (cur >= g_u3dma_last)
     {
         got = (uint16_t)(cur - g_u3dma_last);
