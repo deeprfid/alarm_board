@@ -1108,6 +1108,7 @@ void USART3_6_IRQHandler(void)
     UartIRQ(&g_tUart3);
     UartIRQ_DmaIdle(&g_tUart5);
     UartIRQ(&g_tUart5);
+#endif
 }
 
 #endif
