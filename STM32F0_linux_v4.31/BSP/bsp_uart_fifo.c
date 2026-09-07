@@ -269,6 +269,20 @@ void comSendBuf(COM_PORT_E _ucPort, uint8_t *_ucaBuf, uint16_t _usLen)
         return;
     }
 #endif
+#if UART3_FIFO_EN == 1
+    if (pUart->uart == USART3)
+    {
+        UartSendBlocking(pUart, _ucaBuf, _usLen);
+        return;
+    }
+#endif
+#if UART5_FIFO_EN == 1
+    if (pUart->uart == USART5)
+    {
+        UartSendBlocking(pUart, _ucaBuf, _usLen);
+        return;
+    }
+#endif
     /* TX via FIFO + TXE interrupt for other uarts */
 
 //	if (pUart->SendBefor != 0)
