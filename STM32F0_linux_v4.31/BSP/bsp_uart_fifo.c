@@ -64,6 +64,8 @@ static void UartVarInit(void);
 static void InitHardUart(void);
 static void UartSend(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen);
 static void UartSendBlocking(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen);
+static void uart_dma_tx_start(USART_TypeDef *uart, DMA_Channel_TypeDef *ch, uint32_t cselr_msk, uint32_t cselr_val,
+                              uint8_t *dst, volatile uint8_t *busy, const uint8_t *src, uint16_t len);
 static uint8_t UartGetChar(UART_T *_pUart, uint8_t *_pByte);
 static void UartIRQ(UART_T *_pUart);
 
@@ -245,8 +247,19 @@ void comSendBuf(COM_PORT_E _ucPort, uint8_t *_ucaBuf, uint16_t _usLen)
     }
 
 #if (UART3_FIFO_EN == 1 && UART3_DMA_RX == 1) || (UART4_FIFO_EN == 1 && UART4_DMA_RX == 1) || (UART5_FIFO_EN == 1 && UART5_DMA_RX == 1)
+    if (pUart->uart == USART4 && UART4_DMA_RX == 1)
+    {
+        uart_dma_tx_start(USART4, DMA1_Channel4, DMA1_CSELR_CH4_USART4_TX_Msk, DMA1_CSELR_CH4_USART4_TX,
+                          g_txbuf4, &g_txbusy4, _ucaBuf, _usLen);
+        return;
+    }
+    if (pUart->uart == USART6)
+    {
+        uart_dma_tx_start(USART6, DMA1_Channel2, DMA1_CSELR_CH2_USART6_TX_Msk, DMA1_CSELR_CH2_USART6_TX,
+                          g_txbuf6, &g_txbusy6, _ucaBuf, _usLen);
+        return;
+    }
     if ((pUart->uart == USART3 && UART3_DMA_RX == 1) ||
-        (pUart->uart == USART4 && UART4_DMA_RX == 1) ||
         (pUart->uart == USART5 && UART5_DMA_RX == 1))
     {
         UartSendBlocking(pUart, _ucaBuf, _usLen);
@@ -558,6 +571,14 @@ static void InitHardUart(void)
     MX_USART4_UART_Init();
     MX_USART5_UART_Init();
     MX_USART6_UART_Init();
+#if UART4_FIFO_EN == 1 && UART6_FIFO_EN == 1
+    /* DMA TX channel prep: CH4->USART4_TX, CH2->USART6_TX (CSELR set at each start) */
+    __HAL_RCC_DMA1_CLK_ENABLE();
+    HAL_NVIC_SetPriority(DMA1_Channel2_3_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
+    HAL_NVIC_SetPriority(DMA1_Channel4_5_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(DMA1_Channel4_5_IRQn);
+#endif
 }
 
 /*
@@ -637,6 +658,33 @@ static void UartSend(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen)
 *	返 回 值: 0 表示无数据  1表示读取到数据
 *********************************************************************************************************
 */
+/* DMA TX complete: UART6 uses CH2, UART4 uses CH4 */
+#if (UART6_FIFO_EN == 1) || (UART4_FIFO_EN == 1)
+void DMA1_Channel2_3_IRQHandler(void)
+{
+#if UART6_FIFO_EN == 1
+    if ((DMA1->ISR & DMA_ISR_TCIF2) != 0u)
+    {
+        DMA1->IFCR = DMA_IFCR_CTCIF2;
+        CLEAR_BIT(USART6->CR3, USART_CR3_DMAT);
+        g_txbusy6 = 0u;
+    }
+#endif
+}
+
+void DMA1_Channel4_5_IRQHandler(void)
+{
+#if UART4_FIFO_EN == 1
+    if ((DMA1->ISR & DMA_ISR_TCIF4) != 0u)
+    {
+        DMA1->IFCR = DMA_IFCR_CTCIF4;
+        CLEAR_BIT(USART4->CR3, USART_CR3_DMAT);
+        g_txbusy4 = 0u;
+    }
+#endif
+}
+#endif
+
 static uint8_t UartGetChar(UART_T *_pUart, uint8_t *_pByte)
 {
     uint16_t usCount;
@@ -797,6 +845,32 @@ static void uart_dma_rx_cfg(DMA_Channel_TypeDef *ch, uint32_t cselr_msk, uint32_
     CLEAR_BIT(uart->CR1, USART_CR1_RXNEIE);
     SET_BIT(uart->CR3, USART_CR3_DMAR);
     SET_BIT(uart->CR1, USART_CR1_IDLEIE);
+}
+
+/* --- DMA TX (UART4=CH4, UART6=CH2) --- */
+#define UART_TX_DMA_BUF (600u)
+static uint8_t  g_txbuf4[UART_TX_DMA_BUF];
+static volatile uint8_t g_txbusy4 = 0u;
+static uint8_t  g_txbuf6[UART_TX_DMA_BUF];
+static volatile uint8_t g_txbusy6 = 0u;
+
+/* start DMA TX on one uart: copy to persistent buf, configure, launch, return */
+static void uart_dma_tx_start(USART_TypeDef *uart, DMA_Channel_TypeDef *ch, uint32_t cselr_msk, uint32_t cselr_val,
+                              uint8_t *dst, volatile uint8_t *busy, const uint8_t *src, uint16_t len)
+{
+    uint16_t i;
+    if (*busy != 0u) { return; }          /* previous TX still running */
+    if (len > UART_TX_DMA_BUF) { return; }
+    for (i = 0u; i < len; i++) { dst[i] = src[i]; }
+    ch->CCR = 0u;
+    ch->CMAR = (uint32_t)dst;
+    ch->CPAR = (uint32_t)&uart->TDR;
+    ch->CNDTR = len;
+    DMA1->CSELR = (DMA1->CSELR & ~cselr_msk) | cselr_val;
+    /* mem2per, MINC=1, PINC=0, byte, no CIRC, TC interrupt on */
+    ch->CCR = DMA_CCR_DIR | DMA_CCR_MINC | DMA_CCR_TCIE | DMA_CCR_EN;
+    SET_BIT(uart->CR3, USART_CR3_DMAT);
+    *busy = 1u;
 }
 #endif
 static void UartIRQ(UART_T *_pUart)
