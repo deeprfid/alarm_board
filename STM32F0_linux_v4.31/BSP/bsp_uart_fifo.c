@@ -685,6 +685,12 @@ void DMA1_Channel2_3_IRQHandler(void)
         SET_BIT(USART6->ICR, USART_ICR_TCCF);
         g_u6txbusy = 0u;
     }
+#if UART3_FIFO_EN == 1 && UART3_DMA_RX == 1
+    if ((DMA1->ISR & DMA_ISR_TCIF3) != 0u)
+    {
+        DMA1->IFCR = DMA_IFCR_CTCIF3;   /* U3 RX DMA circular TC */
+    }
+#endif
 }
 
 /* UART4 DMA TX via CH4 */
@@ -715,6 +721,12 @@ void DMA1_Channel4_5_IRQHandler(void)
         SET_BIT(USART4->ICR, USART_ICR_TCCF);
         g_u4txbusy = 0u;
     }
+#if UART5_FIFO_EN == 1 && UART5_DMA_RX == 1
+    if ((DMA1->ISR & DMA_ISR_TCIF5) != 0u)
+    {
+        DMA1->IFCR = DMA_IFCR_CTCIF5;   /* U5 RX DMA circular TC */
+    }
+#endif
 }
 
 /*
