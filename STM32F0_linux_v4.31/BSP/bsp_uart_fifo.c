@@ -791,7 +791,7 @@ static void uart_dma_rx_cfg(DMA_Channel_TypeDef *ch, uint32_t cselr_msk, uint32_
     SET_BIT(uart->CR1, USART_CR1_IDLEIE);
 }
 #endif
-static void UartIRQ(UART_T *_pUart)
+static void UartIRQ_DmaIdle(UART_T *_pUart)
 {
     uint32_t isrflags   = READ_REG(_pUart->uart->ISR);
     uint32_t cr1its     = READ_REG(_pUart->uart->CR1);
@@ -834,8 +834,15 @@ static void UartIRQ(UART_T *_pUart)
     }
 #endif
 #endif
+}
 
-    /* 处理接收中断  */
+static void UartIRQ(UART_T *_pUart)
+{
+    uint32_t isrflags   = READ_REG(_pUart->uart->ISR);
+    uint32_t cr1its     = READ_REG(_pUart->uart->CR1);
+    uint32_t cr3its     = READ_REG(_pUart->uart->CR3);
+
+/* 处理接收中断  */
     if ((isrflags & USART_ISR_RXNE) != RESET)
     {
         /* 从串口接收数据寄存器读取数据存放到接收FIFO */
@@ -988,10 +995,20 @@ void USART2_IRQHandler(void)
 
 void USART3_6_IRQHandler(void)
 {
+    /* service in echo arrival order; DMA-RX uarts: IDLE move first, then std (TX) */
+    UartIRQ(&g_tUart6);
+#if (UART3_FIFO_EN == 1 && UART3_DMA_RX == 1) || (UART4_FIFO_EN == 1 && UART4_DMA_RX == 1) || (UART5_FIFO_EN == 1 && UART5_DMA_RX == 1)
+    UartIRQ_DmaIdle(&g_tUart3);
+    UartIRQ(&g_tUart3);
+    UartIRQ_DmaIdle(&g_tUart4);
+    UartIRQ(&g_tUart4);
+    UartIRQ_DmaIdle(&g_tUart5);
+    UartIRQ(&g_tUart5);
+#else
     UartIRQ(&g_tUart3);
     UartIRQ(&g_tUart4);
     UartIRQ(&g_tUart5);
-    UartIRQ(&g_tUart6);
+#endif
 }
 
 #endif
@@ -1284,3 +1301,4 @@ uint16_t uart_recv(COM_PORT_E _ucPorts, void *buf, uint32_t len)
 }
 
 /***************************** 安富莱电子 www.armfly.com (END OF FILE) *********************************/
+
