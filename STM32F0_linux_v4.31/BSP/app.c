@@ -603,6 +603,9 @@ static void send_legacy_one(uint8_t idx)
     comSendBuf(aa_com[idx], (uint8_t *)&q, sizeof(q));
     txcnt++;
 }
+volatile uint32_t uart3_tx=0, uart3_rx=0, uart3_d=0;
+volatile uint32_t uart4_tx=0, uart4_rx=0, uart4_d=0;
+volatile uint32_t uart5_tx=0, uart5_rx=0, uart5_d=0;
 static uint8_t  aa5_state[5];
 static uint8_t  aa5_len[5];
 static uint16_t aa5_idx[5];
@@ -633,7 +636,13 @@ static void aa5_feed(uint8_t p, uint8_t b)
         c = aa_crc16(aa5_buf[p], (uint16_t)(t - 2u));
         if (((uint8_t)(c & 0xFFu) == aa5_buf[p][t - 2u]) && ((uint8_t)(c >> 8) == aa5_buf[p][t - 1u]))
         {
-            if (aa5_buf[p][2] == 0x81u) { rxcnt++; }
+            if (aa5_buf[p][2] == 0x81u)
+            {
+                rxcnt++;
+                if (p == 2u) { uart3_rx++; uart3_d = uart3_tx - uart3_rx; }
+                else if (p == 3u) { uart4_rx++; uart4_d = uart4_tx - uart4_rx; }
+                else if (p == 4u) { uart5_rx++; uart5_d = uart5_tx - uart5_rx; }
+            }
             aa5_state[p] = 0u; aa5_idx[p] = 0u;
             return;
         }
@@ -663,6 +672,9 @@ static void aa_broadcast_all(uint32_t now)
         out[total - 2u] = (uint8_t)(c & 0xFFu);
         out[total - 1u] = (uint8_t)(c >> 8);
         comSendBuf(aa_com[p], out, total);
+        if (p == 2u) { uart3_tx++; uart3_d = uart3_tx - uart3_rx; }
+        else if (p == 3u) { uart4_tx++; uart4_d = uart4_tx - uart4_rx; }
+        else if (p == 4u) { uart5_tx++; uart5_d = uart5_tx - uart5_rx; }
         txcnt++;
         aa5_state[p] = 0u; aa5_idx[p] = 0u;
         aa5_last[p] = now;
@@ -673,7 +685,6 @@ static void aa_broadcast_all(uint32_t now)
 void Radar_thread(void)
 {
     static uint32_t last_beat = 0u;
-    static uint8_t  prev_type = 1u;   /* what we sent last: 0=legacy, 1=AA */
     uint32_t now = HAL_GetTick();
     uint8_t i;
     uint8_t b;
@@ -681,42 +692,21 @@ void Radar_thread(void)
     if ((now - last_beat) < RADAR_POLL_MS) { return; }
     last_beat = now;
 
-    /* 1) collect replies of the previous broadcast */
-    if (prev_type == 0u)
+    /* collect AA replies of previous broadcast (legacy poll disabled) */
+    for (i = 0u; i < 5u; i++)
     {
-        memset(Chaneel_ID, 0, sizeof(Chaneel_ID));
-        Check_RadarStatus(COM6, &Chaneel_ID[1]);
-        Check_RadarStatus(COM2, &Chaneel_ID[2]); Chaneel_ID[3] = Chaneel_ID[2];
-        Check_RadarStatus(COM3, &Chaneel_ID[4]); Chaneel_ID[5] = Chaneel_ID[4];
-        Check_RadarStatus(COM4, &Chaneel_ID[6]); Chaneel_ID[7] = Chaneel_ID[6];
-        Check_RadarStatus(COM5, &Chaneel_ID[8]);
-    }
-    else
-    {
-        for (i = 0u; i < 5u; i++)
+        while (comGetChar(aa_com[i], &b))
         {
-            while (comGetChar(aa_com[i], &b))
-            {
-                aa5_last[i] = now;
-                aa5_feed(i, b);
-            }
-            if ((aa5_state[i] != 0u) && ((now - aa5_last[i]) > 30u))
-            {
-                aa5_state[i] = 0u; aa5_idx[i] = 0u;
-            }
+            aa5_last[i] = now;
+            aa5_feed(i, b);
+        }
+        if ((aa5_state[i] != 0u) && ((now - aa5_last[i]) > 30u))
+        {
+            aa5_state[i] = 0u; aa5_idx[i] = 0u;
         }
     }
 
-    /* 2) broadcast the other type this beat */
-    if (prev_type == 0u)
-    {
-        aa_broadcast_all(now);          /* variable-length broadcast to all 5 */
-        prev_type = 1u;
-    }
-    else
-    {
-        Broadcast_Get_Radar_Status();   /* fixed-length broadcast to all 5 */
-        prev_type = 0u;
-    }
+    /* broadcast AA to all 5 every beat */
+    aa_broadcast_all(now);
 }
 #endif
