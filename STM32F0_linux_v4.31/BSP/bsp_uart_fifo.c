@@ -60,6 +60,10 @@ UART_HandleTypeDef CH4_huart4;// CHANNEL 4
 UART_HandleTypeDef CH5_huart5;// CHANNEL 5
 UART_HandleTypeDef CH1_huart6;// CHANNEL 1
 
+/* --- UART4 DMA TX (CH4) --- */
+#define UART4_TX_DMA_BUF (600u)
+static uint8_t  g_u4txbuf[UART4_TX_DMA_BUF];
+static volatile uint8_t g_u4txbusy = 0u;
 /* --- UART6 DMA TX (CH2) --- */
 #define UART6_TX_DMA_BUF (600u)
 static uint8_t  g_u6txbuf[UART6_TX_DMA_BUF];
@@ -70,6 +74,7 @@ static void InitHardUart(void);
 static void UartSend(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen);
 static void UartSendBlocking(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen);
 static void uart6_dma_tx_start(const uint8_t *src, uint16_t len);
+static void uart4_dma_tx_start(const uint8_t *src, uint16_t len);
 static uint8_t UartGetChar(UART_T *_pUart, uint8_t *_pByte);
 static void UartIRQ(UART_T *_pUart);
 
@@ -250,6 +255,13 @@ void comSendBuf(COM_PORT_E _ucPort, uint8_t *_ucaBuf, uint16_t _usLen)
         return;
     }
 
+#if UART4_FIFO_EN == 1
+    if (pUart->uart == USART4)
+    {
+        uart4_dma_tx_start(_ucaBuf, _usLen);
+        return;
+    }
+#endif
 #if UART6_FIFO_EN == 1
     if (pUart->uart == USART6)
     {
@@ -568,6 +580,11 @@ static void InitHardUart(void)
     HAL_NVIC_SetPriority(DMA1_Channel2_3_IRQn, 2, 0);
     HAL_NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
 #endif
+#if UART4_FIFO_EN == 1
+    __HAL_RCC_DMA1_CLK_ENABLE();
+    HAL_NVIC_SetPriority(DMA1_Channel4_5_IRQn, 2, 0);
+    HAL_NVIC_EnableIRQ(DMA1_Channel4_5_IRQn);
+#endif
 }
 
 /*
@@ -667,6 +684,36 @@ void DMA1_Channel2_3_IRQHandler(void)
         CLEAR_BIT(USART6->CR3, USART_CR3_DMAT);
         SET_BIT(USART6->ICR, USART_ICR_TCCF);
         g_u6txbusy = 0u;
+    }
+}
+
+/* UART4 DMA TX via CH4 */
+static void uart4_dma_tx_start(const uint8_t *src, uint16_t len)
+{
+    uint16_t i;
+    if (g_u4txbusy != 0u) { return; }
+    if (len > UART4_TX_DMA_BUF) { return; }
+    for (i = 0u; i < len; i++) { g_u4txbuf[i] = src[i]; }
+    CLEAR_BIT(USART4->CR1, USART_CR1_TXEIE);
+    CLEAR_BIT(USART4->CR1, USART_CR1_TCIE);
+    DMA1_Channel4->CCR = 0u;
+    DMA1_Channel4->CMAR = (uint32_t)g_u4txbuf;
+    DMA1_Channel4->CPAR = (uint32_t)&USART4->TDR;
+    DMA1_Channel4->CNDTR = len;
+    DMA1->CSELR = (DMA1->CSELR & ~DMA1_CSELR_CH4_USART4_TX_Msk) | DMA1_CSELR_CH4_USART4_TX;
+    DMA1_Channel4->CCR = DMA_CCR_DIR | DMA_CCR_MINC | DMA_CCR_TCIE | DMA_CCR_EN;
+    SET_BIT(USART4->CR3, USART_CR3_DMAT);
+    g_u4txbusy = 1u;
+}
+
+void DMA1_Channel4_5_IRQHandler(void)
+{
+    if ((DMA1->ISR & DMA_ISR_TCIF4) != 0u)
+    {
+        DMA1->IFCR = DMA_IFCR_CTCIF4;
+        CLEAR_BIT(USART4->CR3, USART_CR3_DMAT);
+        SET_BIT(USART4->ICR, USART_ICR_TCCF);
+        g_u4txbusy = 0u;
     }
 }
 
