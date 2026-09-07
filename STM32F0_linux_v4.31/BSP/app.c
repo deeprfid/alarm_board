@@ -681,7 +681,6 @@ static void aa_broadcast_all(uint32_t now)
     for (k = 0u; k < 5u; k++)
     {
         p = tx_order[k];
-    {
         out[0] = 0xAAu;
         out[1] = (uint8_t)(plen + 2u);
         out[2] = 0x01u;
