@@ -54,7 +54,7 @@ typedef enum
 	#define UART3_BAUD			460800
 	#define UART3_TX_BUF_SIZE	1*512
 	#define UART3_RX_BUF_SIZE	1*512
-	#define UART3_DMA_RX		1	/* 1=UART3 RX via DMA1 CH3 circular + IDLE (experiment) */
+	#define UART3_DMA_RX		1	/* 1=UART3 RX via DMA1 CH3 circular + IDLE */
 #endif
 
 #if UART4_FIFO_EN == 1
