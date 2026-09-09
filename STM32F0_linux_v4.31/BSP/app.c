@@ -285,7 +285,7 @@ void Broadcast_Get_Radar_Status(void)
 
 uint8_t Chaneel_ID[16]={0};
 
-#define FRAME_AA_EN (0u)  /* 1=启用 0xAA 不定长帧扩展(默认关, 用原版接收) */
+#define FRAME_AA_EN (1u)  /* 1=启用 0xAA 不定长帧扩展(默认关, 用原版接收) */
 #if FRAME_AA_EN
 /* ===== variable-length frame core (0xAA) - channel links only ===== */
 #define FRAME_HDR_AA           (0xAAu)
@@ -378,7 +378,10 @@ typedef struct
     COM_PORT_E port;
     frame_rx_t rx;
     uint32_t lastRcvMs;
-    uint8_t  radarVal;
+    uint8_t  radarVal;      /* 0x10 reply: 1=someone present (any radar bit) */
+    uint8_t  gpioIn;        /* 0x10 reply Byte0: bit0..2=radar1..3, bit3=GPIO_IN1, bit4=GPIO_IN2 */
+    uint8_t  workMode;      /* 0x10 reply Byte1: install mode switches */
+    uint8_t  alarmDone;     /* 0x10 reply Byte2 */
     uint32_t varCnt;
     uint32_t rxByteCnt;
     uint32_t varCrcFail;
@@ -426,6 +429,15 @@ static void stm_handle_var(port_rx_t *pr)
     pr->varAddr = pr->rx.buf[3];
     pr->varPlen = (uint8_t)(pr->rx.len - 2u);
     pr->varCnt++;
+
+    /* Cmd 0x10 query reply: payload 3B = [gpioIn][workMode][alarmDone] */
+    if ((pr->varCmd == 0x10u) && (pr->varPlen >= 3u))
+    {
+        pr->gpioIn    = pr->rx.buf[4];
+        pr->workMode  = pr->rx.buf[5];
+        pr->alarmDone = pr->rx.buf[6];
+        pr->radarVal  = ((pr->gpioIn & 0x07u) != 0u) ? 1u : 0u;   /* any radar present=1 */
+    }
 }
 #if FRAME_TEST_PING
 static void ping_one(uint8_t port_idx)
@@ -501,137 +513,109 @@ void Check_RadarStatus(COM_PORT_E _ucPort,uint8_t *alarm_done)
 
 
 
-/* ===== AA variable-length 5-port broadcast self-test (one frame per beat) ===== */
-#define RADAR_POLL_MS    (50u)  /* one frame per beat (blocking TX on UART3/4/5 needs headroom) */
-#define AA_MAXBUF        (260u)
-static const COM_PORT_E aa_com[5] = { COM6, COM2, COM3, COM4, COM5 };
-static uint8_t  aa_cycle = 0u;
+#if FRAME_AA_EN
+/* ===== 0xAA Cmd 0x10 radar status polling (5-port) ===== */
+#define RADAR_POLL_MS    (50u)
 
-static uint16_t aa_crc16(const uint8_t *p, uint16_t n)
-{
-    uint16_t crc = 0xFFFFu;
-    uint16_t i, j;
-    for (i = 0u; i < n; i++)
-    {
-        crc ^= (uint16_t)((uint16_t)p[i] << 8);
-        for (j = 0u; j < 8u; j++)
-        {
-            if (crc & 0x8000u) { crc = (uint16_t)((crc << 1) ^ 0x1021u); }
-            else { crc = (uint16_t)(crc << 1); }
-        }
-    }
-    return crc;
-}
+/* per-port tx/rx counters (kept from previous AA self-test) */
 static volatile uint32_t uart3_tx=0, uart3_rx=0;
 static volatile uint32_t uart4_tx=0, uart4_rx=0;
 static volatile uint32_t uart5_tx=0, uart5_rx=0;
 static volatile uint32_t uart6_tx=0, uart6_rx=0;
-static uint8_t  aa5_state[5];
-static uint8_t  aa5_len[5];
-static uint16_t aa5_idx[5];
-static uint8_t  aa5_buf[5][AA_MAXBUF];
-static uint32_t aa5_last[5];
+static uint8_t  s_pump_init = 0u;
 
-static void aa5_feed(uint8_t p, uint8_t b)
+static void radar_cnt_tx(COM_PORT_E port)
 {
-    uint16_t t;
-    uint16_t c;
-    if (aa5_state[p] == 0u)
+    switch (port)
     {
-        if (b == 0xAAu) { aa5_buf[p][0] = b; aa5_idx[p] = 1u; aa5_state[p] = 1u; }
-        return;
+        case COM3: uart3_tx++; break;
+        case COM4: uart4_tx++; break;
+        case COM5: uart5_tx++; break;
+        case COM6: uart6_tx++; break;
+        default: break;
     }
-    if (aa5_state[p] == 1u)
+}
+static void radar_cnt_rx(COM_PORT_E port)
+{
+    switch (port)
     {
-        aa5_len[p] = b;
-        if ((aa5_len[p] < 2u) || (aa5_len[p] > 251u)) { aa5_state[p] = 0u; aa5_idx[p] = 0u; return; }
-        aa5_buf[p][aa5_idx[p]++] = b;
-        aa5_state[p] = 2u;
-        return;
-    }
-    aa5_buf[p][aa5_idx[p]++] = b;
-    t = (uint16_t)aa5_len[p] + 4u;
-    if (aa5_idx[p] >= t)
-    {
-        c = aa_crc16(aa5_buf[p], (uint16_t)(t - 2u));
-        if (((uint8_t)(c & 0xFFu) == aa5_buf[p][t - 2u]) && ((uint8_t)(c >> 8) == aa5_buf[p][t - 1u]))
-        {
-            if (aa5_buf[p][2] == 0x81u)
-            {
-                rxcnt++;
-                if (p == 0u) { uart6_rx++; }
-                else if (p == 2u) { uart3_rx++; }
-                else if (p == 3u) { uart4_rx++; }
-                else if (p == 4u) { uart5_rx++; }
-            }
-            aa5_state[p] = 0u; aa5_idx[p] = 0u;
-            return;
-        }
-        aa5_state[p] = 0u; aa5_idx[p] = 0u;
+        case COM3: uart3_rx++; break;
+        case COM4: uart4_rx++; break;
+        case COM5: uart5_rx++; break;
+        case COM6: uart6_rx++; break;
+        default: break;
     }
 }
 
-static void aa_broadcast_all(uint32_t now)
+/* broadcast Cmd 0x10 empty query to all 5 ports */
+static void radar_query_all(void)
 {
-    static const uint8_t plens[4] = { 0u, 8u, 32u, 150u };
-    uint8_t out[AA_MAXBUF];
-    uint8_t plen;
-    uint8_t p;
     uint8_t i;
-    uint16_t total;
-    uint16_t c;
-    static const uint8_t tx_order[5] = { 0u, 2u, 1u, 3u, 4u };   /* U6 first, U3 second */
-    uint8_t k;
-    plen = plens[aa_cycle & 3u];
-    total = (uint16_t)plen + 6u;
-    for (k = 0u; k < 5u; k++)
+    for (i = 0u; i < STM_PORT_CNT; i++)
     {
-        p = tx_order[k];
-        out[0] = 0xAAu;
-        out[1] = (uint8_t)(plen + 2u);
-        out[2] = 0x01u;
-        out[3] = (uint8_t)(p + 1u);
-        for (i = 0u; i < plen; i++) { out[4u + i] = (uint8_t)(0xA0u + i); }
-        c = aa_crc16(out, (uint16_t)(total - 2u));
-        out[total - 2u] = (uint8_t)(c & 0xFFu);
-        out[total - 1u] = (uint8_t)(c >> 8);
-        comSendBuf(aa_com[p], out, total);
-        if (p == 0u) { uart6_tx++; }
-        else if (p == 2u) { uart3_tx++; }
-        else if (p == 3u) { uart4_tx++; }
-        else if (p == 4u) { uart5_tx++; }
-        txcnt++;
-        aa5_state[p] = 0u; aa5_idx[p] = 0u;
-        aa5_last[p] = now;
+        (void)stm_var_send(s_portCom[i], 0x10u, (uint8_t)(i + 1u), 0, 0u);
+        radar_cnt_tx(s_portCom[i]);
     }
-    aa_cycle++;
 }
-/* ===== end AA helpers ===== */
+
+/* pump one port's FIFO through the var-frame state machine */
+static void radar_pump_port(uint8_t i, uint32_t now)
+{
+    uint8_t b;
+    int ev;
+    frame_rx_guard(&s_ports[i].rx, now);
+    while (comGetChar(s_portCom[i], &b))
+    {
+        ev = frame_rx_feed(&s_ports[i].rx, b);
+        if (ev == FRAME_EV_LEGACY)
+        {
+            stm_handle_legacy(&s_ports[i], now);
+        }
+        else if (ev == FRAME_EV_VAR)
+        {
+            stm_handle_var(&s_ports[i]);
+            if (s_ports[i].varCmd == 0x10u)   /* valid 0x10 reply */
+            {
+                s_ports[i].lastRcvMs = now;
+                radar_cnt_rx(s_portCom[i]);
+            }
+        }
+        else if (ev == FRAME_EV_VAR_BAD)
+        {
+            s_ports[i].varCrcFail++;
+        }
+    }
+}
+
 void Radar_thread(void)
 {
     static uint32_t last_beat = 0u;
     uint32_t now = HAL_GetTick();
     uint8_t i;
-    uint8_t b;
+
+    if (s_pump_init == 0u)
+    {
+        for (i = 0u; i < STM_PORT_CNT; i++)
+        {
+            frame_rx_init(&s_ports[i].rx);
+        }
+        s_pump_init = 1u;
+    }
 
     if ((now - last_beat) < RADAR_POLL_MS) { return; }
     last_beat = now;
 
-    /* collect AA replies of previous broadcast (legacy poll disabled) */
-    for (i = 0u; i < 5u; i++)
+    /* 1) pump incoming bytes per port */
+    for (i = 0u; i < STM_PORT_CNT; i++)
     {
-        while (comGetChar(aa_com[i], &b))
-        {
-            aa5_last[i] = now;
-            aa5_feed(i, b);
-        }
-        if ((aa5_state[i] != 0u) && ((now - aa5_last[i]) > 30u))
-        {
-            aa5_state[i] = 0u; aa5_idx[i] = 0u;
-        }
+        radar_pump_port(i, now);
     }
 
-    /* broadcast AA to all 5 every beat */
-    aa_broadcast_all(now);
+    /* 1b) refresh Chaneel_ID from per-port radar state (internal only) */
+    refresh_chaneel(now);
+
+    /* 2) broadcast Cmd 0x10 query */
+    radar_query_all();
 }
-#endif
+#endif /* FRAME_AA_EN */
+#endif /* GET_RADAR_ENABLE */

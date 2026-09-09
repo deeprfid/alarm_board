@@ -404,6 +404,11 @@
               <FilePath>..\source\main.c</FilePath>
             </File>
             <File>
+              <FileName>bsp_report.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\bsp_report.c</FilePath>
+            </File>
+            <File>
               <FileName>common.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\source\common.c</FilePath>
@@ -1093,6 +1098,11 @@
               <FileName>main.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\source\main.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_report.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\bsp_report.c</FilePath>
             </File>
             <File>
               <FileName>common.c</FileName>

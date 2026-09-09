@@ -3,6 +3,7 @@
  * Include files
  ******************************************************************************/
 #include "main.h"
+#include "bsp_report.h"
 
 extern LED_T Board_LED_1;
 extern LED_T Board_LED_2;
@@ -356,6 +357,14 @@ static void hc32_handle_legacy_frame(void)
 static void hc32_handle_var_frame(void)
 {
     uint8_t plen;
+    uint8_t payload[BSP_REPORT_LEN];
+
+    if (s_hc32_rx.buf[2] == 0x10u) /* Cmd 0x10: query -> reply */
+    {
+        (void)bsp_report_build(payload);
+        (void)frame_var_send(0x10u, s_hc32_rx.buf[3], payload, BSP_REPORT_LEN);
+        return;
+    }
 
     if (s_hc32_rx.buf[2] != 0x01u) { return; }
     plen = (uint8_t)(s_hc32_rx.len - 2u);
