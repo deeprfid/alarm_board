@@ -375,20 +375,14 @@ static int frame_rx_feed(frame_rx_t *rx, uint8_t b)
 #define STM_PORT_CNT (5u)
 typedef struct
 {
-    COM_PORT_E port;
     frame_rx_t rx;
     uint32_t lastRcvMs;
     uint8_t  radarVal;      /* 0x10 reply: 1=someone present (any radar bit) */
     uint8_t  gpioIn;        /* 0x10 reply Byte0: bit0..2=radar1..3, bit3=GPIO_IN1, bit4=GPIO_IN2 */
     uint8_t  workMode;      /* 0x10 reply Byte1: install mode switches */
     uint8_t  alarmDone;     /* 0x10 reply Byte2 */
-    uint32_t varCnt;
-    uint32_t rxByteCnt;
-    uint32_t varCrcFail;
-    uint32_t legCrcFail;
-    uint8_t  varCmd;
-    uint8_t  varAddr;
-    uint8_t  varPlen;
+    uint8_t  varCmd;        /* last received 0xAA cmd */
+    uint8_t  varPlen;       /* last received var payload len */
 } port_rx_t;
 static port_rx_t s_ports[STM_PORT_CNT];
 //static uint32_t s_ping_next[STM_PORT_CNT];
@@ -418,7 +412,7 @@ static void stm_handle_legacy(port_rx_t *pr, uint32_t now)
     uint16_t r0;
     if (pr->rx.buf[0] != GPIOHEAD) { return; }
     c = ipcCrc(pr->rx.buf, APP_FRAME_LEN_MAX - 2u);
-    if ((uint16_t)(pr->rx.buf[30] | ((uint16_t)pr->rx.buf[31] << 8)) != c) { pr->legCrcFail++; return; }
+    if ((uint16_t)(pr->rx.buf[30] | ((uint16_t)pr->rx.buf[31] << 8)) != c) { return; }
     r0 = (uint16_t)(pr->rx.buf[10] | ((uint16_t)pr->rx.buf[11] << 8));
     pr->radarVal = (r0 == 1u) ? 1u : 0u;
     pr->lastRcvMs = now;
@@ -426,9 +420,7 @@ static void stm_handle_legacy(port_rx_t *pr, uint32_t now)
 static void stm_handle_var(port_rx_t *pr)
 {
     pr->varCmd  = pr->rx.buf[2];
-    pr->varAddr = pr->rx.buf[3];
     pr->varPlen = (uint8_t)(pr->rx.len - 2u);
-    pr->varCnt++;
 
     /* Cmd 0x10 query reply: payload 3B = [gpioIn][workMode][alarmDone] */
     if ((pr->varCmd == 0x10u) && (pr->varPlen >= 3u))
@@ -579,10 +571,6 @@ static void radar_pump_port(uint8_t i, uint32_t now)
                 s_ports[i].lastRcvMs = now;
                 radar_cnt_rx(s_portCom[i]);
             }
-        }
-        else if (ev == FRAME_EV_VAR_BAD)
-        {
-            s_ports[i].varCrcFail++;
         }
     }
 }
