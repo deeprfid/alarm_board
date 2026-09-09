@@ -218,6 +218,7 @@ void Alarm_CMD(void)
 
 }
 
+#if !FRAME_AA_EN  /* legacy count-32B COM1 rx (kept, used when AA pump disabled) */
 void Check_Uart_Pdu(void)
 {
     uint32_t tickcount = HAL_GetTick();
@@ -259,6 +260,8 @@ void Check_Uart_Pdu(void)
         LED_Start(&Port_5_LED, PORTLED_5, 5, 50, 1);
     }
 }
+#endif /* !FRAME_AA_EN */
+
 
 
 #if GET_RADAR_ENABLE
@@ -290,10 +293,11 @@ uint8_t Chaneel_ID[16]={0};
 /* ===== variable-length frame core (0xAA) - channel links only ===== */
 #define FRAME_HDR_AA           (0xAAu)
 #define FRAME_HDR_LEG_GPIO     (0x55u)
+#define FRAME_HDR_LEG_PDU      (0xFFu)
 #define FRAME_MAX_PAYLOAD      (251u)
 #define FRAME_RX_GUARD_MS      (50u)
 #define FRAME_TEST_PING        (0u)  /* 1=每秒向5口发0xAA回显自检ping(诊断用, 会叠加并发流量) */
-#define FRAME_VAR_TOTAL_MAX    (257u)
+#define FRAME_VAR_TOTAL_MAX    (255u)
 #define FRAME_EV_NONE          (0)
 #define FRAME_EV_LEGACY        (1)
 #define FRAME_EV_VAR           (2)
@@ -338,7 +342,10 @@ static int frame_rx_feed(frame_rx_t *rx, uint8_t b)
     uint16_t c;
     if (rx->state == 0u)
     {
-        if (b == FRAME_HDR_LEG_GPIO) { rx->buf[0] = b; rx->idx = 1u; rx->state = 1u; }
+        if ((b == FRAME_HDR_LEG_GPIO) || (b == FRAME_HDR_LEG_PDU))
+        {
+            rx->buf[0] = b; rx->idx = 1u; rx->state = 1u;
+        }
         else if (b == FRAME_HDR_AA)   { rx->buf[0] = b; rx->idx = 1u; rx->state = 2u; }
         return FRAME_EV_NONE;
     }
@@ -507,7 +514,7 @@ void Check_RadarStatus(COM_PORT_E _ucPort,uint8_t *alarm_done)
 
 #if FRAME_AA_EN
 /* ===== 0xAA Cmd 0x10 radar status polling (5-port) ===== */
-#define RADAR_POLL_MS    (50u)
+#define RADAR_POLL_MS    (20u)
 
 /* per-port tx/rx counters (kept from previous AA self-test) */
 static volatile uint32_t uart3_tx=0, uart3_rx=0;
@@ -515,6 +522,8 @@ static volatile uint32_t uart4_tx=0, uart4_rx=0;
 static volatile uint32_t uart5_tx=0, uart5_rx=0;
 static volatile uint32_t uart6_tx=0, uart6_rx=0;
 static uint8_t  s_pump_init = 0u;
+
+static void ipc_report_status(uint32_t now);   /* defined below Radar_thread */
 
 static void radar_cnt_tx(COM_PORT_E port)
 {
@@ -604,6 +613,118 @@ void Radar_thread(void)
 
     /* 2) broadcast Cmd 0x10 query */
     radar_query_all();
+
+    /* 2b) report 5-port status to Linux on change (Cmd 0x20, 0xAA var frame) */
+    ipc_report_status(now);
 }
+
+/* ===== Linux IPC (COM1) report: 0xAA Cmd 0x20, 5x3B payload, send on change ===== */
+#define IPC_REPORT_CMD       (0x20u)
+#define IPC_REPORT_ADDR      (0x00u)
+#define IPC_REPORT_PORT3B    (3u)
+#define IPC_REPORT_IDLE_MS   (1000u)   /* keepalive fallback when no change */
+
+static uint8_t  s_ipc_report_last[STM_PORT_CNT][3];   /* last reported per-port 3B */
+static uint32_t s_ipc_report_ms = 0u;
+
+static void ipc_report_status(uint32_t now)
+{
+    uint8_t payload[STM_PORT_CNT * 3u];
+    uint8_t changed = 0u;
+    uint8_t i;
+
+    for (i = 0u; i < STM_PORT_CNT; i++)
+    {
+        payload[i * 3u + 0u] = s_ports[i].gpioIn;
+        payload[i * 3u + 1u] = s_ports[i].workMode;
+        payload[i * 3u + 2u] = s_ports[i].alarmDone;
+
+        if ((payload[i * 3u + 0u] != s_ipc_report_last[i][0]) ||
+            (payload[i * 3u + 1u] != s_ipc_report_last[i][1]) ||
+            (payload[i * 3u + 2u] != s_ipc_report_last[i][2]))
+        {
+            changed = 1u;
+        }
+    }
+
+    if ((changed != 0u) || ((now - s_ipc_report_ms) >= IPC_REPORT_IDLE_MS))
+    {
+        (void)stm_var_send(COM1, IPC_REPORT_CMD, IPC_REPORT_ADDR, payload, sizeof(payload));
+        for (i = 0u; i < STM_PORT_CNT; i++)
+        {
+            s_ipc_report_last[i][0] = payload[i * 3u + 0u];
+            s_ipc_report_last[i][1] = payload[i * 3u + 1u];
+            s_ipc_report_last[i][2] = payload[i * 3u + 2u];
+        }
+        s_ipc_report_ms = now;
+    }
+}
+
+/* ===== Linux IPC (COM1) frame pump: 0x55/0xFF legacy 32B + 0xAA variable ===== */
+static frame_rx_t s_ipc_rx;
+static uint8_t   s_ipc_inited = 0u;
+
+/* 32B fixed frame from Linux: PDUHEAD dispatch; GPIOHEAD query disabled for now */
+static void ipc_handle_legacy(void)
+{
+    uint16_t c;
+    uint16_t crc_rcv;
+
+    if ((s_ipc_rx.buf[0] != PDUHEAD) && (s_ipc_rx.buf[0] != GPIOHEAD)) { return; }
+    c = ipcCrc(s_ipc_rx.buf, APP_FRAME_LEN_MAX - 2u);
+    crc_rcv = (uint16_t)(s_ipc_rx.buf[30] | ((uint16_t)s_ipc_rx.buf[31] << 8));
+    if (crc_rcv != c) { comClearRxFifo(COM1); return; }
+
+    memcpy(&alarmboard, s_ipc_rx.buf, sizeof(alarm_pdu));
+
+    if (alarmboard.FrameHead == PDUHEAD)
+    {
+        ipc_hpm_message((uint8_t *)&alarmboard, sizeof(alarmboard), alarmboard.AntID);
+        return;
+    }
+
+#if 0 /* GPIOHEAD query reply disabled for now */
+    if (alarmboard.FrameHead == GPIOHEAD)
+    {
+        uint8_t gpi_val = 0;
+        PIO_GpioRead(&gpi_val);
+        PIO_GpioSet(0xF, alarmboard.reserved & 0xF);
+        alarmboard.reserved = gpi_val;
+        alarmboard.crc = ipcCrc((uint8_t *)&alarmboard, sizeof(alarmboard) - 2);
+        comSendBuf(COM1, (uint8_t *)&alarmboard, sizeof(alarmboard));
+    }
+#endif
+}
+
+/* 0xAA variable frame from Linux - received, business reserved for future */
+static void ipc_handle_var(void)
+{
+    /* reserved: parse Len/CRC verified in frame_rx_feed; no business yet */
+}
+
+void Check_Uart_Pdu(void)
+{
+    uint32_t now = HAL_GetTick();
+    uint8_t b;
+    int ev;
+    extern LED_T Port_1_LED;
+
+    if (s_ipc_inited == 0u) { frame_rx_init(&s_ipc_rx); s_ipc_inited = 1u; }
+
+    frame_rx_guard(&s_ipc_rx, now);
+
+    while (comGetChar(COM1, &b))
+    {
+        ev = frame_rx_feed(&s_ipc_rx, b);
+        if (ev == FRAME_EV_LEGACY)  { ipc_handle_legacy(); }
+        else if (ev == FRAME_EV_VAR) { ipc_handle_var(); }
+    }
+
+    if (Port_5_LED.ucEnalbe == 0)
+    {
+        LED_Start(&Port_5_LED, PORTLED_5, 5, 50, 1);
+    }
+}
+
 #endif /* FRAME_AA_EN */
 #endif /* GET_RADAR_ENABLE */
