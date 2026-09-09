@@ -89,8 +89,8 @@
 #define GPO1_GPIO_Port            GPIOB
 #define GPO2_Pin                  GPIO_PIN_9
 #define GPO2_GPIO_Port            GPIOB
-#define CMRESET_Pin              GPIO_PIN_8
-#define CMRESET_GPIO_Port        GPIOB
+#define CM4RESET_Pin              GPIO_PIN_8
+#define CM4RESET_GPIO_Port        GPIOB
 #define Host_IRQ_Pin            GPIO_PIN_12
 #define Host_IRQ_GPIO_Port      GPIOA
 
@@ -119,6 +119,7 @@ void System_Init(void);
 void bsp_GetCpuID(uint32_t *_id);
 void Error_Handler(void);
 void STM32F030_delay(__IO uint32_t nCount);
+void CM4_System_Reset(void);
 #endif
 
 /***************************** 安富莱电子 www.armfly.com (END OF FILE) *********************************/

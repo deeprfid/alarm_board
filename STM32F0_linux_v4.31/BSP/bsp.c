@@ -42,7 +42,13 @@ void System_Init(void)
 
 }
 
-
+void CM4_System_Reset(void)
+{
+  HAL_GPIO_WritePin(CM4RESET_GPIO_Port, CM4RESET_Pin, GPIO_PIN_RESET);
+  HAL_Delay(500);
+	HAL_GPIO_WritePin(CM4RESET_GPIO_Port, CM4RESET_Pin, GPIO_PIN_SET);
+	
+}
 uint32_t rd_idkey_fun(void)
 {
     /* ºÏ≤‚CPU ID */
@@ -86,12 +92,12 @@ void bsp_Init(void)
 {
 
     MX_GPIO_Init();
-    EXTI4_15_IRQHandler_Config();
+ //   EXTI4_15_IRQHandler_Config();  // input irq#
     bsp_InitUart();
     BEEP_InitHard();
     bsp_InitLed();
     PIO_GPIOInit();
-
+    CM4_System_Reset();
 #if STM32F0_IWDG_ENABLE
     rd_idkey_fun();
     MX_IWDG_Init();
@@ -219,14 +225,19 @@ static void MX_GPIO_Init(void)
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
 
-		  /*Configure GPIO pin : CMRESET_Pin */
-    GPIO_InitStruct.Pin = CMRESET_Pin;
+		/*Configure GPIO pin : CM4RESET_Pin */
+    GPIO_InitStruct.Pin = CM4RESET_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
-    HAL_GPIO_Init(CMRESET_GPIO_Port, &GPIO_InitStruct);
-    HAL_GPIO_WritePin(CMRESET_GPIO_Port, CMRESET_Pin, GPIO_PIN_SET);
+    HAL_GPIO_Init(CM4RESET_GPIO_Port, &GPIO_InitStruct);
+    HAL_GPIO_WritePin(CM4RESET_GPIO_Port, CM4RESET_Pin, GPIO_PIN_SET);
 		
-		
+		 /*Configure GPIO pin : Host_IRQ_Pin */
+		 GPIO_InitStruct.Pin  = Host_IRQ_Pin;
+		 GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+     GPIO_InitStruct.Pull = GPIO_PULLUP;
+     HAL_GPIO_Init(Host_IRQ_GPIO_Port, &GPIO_InitStruct);
+		 HAL_GPIO_WritePin(Host_IRQ_GPIO_Port, Host_IRQ_Pin, GPIO_PIN_SET);
 		
     /*Configure GPIO pin Output Level */
     HAL_GPIO_WritePin(GPIOB, GPO_BZ3V3_Pin | LED_B_Pin | LED_R_Pin | LED_G_Pin
