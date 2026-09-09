@@ -18,12 +18,13 @@ extern LED_T Radar_LED;
 extern LED_T Board_LED_1;
 extern LED_T Board_LED_2;
 
-/* Set/clear one indicator LED by presence level (start on active, stop on inactive). */
+#if 0 /* old timer-blink helper, kept with disabled legacy logic */
 static void led_blink_update(LED_T *led, uint8_t id, uint8_t active, uint16_t cadence)
 {
     if (active) { LED_Start(led, id, cadence, 1, 1); }
     else        { Led_Stop(led, id); }
 }
+#endif
 
 en_pin_state_t Radar_Led_update(void)
 {
@@ -31,6 +32,8 @@ en_pin_state_t Radar_Led_update(void)
     uint8_t  radar_on  = bsp_get_radar_singal();
     uint8_t  aicam_on  = (PIN_RESET == aicamsingal) ? 1u : 0u;
     uint8_t  presence  = (radar_on || aicam_on) ? 1u : 0u;
+
+#if 0 /* ---- OLD: software-timer blink via LED_Start/Led_Stop (kept, disabled) ---- */
 
     /* Alarm active (R/G LED running): reflect presence on Radar_LED */
     if ((R_tLED.ucEnalbe == 1) || (G_tLED.ucEnalbe == 1))
@@ -46,7 +49,6 @@ en_pin_state_t Radar_Led_update(void)
         en_pin_state_t p_Easmode   = switch_decoder_pio_read(EAS_MODE);
         en_pin_state_t p_light     = switch_decoder_pio_read(LIGHT_ON);
 
-        /* Mode: AICAM + Radar both drive the presence LED */
         if ((p_Aicammode == PIN_RESET) && (p_Radarmode == PIN_RESET))
         {
             led_blink_update(&Radar_LED, RADARLED, presence, 100);
@@ -54,7 +56,6 @@ en_pin_state_t Radar_Led_update(void)
             return aicamsingal;
         }
 
-        /* Mode: AICAM only drives the presence LED */
         if ((p_Aicammode == PIN_RESET) && (p_Radarmode == PIN_SET))
         {
             led_blink_update(&Radar_LED, RADARLED, aicam_on, 100);
@@ -62,7 +63,6 @@ en_pin_state_t Radar_Led_update(void)
             return aicamsingal;
         }
 
-        /* Mode: Radar only drives the presence LED (radar_on==0 means nobody) */
         if ((p_Radarmode == PIN_RESET) && (p_Aicammode == PIN_SET))
         {
             led_blink_update(&Radar_LED, RADARLED, radar_on, 300);
@@ -70,8 +70,6 @@ en_pin_state_t Radar_Led_update(void)
             return aicamsingal;
         }
 
-        /* Mode: EAS only (AICAM/Radar not installed). Legacy: B blinks while selected,
-           presence additionally lights Radar_LED. Kept as-is. */
         if ((p_Easmode == PIN_RESET) && (p_Aicammode == PIN_SET) && (p_Radarmode == PIN_SET))
         {
             LED_Start(&B_tLED, LED_BLED, 100, 1, 1);
@@ -83,7 +81,6 @@ en_pin_state_t Radar_Led_update(void)
             return aicamsingal;
         }
 
-        /* Mode: Light control only. Legacy kept as-is (mirrors EAS mode). */
         if ((p_light == PIN_RESET) && (p_Aicammode == PIN_SET) && (p_Radarmode == PIN_SET))
         {
             LED_Start(&B_tLED, LED_BLED, 100, 1, 1);
@@ -95,6 +92,37 @@ en_pin_state_t Radar_Led_update(void)
             return aicamsingal;
         }
     }
+
+    return aicamsingal;
+
+#else /* ---- NEW: direct IO control (no LED_Start/Led_Stop) ---- */
+
+    /* R/G alarm LEDs have priority: during alarm the Alarm_* funcs own the LEDs */
+    if ((R_tLED.ucEnalbe == 1) || (G_tLED.ucEnalbe == 1))
+    {
+        return aicamsingal;
+    }
+
+    /* stop any leftover software blink on the two indicator LEDs so LED_Pro cannot fight us */
+    if (B_tLED.ucEnalbe != 0u)     { Led_Stop(&B_tLED, LED_BLED); }
+    if (Radar_LED.ucEnalbe != 0u)  { Led_Stop(&Radar_LED, RADARLED); }
+
+    /* Blue LED: LIGHT_ON -> always on; else follow presence (radar/camera/EAS) */
+    if (PIN_RESET == switch_decoder_pio_read(LIGHT_ON))
+    {
+        LED_B_ON();
+    }
+    else
+    {
+        if (presence) { LED_B_ON(); }
+        else          { LED_B_OFF(); }
+    }
+
+    /* Board small Radar_LED: follow presence */
+    if (presence) { bsp_LedOn(RADARLED); }
+    else          { bsp_LedOff(RADARLED); }
+
+#endif
 
     return aicamsingal;
 }
