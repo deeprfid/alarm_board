@@ -2,6 +2,7 @@
 
 
 
+#define FRAME_AA_EN (1u)  /* 1=enable 0xAA variable frame (COM2..6 + COM1) */
 #define MSG_CRC_INIT		      (0xFFFF)
 #define MSG_CCITT_CRC_POLY		(0x1021)
 
@@ -288,7 +289,6 @@ void Broadcast_Get_Radar_Status(void)
 
 uint8_t Chaneel_ID[16]={0};
 
-#define FRAME_AA_EN (1u)  /* 1=启用 0xAA 不定长帧扩展(默认关, 用原版接收) */
 #if FRAME_AA_EN
 /* ===== variable-length frame core (0xAA) - channel links only ===== */
 #define FRAME_HDR_AA           (0xAAu)
