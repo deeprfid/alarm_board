@@ -391,8 +391,8 @@ typedef struct
     uint8_t  varPlen;
 } port_rx_t;
 static port_rx_t s_ports[STM_PORT_CNT];
-static uint32_t s_ping_next[STM_PORT_CNT];
-static uint8_t  s_ping_len[STM_PORT_CNT];
+//static uint32_t s_ping_next[STM_PORT_CNT];
+//static uint8_t  s_ping_len[STM_PORT_CNT];
 
 static const COM_PORT_E s_portCom[STM_PORT_CNT] = { COM6, COM2, COM3, COM4, COM5 };
 static const uint8_t s_portCh[STM_PORT_CNT][2] = { {1,0},{2,3},{4,5},{6,7},{8,0} };
