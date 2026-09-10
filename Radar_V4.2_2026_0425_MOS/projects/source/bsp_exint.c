@@ -1,6 +1,9 @@
 
 #include "main.h"
 
+/* presence display hold: keep LED on this long after last detected presence */
+#define RADAR_PRESENCE_HOLD_MS   (1000u)
+
 /*******************************************************************************
  * Local function prototypes ('static')
  ******************************************************************************/
@@ -107,20 +110,38 @@ en_pin_state_t Radar_Led_update(void)
     if (B_tLED.ucEnalbe != 0u)     { Led_Stop(&B_tLED, LED_BLED); }
     if (Radar_LED.ucEnalbe != 0u)  { Led_Stop(&Radar_LED, RADARLED); }
 
-    /* Blue LED: LIGHT_ON -> always on; else follow presence (radar/camera/EAS) */
-    if (PIN_RESET == switch_decoder_pio_read(LIGHT_ON))
+    /* presence hold: radar OUT refreshes every ~100ms, hold "someone" for HOLD_MS
+       so the LED does not flicker during the low gaps between radar pulses */
     {
-        LED_B_ON();
-    }
-    else
-    {
-        if (presence) { LED_B_ON(); }
-        else          { LED_B_OFF(); }
-    }
+        static uint32_t s_presence_ms   = 0u;
+        static uint8_t  s_presence_seen = 0u;
+        extern uint32_t m_u32Tickms;
+        uint32_t nowms = m_u32Tickms;
+        uint8_t  presence_hold;
 
-    /* Board small Radar_LED: follow presence */
-    if (presence) { bsp_LedOn(RADARLED); }
-    else          { bsp_LedOff(RADARLED); }
+        if (presence)
+        {
+            s_presence_ms   = nowms;
+            s_presence_seen = 1u;
+        }
+
+        presence_hold = ((s_presence_seen != 0u) && ((nowms - s_presence_ms) <= RADAR_PRESENCE_HOLD_MS)) ? 1u : 0u;
+
+        /* Blue LED: LIGHT_ON -> always on; else follow held presence */
+        if (PIN_RESET == switch_decoder_pio_read(LIGHT_ON))
+        {
+            LED_B_ON();
+        }
+        else
+        {
+            if (presence_hold) { LED_B_ON(); }
+            else               { LED_B_OFF(); }
+        }
+
+        /* Board small Radar_LED: follow held presence too */
+        if (presence_hold) { bsp_LedOn(RADARLED); }
+        else               { bsp_LedOff(RADARLED); }
+    }
 
 #endif
 
