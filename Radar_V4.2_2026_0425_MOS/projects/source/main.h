@@ -93,7 +93,7 @@ void Alarm_Off(void);
 void Alarm_On(void);
 void Alarm_SilenceCmd(void);
 uint16_t Ucode_read(uint32_t *rngkey, uint16_t *uidkey);
-en_pin_state_t Radar_Led_update(void);
+void Radar_Led_update(void);
 uint8_t bsp_get_radar_detection(void);
 uint8_t bsp_get_radar_singal(void);
 void bsp_RunPer10ms(void);

@@ -29,7 +29,7 @@ static void led_blink_update(LED_T *led, uint8_t id, uint8_t active, uint16_t ca
 }
 #endif
 
-en_pin_state_t Radar_Led_update(void)
+void Radar_Led_update(void)
 {
     en_pin_state_t aicamsingal = switch_decoder_pio_read(AI_CAMERA);
     uint8_t  radar_on  = bsp_get_radar_singal();
@@ -42,7 +42,7 @@ en_pin_state_t Radar_Led_update(void)
     if ((R_tLED.ucEnalbe == 1) || (G_tLED.ucEnalbe == 1))
     {
         if (presence) { LED_Start(&Radar_LED, RADARLED, 100, 1, 1); }
-        return aicamsingal;
+        return ;
     }
 
     /* Normal mode: behavior selected by installation switches */
@@ -56,21 +56,21 @@ en_pin_state_t Radar_Led_update(void)
         {
             led_blink_update(&Radar_LED, RADARLED, presence, 100);
             led_blink_update(&B_tLED, LED_BLED, presence, 100);
-            return aicamsingal;
+            return ;
         }
 
         if ((p_Aicammode == PIN_RESET) && (p_Radarmode == PIN_SET))
         {
             led_blink_update(&Radar_LED, RADARLED, aicam_on, 100);
             led_blink_update(&B_tLED, LED_BLED, aicam_on, 100);
-            return aicamsingal;
+            return ;
         }
 
         if ((p_Radarmode == PIN_RESET) && (p_Aicammode == PIN_SET))
         {
             led_blink_update(&Radar_LED, RADARLED, radar_on, 300);
             led_blink_update(&B_tLED, LED_BLED, radar_on, 300);
-            return aicamsingal;
+            return ;
         }
 
         if ((p_Easmode == PIN_RESET) && (p_Aicammode == PIN_SET) && (p_Radarmode == PIN_SET))
@@ -81,7 +81,7 @@ en_pin_state_t Radar_Led_update(void)
                 LED_Start(&Radar_LED, RADARLED, 100, 1, 1);
                 LED_Start(&B_tLED, LED_BLED, 100, 1, 1);
             }
-            return aicamsingal;
+            return ;
         }
 
         if ((p_light == PIN_RESET) && (p_Aicammode == PIN_SET) && (p_Radarmode == PIN_SET))
@@ -92,7 +92,7 @@ en_pin_state_t Radar_Led_update(void)
                 LED_Start(&Radar_LED, RADARLED, 100, 1, 1);
                 LED_Start(&B_tLED, LED_BLED, 100, 1, 1);
             }
-            return aicamsingal;
+            return ;
         }
     }
 
@@ -103,11 +103,11 @@ en_pin_state_t Radar_Led_update(void)
     /* R/G alarm LEDs have priority: during alarm the Alarm_* funcs own the LEDs */
     if ((R_tLED.ucEnalbe == 1) || (G_tLED.ucEnalbe == 1))
     {
-        return aicamsingal;
+        return ;
     }
 
     /* stop any leftover software blink on the two indicator LEDs so LED_Pro cannot fight us */
-    if (B_tLED.ucEnalbe != 0u)     { Led_Stop(&B_tLED, LED_BLED); }
+    
     if (Radar_LED.ucEnalbe != 0u)  { Led_Stop(&Radar_LED, RADARLED); }
 
     /* presence hold: radar OUT refreshes every ~100ms, hold "someone" for HOLD_MS
@@ -118,6 +118,10 @@ en_pin_state_t Radar_Led_update(void)
         extern uint32_t m_u32Tickms;
         uint32_t nowms = m_u32Tickms;
         uint8_t  presence_hold;
+			
+			 /* Board small Radar_LED: real-time presence, no hold */
+        if (presence) { bsp_LedOn(RADARLED); }
+        else          { bsp_LedOff(RADARLED); }
 
         if (presence)
         {
@@ -127,7 +131,9 @@ en_pin_state_t Radar_Led_update(void)
 
         presence_hold = ((s_presence_seen != 0u) && ((nowms - s_presence_ms) <= RADAR_PRESENCE_HOLD_MS)) ? 1u : 0u;
 
-        /* Blue LED: LIGHT_ON -> always on; else follow held presence */
+        
+				if (B_tLED.ucEnalbe != 0u)     { return; }
+				/* Blue LED: LIGHT_ON -> always on; else follow held presence */
         if (PIN_RESET == switch_decoder_pio_read(LIGHT_ON))
         {
             LED_B_ON();
@@ -138,14 +144,12 @@ en_pin_state_t Radar_Led_update(void)
             else               { LED_B_OFF(); }
         }
 
-        /* Board small Radar_LED: real-time presence, no hold */
-        if (presence) { bsp_LedOn(RADARLED); }
-        else          { bsp_LedOff(RADARLED); }
+       
     }
 
 #endif
 
-    return aicamsingal;
+    return ;
 }
 
 static void EXTINT_IrqCallback(void)
