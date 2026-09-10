@@ -138,9 +138,9 @@ en_pin_state_t Radar_Led_update(void)
             else               { LED_B_OFF(); }
         }
 
-        /* Board small Radar_LED: follow held presence too */
-        if (presence_hold) { bsp_LedOn(RADARLED); }
-        else               { bsp_LedOff(RADARLED); }
+        /* Board small Radar_LED: real-time presence, no hold */
+        if (presence) { bsp_LedOn(RADARLED); }
+        else          { bsp_LedOff(RADARLED); }
     }
 
 #endif
