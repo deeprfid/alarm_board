@@ -60,6 +60,20 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 - **docs**：新增《Boot/OTA 设计稿 v0.1》（`docs/ota_boot_design.md`）：**A/B 双槽即运行区、无搬运**；选择器标志（双份+CRC）为选槽唯一真值，版本号不参与选槽；Boot 只做“读标志→校验(Magic/ImageLen/整包CRC32/TargetSlot)→跳槽”，TRIAL 试运行窗口(3s)+失败计数自动回退；按槽分别编译两份镜像（STM32 M0 无 VTOR 需向量表重映射，HC32 用 VTOR）；下载期页粒度擦写非活动槽，掉电矩阵任意时刻不砖；含 Linux→STM32→HC32 中继与内存布局（STM32 Boot16K/A64/B64/标志4K；HC32 Boot32K/A128/B128/标志8K）。**未改动任何固件代码**。
 
 - **docs**：新增《设计定稿备忘 2026-09-04》（`docs/decisions_2026-09-04.md`）：汇总当日决策——老格式冻结(0xFF/0x55)+0xAA 变长新帧(Len+Cmd+Addr+Payload+CRC16)、按帧头分流的状态机接收引擎与三判决点/滑窗重同步、实时性=事件+周期+迟滞、流水线轮询、OTA A/B 槽/代理缓存、已确认产品口径与明天开工顺序。未改动任何固件代码。
+### [stm32f0] BSP / app
+
+- **fix**: COM1(Linux IPC) 接收由“`UartGetRxcnt>=32` 定长取包”改为**帧头分流状态机**（`app.c` 新帧核心 `frameRxInit/frameRxGuard/frameRxFeed` + `frCrc16`）：`0x55`/`0xFF` 按 32B 定长、`0xAA` 按 `AA+Len+Cmd+Addr+Payload+CRC16` 变长；`PDUHEAD` 帧分发 `ipc_hpm_message()`（GPIOHEAD 查询应答暂 `#if 0`）。修复两处接收失效：泵内未刷新 `lastByteMs` 导致 `frameRxGuard` 每拍误复位状态机（Linux 包收不到）；CRC 失败时误调 `comClearRxFifo` 破坏与中断共享的 FIFO 索引（改为直接丢弃、下一个帧头重同步）。
+- **feat**: 上行新增 **0xAA Cmd 0x20 五口状态聚合帧**：`[AA][Len=17][0x20][00][5×(gpioIn,workMode,alarmDone)][CRC16]`，数据源为 0xAA Cmd 0x10 应答（雷达位图 / 安装模式位图 / 报警完成），**变化即报 + 1s 无变化心跳**；`Radar_thread` 周期（`radarPollMs=2000`）向 5 口发 Cmd 0x10 查询（COM6/COM2/COM3/COM4/COM5 ↔ 通道 1..9）。
+- **fix**: 发送前增加 **TX 空闲等待** `UartTxWait(port, 5ms)`（`bsp_uart_fifo.c/.h` 新增，基于 `UartTxEmpty`）：消除 UART4/UART6 DMA 忙时 `uart4/6_dma_tx_start` **静默丢包**（雷达查询与 Linux 报警包并发时丢报警）。
+- **perf**: `UartGetChar` 增加“FIFO 空”快速路径（无临界区直接返回），仅在有数据时进一次临界区出队——主循环逐字节泵的关中断开销显著下降。
+- **refactor**: `app.c` 本轮新增标识符统一改为 **lowerCamelCase**（函数/变量/宏共 51 个，如 `frameRxFeed`/`stmVarSend`/`radarQueryAll`/`sPortCom`/`frameRxGuardMs`/`frameAaEn`）；`portRx_t` 删除未使用成员（`port/rxByteCnt/varCnt/varCrcFail/legCrcFail/varAddr`）。
+- **chore**: `bsp.c` 中 `CM4_System_Reset()` 移入 `#if STM32F0_IWDG_ENABLE`（与看门狗使能一致，不再无条件拉复位脉冲）。
+
+### [hc32f460] projects/source
+
+- **feat**: 新增 `bsp_report.c/.h`：`bsp_report_build()` 组 3B 上报负载——Byte0 GPIO_IN 位图（bit0..2 雷达 PC14/PC13/PH2 高有效、bit3 GPIO_IN1=摄像头 PB0 低有效、bit4 GPIO_IN2=继电器 PB1 低有效）、Byte1 安装模式位图（LIGHT/SYNC/RADAR/AICAM/EAS）、Byte2 alarm_done；`common.c` 0xAA **Cmd 0x10** 查询回该 3B，`CMD 0x01` 仍回 0x81 回显。
+- **refactor**: `Radar_Led_update()`（`bsp_exint.c`/`main.h` 原型）改为 **void 返回 + 直接 IO 控制**（旧 `LED_Start/Led_Stop` 定时闪烁逻辑 `#if 0` 保留）：报警(R/G) 优先；蓝灯 = presence 且**保持 1s**（`RADAR_PRESENCE_HOLD_MS`，消除雷达 ~100ms 脉冲间隙导致的闪烁）、`LIGHT_ON` 常亮；板载 Radar_LED 跟随实时 presence（不保持）。
+
 ## [0.1.0] - 2026-09-04
 
 ### Added

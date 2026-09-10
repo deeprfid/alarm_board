@@ -743,35 +743,28 @@ void DMA1_Channel4_5_IRQHandler(void)
 */
 static uint8_t UartGetChar(UART_T *_pUart, uint8_t *_pByte)
 {
-    uint16_t usCount;
-
-    /* usRxWrite 变量在中断函数中被改写，主程序读取该变量时，必须进行临界区保护 */
-    HAL_NVIC_DisableIRQ(_pUart->uartirq);
-    usCount = _pUart->usRxCount;
-    ENABLE_INT();
-
-    /* 如果读和写索引相同，则返回0 */
-    //if (_pUart->usRxRead == usRxWrite)
-    if (usCount == 0)	/* 已经没有数据 */
+    /* fast path: no critical section when FIFO empty (most polls) */
+    if (_pUart->usRxCount == 0)
     {
         return 0;
     }
-    else
+
+    /* single critical section: pop one byte and advance the read index */
+    HAL_NVIC_DisableIRQ(_pUart->uartirq);
+    if (_pUart->usRxCount == 0)   /* re-check inside critical section */
     {
-        *_pByte = _pUart->pRxBuf[_pUart->usRxRead];		/* 从串口接收FIFO取1个数据 */
-
-        /* 改写FIFO读索引 */
-        HAL_NVIC_DisableIRQ(_pUart->uartirq);
-
-        if (++_pUart->usRxRead >= _pUart->usRxBufSize)
-        {
-            _pUart->usRxRead = 0;
-        }
-
-        _pUart->usRxCount--;
         HAL_NVIC_EnableIRQ(_pUart->uartirq);
-        return 1;
+        return 0;
     }
+
+    *_pByte = _pUart->pRxBuf[_pUart->usRxRead];
+    if (++_pUart->usRxRead >= _pUart->usRxBufSize)
+    {
+        _pUart->usRxRead = 0;
+    }
+    _pUart->usRxCount--;
+    HAL_NVIC_EnableIRQ(_pUart->uartirq);
+    return 1;
 }
 
 uint16_t UartGetRxcnt(COM_PORT_E _ucPort)
@@ -797,7 +790,6 @@ uint16_t UartGetRxcnt(COM_PORT_E _ucPort)
 uint8_t UartTxEmpty(COM_PORT_E _ucPort)
 {
     UART_T *pUart;
-    uint8_t Sending;
 
     pUart = ComToUart(_ucPort);
 
@@ -806,11 +798,47 @@ uint8_t UartTxEmpty(COM_PORT_E _ucPort)
         return 0;
     }
 
-    Sending = pUart->Sending;
-
-    if (Sending != 0)
+#if UART4_FIFO_EN == 1
+    /* UART4 TX is DMA driven: busy flag AND DMAT bit must both be clear */
+    if (pUart->uart == USART4)
+    {
+        return ((g_u4txbusy == 0u) && ((USART4->CR3 & USART_CR3_DMAT) == 0u)) ? 1u : 0u;
+    }
+#endif
+#if UART6_FIFO_EN == 1
+    /* UART6 TX is DMA driven: busy flag AND DMAT bit must both be clear */
+    if (pUart->uart == USART6)
+    {
+        return ((g_u6txbusy == 0u) && ((USART6->CR3 & USART_CR3_DMAT) == 0u)) ? 1u : 0u;
+    }
+#endif
+    /* Interrupt + FIFO TX path: empty only when no queued byte and none in flight */
+    if ((pUart->usTxCount != 0u) || (pUart->Sending != 0u))
     {
         return 0;
+    }
+
+    return 1;
+}
+
+/*
+*********************************************************************************************************
+*   函 数 名: UartTxWait
+*   功能说明: 等待发送缓冲区空闲，避免上一包尚未发完就重新启动发送导致丢包。
+*   形     参:  _ucPort : 串口设备 ; _timeoutMs : 最长等待时间(ms)
+*   返 回 值: 1 表示空闲(可发送) ; 0 表示超时仍忙
+*********************************************************************************************************
+*/
+uint8_t UartTxWait(COM_PORT_E _ucPort, uint32_t _timeoutMs)
+{
+    uint32_t t0 = HAL_GetTick();
+
+    while (UartTxEmpty(_ucPort) == 0u)
+    {
+        if ((HAL_GetTick() - t0) >= _timeoutMs)
+        {
+            return 0;
+        }
     }
 
     return 1;

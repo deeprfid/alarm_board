@@ -97,8 +97,8 @@ void bsp_Init(void)
     BEEP_InitHard();
     bsp_InitLed();
     PIO_GPIOInit();
-    CM4_System_Reset();
 #if STM32F0_IWDG_ENABLE
+	  CM4_System_Reset();
     rd_idkey_fun();
     MX_IWDG_Init();
 
