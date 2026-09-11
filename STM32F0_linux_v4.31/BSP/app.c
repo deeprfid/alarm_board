@@ -350,6 +350,46 @@ static void radarQueryAll(void)
 }
 
 /* pump one port's FIFO through the var-frame state machine */
+/* ===== 雷达触发输出: 轮询到某口有人(radarVal=1) -> Host_IRQ 输出 1 + 对应口 LED, 保持 radarTrigHoldMs ===== */
+#define radarTrigHoldMs     (1000u)   /* 触发信号与点灯的保持时间(ms) */
+#define radarTrigLedOn      (10u)     /* LED_Start 参数: 亮 10*10ms */
+#define radarTrigLedOff     (10u)     /* LED_Start 参数: 灭 10*10ms */
+
+static uint8_t  sTrigOn[stmPortCnt];      /* 1 = 该口处于触发保持窗口内 */
+static uint32_t sTrigMs[stmPortCnt];      /* 该口最近一次收到"有人"的时刻 */
+static LED_T *const sTrigLed[stmPortCnt] = { &Port_1_LED, &Port_2_LED, &Port_3_LED, &Port_4_LED, &Port_5_LED };
+static const uint8_t sTrigLedNo[stmPortCnt] = { PORTLED_1, PORTLED_2, PORTLED_3, PORTLED_4, PORTLED_5 };
+
+static void radarTriggerOut(uint32_t now)
+{
+    uint8_t i;
+    uint8_t active = 0u;
+
+    for (i = 0u; i < stmPortCnt; i++)
+    {
+        if (sPorts[i].radarVal != 0u)
+        {
+            sTrigOn[i] = 1u;                    /* 有人: 打开/刷新保持窗口 */
+            sTrigMs[i] = now;
+        }
+        else if ((sTrigOn[i] != 0u) && ((now - sTrigMs[i]) >= radarTrigHoldMs))
+        {
+            sTrigOn[i] = 0u;                    /* 保持时间内再没收到有人: 窗口结束 */
+        }
+
+        if (sTrigOn[i] != 0u)
+        {
+            /* 窗口内每拍刷新一次, LED 保持点亮; 窗口结束后由 LED_Pro 收尾熄灭 */
+            LED_Start(sTrigLed[i], sTrigLedNo[i], radarTrigLedOn, radarTrigLedOff, 1u);
+            active = 1u;
+        }
+    }
+
+    /* 任一口在窗口内 -> 触发信号输出 1; 全部结束 -> 输出 0 */
+    HAL_GPIO_WritePin(Host_IRQ_GPIO_Port, Host_IRQ_Pin,
+                      (active != 0u) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+}
+
 static void radarPumpPort(uint8_t i, uint32_t now)
 {
     uint8_t b;
@@ -362,9 +402,6 @@ static void radarPumpPort(uint8_t i, uint32_t now)
         if (ev == frameEvVar)
         {
             stmHandleVar(&sPorts[i]);
-            if (sPorts[i].varCmd == 0x10u)   /* valid 0x10 reply */
-            {
-            }
         }
     }
 }
@@ -395,6 +432,9 @@ void Radar_thread(void)
 
     /* 2) broadcast Cmd 0x10 query */
     radarQueryAll();
+
+    /* 3) 有人触发输出: Host_IRQ=1 + 对应口 LED 点亮, 保持 radarTrigHoldMs */
+    radarTriggerOut(now);
 
     /* 2b) report port/channel status to Linux (PDUHEAD gpio_pdu 32B, on change) */
     ipcReportStatus(now);
@@ -576,10 +616,10 @@ void Check_Uart_Pdu(void)
         else if (ev == frameEvVar) { ipcHandleVar(); }
     }
 
-    if (Port_5_LED.ucEnalbe == 0)
-    {
-        LED_Start(&Port_5_LED, PORTLED_5, 5, 50, 1);
-    }
+//    if (Port_5_LED.ucEnalbe == 0)
+//    {
+//        LED_Start(&Port_5_LED, PORTLED_5, 5, 50, 1);
+//    }
 }
 
 #endif /* frameAaEn */

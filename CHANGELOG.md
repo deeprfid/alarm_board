@@ -62,6 +62,9 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 - **docs**：新增《设计定稿备忘 2026-09-04》（`docs/decisions_2026-09-04.md`）：汇总当日决策——老格式冻结(0xFF/0x55)+0xAA 变长新帧(Len+Cmd+Addr+Payload+CRC16)、按帧头分流的状态机接收引擎与三判决点/滑窗重同步、实时性=事件+周期+迟滞、流水线轮询、OTA A/B 槽/代理缓存、已确认产品口径与明天开工顺序。未改动任何固件代码。
 ### [stm32f0] BSP / app
 
+- `[stm32f0]` **feat**: 新增**雷达有人触发输出** —— `app.c` 新增 `radarTriggerOut()`，在 `Radar_thread()` 每 `radarPollMs`(20ms) 一拍调用：任一口轮询到的雷达状态为"有人"（`sPorts[i].radarVal == 1`，来自 HC32 0xAA Cmd 0x10 应答 Byte0 的雷达位）时，①输出触发信号 `HAL_GPIO_WritePin(Host_IRQ_GPIO_Port, Host_IRQ_Pin, GPIO_PIN_SET)`；②点亮该口对应 LED `LED_Start(&Port_x_LED, PORTLED_x, 10, 10, 1)`；两者保持 `radarTrigHoldMs = 1000ms`（窗口内持续有人则每拍刷新续期，保持为 1/常亮；窗口结束后 `Host_IRQ` 拉低、LED 由 `LED_Pro` 收尾熄灭）。口→LED 映射：COM6→Port_1_LED/PORTLED_1、COM2→Port_2、COM3→Port_3、COM4→Port_4、COM5→Port_5。
+- `[stm32f0]` **fix**: `bsp.c` 中 `Host_IRQ(PA12)` 上电初始化电平由 `GPIO_PIN_SET` 改为 `GPIO_PIN_RESET`（触发信号为 1，空闲必须为 0，避免上电即出现假触发）；并清掉 `radarPumpPort()` 里遗留的空 `if` 块。
+
 - `[stm32f0]` **clean**: 清理 `BSP/bsp.c`、`BSP/bsp_beep.c` 中未使用的代码（`bsp.c` 353 → 313 行，`bsp_beep.c` 175 → 132 行，`bsp_beep.h` −4 行，`bsp.h` −1 行）：
   - `bsp.c`：删除 `STM32F030_delay()`（0 调用，`bsp.h` 中对应原型一并删除）与 HAL 断言钩子 `assert_failed()`（`stm32f0xx_hal_conf.h` 里 `USE_FULL_ASSERT` 处于注释状态，`assert_param` 展开为 `(void)0`，无人调用——**若今后启用 `USE_FULL_ASSERT` 需把它加回**），连同其 `#ifdef USE_FULL_ASSERT` 空壳与两段孤立注释；删除 `bsp_Init()` 中指向已删函数的注释调用 `// EXTI4_15_IRQHandler_Config();`。
   - `bsp_beep.c`：删除 `mutex_beep_lock()`/`mutex_beep_unlock()`（只被 `BEEP_Stop` 调用）、`BEEP_Stop()`（只被 `BEEP_Pause`/`BEEP_Resume` 调用）、`BEEP_Pause()`、`BEEP_Resume()`、`BEEP_KeyTone()`（三者 0 调用）及静态变量 `mutex_beep`、`bsp_beep.h` 中对应 5 条原型；另外删掉被注释掉的旧 `BEEP_ENABLE/BEEP_DISABLE`（引用已删的 `GPO_BZ_GPIO_Port/GPO_BZ_Pin`）与 `BEEP_InitHard()` 里注释掉的 HC32 风格 GPIO 初始化片段。保留 `BEEP_InitHard`/`BEEP_Start`/`BEEP_Pro`、`g_tBeep`、在用的一对 `BEEP_ENABLE/BEEP_DISABLE`（`GPO_BZ3V3_*`，被 `BEEP_Start`/`BEEP_Pro` 使用）。
