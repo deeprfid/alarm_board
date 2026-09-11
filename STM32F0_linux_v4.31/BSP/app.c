@@ -47,18 +47,6 @@ static void CRC_calcCrc8(unsigned short *crcReg, unsigned short poly, unsigned s
     }
 }
 
-unsigned short CalcCRC(unsigned char *msgbuf, int msglen)
-{
-    unsigned short calcCrc = MSG_CRC_INIT;
-    unsigned short  k;
-
-    for (k = 1; k < msglen; ++k)
-    {
-        CRC_calcCrc8(&calcCrc, MSG_CCITT_CRC_POLY, msgbuf[k]);
-    }
-
-    return calcCrc;
-}
 
 unsigned short ipcCrc(unsigned char *msgbuf, int msglen)
 {
@@ -73,30 +61,6 @@ unsigned short ipcCrc(unsigned char *msgbuf, int msglen)
     return calcCrc;
 }
 
-void rfid_app(void)
-{
-
-
-//	memset(&alarmboard, 0, sizeof(alarmboard));
-    alarmboard.FrameHead = PDUHEAD;
-    alarmboard.Pdu_len = sizeof(alarmboard);
-    //alarmboard.AntID = 0x01;
-    alarmboard.Alarm_Duration[0] = 2;                              // LED_R
-    alarmboard.Alarm_Duration[1] = 2;                              // LED_B
-    alarmboard.Alarm_Duration[2] = ALARM_R_CODE;                   // LED_G  p->cmd
-    alarmboard.Alarm_Duration[3] = 1;
-    alarmboard.Alarm_Duration[4] = AUX_EAS_CODE;
-    alarmboard.random_forest = 0;
-
-    if(alarmboard.AntID++ > 8)
-    {
-        alarmboard.AntID = 1;
-    }
-
-    uint16_t crcdata = ipcCrc((uint8_t *)&alarmboard, sizeof(alarmboard) - 2);
-    alarmboard.crc = crcdata;
-
-}
 
 #define ipcReportOnQuery  (1u)   /* 1 = Linux 0xFF PDUHEAD(AntID!=0) 查询到达时立即应答一帧 32B gpio_pdu */
 
@@ -220,14 +184,6 @@ void ipc_hpm_message(uint8_t *upload, uint8_t dlen, uint8_t antid)
 
 }
 
-void Alarm_CMD(void)
-{
-
-    rfid_app();
-    ipc_hpm_message((uint8_t *)&alarmboard, sizeof(alarmboard), alarmboard.AntID);
-
-
-}
 
 
 
@@ -240,7 +196,6 @@ void Alarm_CMD(void)
 #define frameHdrLegPdu      (0xFFu)
 #define frameMaxPayload     (251u)
 #define frameRxGuardMs      (20u)
-#define frameTestPing       (0u)  /* 1=每秒向5口发0xAA回显自检ping(诊断用, 会叠加并发流量) */
 #define frameVarTotalMax    (255u)
 #define frameEvNone         (0)
 #define frameEvLegacy       (1)
@@ -327,7 +282,6 @@ static int frameRxFeed(frameRx_t *rx, uint8_t b)
 typedef struct
 {
     frameRx_t rx;
-    uint32_t lastRcvMs;
     uint8_t  radarVal;      /* 0x10 reply: 1=someone present (any radar bit) */
     uint8_t  gpioIn;        /* 0x10 reply Byte0: bit0..2=radar1..3, bit3=GPIO_IN1, bit4=GPIO_IN2 */
     uint8_t  workMode;      /* 0x10 reply Byte1: install mode switches */
@@ -369,20 +323,6 @@ static void stmHandleVar(portRx_t *pr)
         pr->radarVal  = ((pr->gpioIn & 0x07u) != 0u) ? 1u : 0u;   /* any radar present=1 */
     }
 }
-#if frameTestPing
-static void pingOne(uint8_t portIdx)
-{
-    static const uint8_t plens[4] = { 0u, 8u, 32u, 80u };
-    uint8_t pl[80];
-    uint8_t plen;
-    uint8_t n;
-    uint8_t i;
-    n = (uint8_t)(sPingLen[portIdx] & 3u);
-    plen = plens[n];
-    for (i = 0u; i < plen; i++) { pl[i] = (uint8_t)(0xA0u + i); }
-    (void)stmVarSend(sPortCom[portIdx], 0x01u, (uint8_t)(portIdx + 1u), pl, plen);
-}
-#endif
 /* ===== end frame core part2 ===== */
 #endif /* frameAaEn */
 
@@ -394,37 +334,10 @@ static void pingOne(uint8_t portIdx)
 /* ===== 0xAA Cmd 0x10 radar status polling (5-port) ===== */
 #define radarPollMs    (20u)
 
-/* per-port tx/rx counters (kept from previous AA self-test) */
-static volatile uint32_t uart3Tx=0, uart3Rx=0;
-static volatile uint32_t uart4Tx=0, uart4Rx=0;
-static volatile uint32_t uart5Tx=0, uart5Rx=0;
-static volatile uint32_t uart6Tx=0, uart6Rx=0;
 static uint8_t  sPumpInit = 0u;
 
 static void ipcReportStatus(uint32_t now);   /* defined below Radar_thread */
 
-static void radarCntTx(COM_PORT_E port)
-{
-    switch (port)
-    {
-        case COM3: uart3Tx++; break;
-        case COM4: uart4Tx++; break;
-        case COM5: uart5Tx++; break;
-        case COM6: uart6Tx++; break;
-        default: break;
-    }
-}
-static void radarCntRx(COM_PORT_E port)
-{
-    switch (port)
-    {
-        case COM3: uart3Rx++; break;
-        case COM4: uart4Rx++; break;
-        case COM5: uart5Rx++; break;
-        case COM6: uart6Rx++; break;
-        default: break;
-    }
-}
 
 /* broadcast Cmd 0x10 empty query to all 5 ports */
 static void radarQueryAll(void)
@@ -433,7 +346,6 @@ static void radarQueryAll(void)
     for (i = 0u; i < stmPortCnt; i++)
     {
         (void)stmVarSend(sPortCom[i], 0x10u, (uint8_t)(i + 1u), 0, 0u);
-        radarCntTx(sPortCom[i]);
     }
 }
 
@@ -452,8 +364,6 @@ static void radarPumpPort(uint8_t i, uint32_t now)
             stmHandleVar(&sPorts[i]);
             if (sPorts[i].varCmd == 0x10u)   /* valid 0x10 reply */
             {
-                sPorts[i].lastRcvMs = now;
-                radarCntRx(sPortCom[i]);
             }
         }
     }
@@ -587,8 +497,6 @@ static void ipcReportForce(void)
  */
 #define ipcReportCmd       (0x20u)
 #define ipcReportAddr      (0x00u)
-#define ipcReportPort3b    (3u)
-
 static void ipcReportStatusVar20(uint32_t now)
 {
     uint8_t payload[stmPortCnt * 3u];

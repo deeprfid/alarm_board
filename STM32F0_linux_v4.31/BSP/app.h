@@ -14,25 +14,11 @@
 #define _APP_H_
 #include "stdint.h"
 
-#define NONE_EAS_CODE      (0x64)
-#define AUX_EAS_CODE       (0x32)
 #define PDUHEAD            (0xFF)   /* Linux 链路唯一帧头: 下行命令与上行响应(gpio_pdu)均用它 */
-#define NONE_EAS_CODE      (0x64)
-#define AUX_EAS_CODE       (0x32)
 #define ALARM_G_CODE       (0xA5)
-#define ALARM_NONE_CODE    (0x90)
 #define ALARM_R_CODE       (0x5A)
 #define ALARM_RELAY_CODE   (0x55)
 #define APP_FRAME_LEN_MAX  (32U)
-
-#define ACT_TAGDATA     (1)
-#define ACT_GPICHANGE   (2)
-#define ACT_TAGCOMING   (3)
-
-#define MAX_EPCLEN         (16)
-#define MAX_BOARD_CNT      (8)
-
-
 
 typedef struct
 {
@@ -63,9 +49,7 @@ typedef struct
 
 
 unsigned short ipcCrc(unsigned char *msgbuf, int msglen);
-void rfid_app(void);
 void ipc_hpm_message(uint8_t *upload, uint8_t dlen, uint8_t antid);
-void Alarm_CMD(void);
 void Radar_thread(void);
 void Check_Uart_Pdu(void);
 #endif
