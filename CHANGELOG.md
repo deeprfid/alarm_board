@@ -62,6 +62,8 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 - **docs**：新增《设计定稿备忘 2026-09-04》（`docs/decisions_2026-09-04.md`）：汇总当日决策——老格式冻结(0xFF/0x55)+0xAA 变长新帧(Len+Cmd+Addr+Payload+CRC16)、按帧头分流的状态机接收引擎与三判决点/滑窗重同步、实时性=事件+周期+迟滞、流水线轮询、OTA A/B 槽/代理缓存、已确认产品口径与明天开工顺序。未改动任何固件代码。
 ### [stm32f0] BSP / app
 
+- `[stm32f0]` **refactor**: 简化雷达触发输出实现——去掉自定义的 LED 指针表/刷新逻辑，**直接调用已有驱动**：`switch(口)` → `LED_Start(&Port_x_LED, PORTLED_x, 10, 10, 1)` 仅在"有人"上升沿调用一次（闪烁节拍交给 LED 驱动，由 `bsp_RunPer10ms()`→`LED_Pro()` 推进）；触发保持只用一个时刻数组 `sTrigMs[stmPortCnt]` + `radarTrigHoldMs = 1000ms`，窗口内为 1、全部口超时后 `HAL_GPIO_WritePin(..., GPIO_PIN_RESET)`。
+
 - `[stm32f0]` **feat**: 新增**雷达有人触发输出** —— `app.c` 新增 `radarTriggerOut()`，在 `Radar_thread()` 每 `radarPollMs`(20ms) 一拍调用：任一口轮询到的雷达状态为"有人"（`sPorts[i].radarVal == 1`，来自 HC32 0xAA Cmd 0x10 应答 Byte0 的雷达位）时，①输出触发信号 `HAL_GPIO_WritePin(Host_IRQ_GPIO_Port, Host_IRQ_Pin, GPIO_PIN_SET)`；②点亮该口对应 LED `LED_Start(&Port_x_LED, PORTLED_x, 10, 10, 1)`；两者保持 `radarTrigHoldMs = 1000ms`（窗口内持续有人则每拍刷新续期，保持为 1/常亮；窗口结束后 `Host_IRQ` 拉低、LED 由 `LED_Pro` 收尾熄灭）。口→LED 映射：COM6→Port_1_LED/PORTLED_1、COM2→Port_2、COM3→Port_3、COM4→Port_4、COM5→Port_5。
 - `[stm32f0]` **fix**: `bsp.c` 中 `Host_IRQ(PA12)` 上电初始化电平由 `GPIO_PIN_SET` 改为 `GPIO_PIN_RESET`（触发信号为 1，空闲必须为 0，避免上电即出现假触发）；并清掉 `radarPumpPort()` 里遗留的空 `if` 块。
 

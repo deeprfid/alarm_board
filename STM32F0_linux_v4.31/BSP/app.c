@@ -351,7 +351,7 @@ static void radarQueryAll(void)
 
 /* pump one port's FIFO through the var-frame state machine */
 /* ===== 雷达触发输出: 轮询到某口有人(radarVal=1) -> Host_IRQ 输出 1 + 对应口 LED, 保持 radarTrigHoldMs ===== */
-#define radarTrigHoldMs     (1000u)   /* 触发信号与点灯的保持时间(ms) */
+#define radarTrigHoldMs     (100u)   /* 触发信号与点灯的保持时间(ms) */
 #define radarTrigLedOn      (10u)     /* LED_Start 参数: 亮 10*10ms */
 #define radarTrigLedOff     (10u)     /* LED_Start 参数: 灭 10*10ms */
 
