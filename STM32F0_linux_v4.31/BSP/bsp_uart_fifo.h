@@ -106,17 +106,9 @@ typedef struct
 
 void bsp_InitUart(void);
 void comSendBuf(COM_PORT_E _ucPort, uint8_t *_ucaBuf, uint16_t _usLen);
-void comSendChar(COM_PORT_E _ucPort, uint8_t _ucByte);
 uint8_t comGetChar(COM_PORT_E _ucPort, uint8_t *_pByte);
-void comClearTxFifo(COM_PORT_E _ucPort);
-void comClearRxFifo(COM_PORT_E _ucPort);
-void comSetBaud(COM_PORT_E _ucPort, uint32_t _BaudRate);
-void bsp_SetUartParam(USART_TypeDef *Instance,  uint32_t BaudRate, uint32_t Parity, uint32_t Mode);
-uint16_t uart_recv(COM_PORT_E _ucPorts, void *buf, uint32_t len);
 uint8_t  UartTxEmpty(COM_PORT_E _ucPort);
 uint8_t  UartTxWait(COM_PORT_E _ucPort, uint32_t _timeoutMs);
-uint16_t UartGetRxcnt(COM_PORT_E _ucPort);
-  
 #endif
 
 /***************************** 安富莱电子 www.armfly.com (END OF FILE) *********************************/

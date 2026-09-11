@@ -72,12 +72,10 @@ static volatile uint8_t g_u6txbusy = 0u;
 static void UartVarInit(void);
 static void InitHardUart(void);
 static void UartSend(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen);
-static void UartSendBlocking(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen);
 static void uart6_dma_tx_start(const uint8_t *src, uint16_t len);
 static void uart4_dma_tx_start(const uint8_t *src, uint16_t len);
 static uint8_t UartGetChar(UART_T *_pUart, uint8_t *_pByte);
 static void UartIRQ(UART_T *_pUart);
-
 
 
 static void MX_USART1_UART_Init(void);
@@ -170,72 +168,6 @@ UART_T *ComToUart(COM_PORT_E _ucPort)
 
 /*
 *********************************************************************************************************
-*	函 数 名: ComToUart
-*	功能说明: 将COM端口号转换为 USART_TypeDef* USARTx
-*	形    参: _ucPort: 端口号(COM1 - COM8)
-*	返 回 值: USART_TypeDef*,  USART1, USART2, USART3, UART4, UART5，USART6，UART7，UART8。
-*********************************************************************************************************
-*/
-USART_TypeDef *ComToUSARTx(COM_PORT_E _ucPort)
-{
-    if (_ucPort == COM1)
-    {
-        #if UART1_FIFO_EN == 1
-        return USART1;
-        #else
-        return 0;
-        #endif
-    }
-    else if (_ucPort == COM2)
-    {
-        #if UART2_FIFO_EN == 1
-        return USART2;
-        #else
-        return 0;
-        #endif
-    }
-    else if (_ucPort == COM3)
-    {
-        #if UART3_FIFO_EN == 1
-        return USART3;
-        #else
-        return 0;
-        #endif
-    }
-    else if (_ucPort == COM4)
-    {
-        #if UART4_FIFO_EN == 1
-        return USART4;
-        #else
-        return 0;
-        #endif
-    }
-    else if (_ucPort == COM5)
-    {
-        #if UART5_FIFO_EN == 1
-        return USART5;
-        #else
-        return 0;
-        #endif
-    }
-    else if (_ucPort == COM6)
-    {
-        #if UART6_FIFO_EN == 1
-        return USART6;
-        #else
-        return 0;
-        #endif
-    }
-
-    else
-    {
-        /* 不做任何处理 */
-        return 0;
-    }
-}
-
-/*
-*********************************************************************************************************
 *	函 数 名: comSendBuf
 *	功能说明: 向串口发送一组数据。数据放到发送缓冲区后立即返回，由中断服务程序在后台完成发送
 *	形    参: _ucPort: 端口号(COM1 - COM8)
@@ -281,20 +213,6 @@ void comSendBuf(COM_PORT_E _ucPort, uint8_t *_ucaBuf, uint16_t _usLen)
 
 /*
 *********************************************************************************************************
-*	函 数 名: comSendChar
-*	功能说明: 向串口发送1个字节。数据放到发送缓冲区后立即返回，由中断服务程序在后台完成发送
-*	形    参: _ucPort: 端口号(COM1 - COM8)
-*			  _ucByte: 待发送的数据
-*	返 回 值: 无
-*********************************************************************************************************
-*/
-void comSendChar(COM_PORT_E _ucPort, uint8_t _ucByte)
-{
-    comSendBuf(_ucPort, &_ucByte, 1);
-}
-
-/*
-*********************************************************************************************************
 *	函 数 名: comGetChar
 *	功能说明: 从接收缓冲区读取1字节，非阻塞。无论有无数据均立即返回。
 *	形    参: _ucPort: 端口号(COM1 - COM8)
@@ -315,79 +233,6 @@ uint8_t comGetChar(COM_PORT_E _ucPort, uint8_t *_pByte)
 
     return UartGetChar(pUart, _pByte);
 }
-
-/*
-*********************************************************************************************************
-*	函 数 名: comClearTxFifo
-*	功能说明: 清零串口发送缓冲区
-*	形    参: _ucPort: 端口号(COM1 - COM8)
-*	返 回 值: 无
-*********************************************************************************************************
-*/
-void comClearTxFifo(COM_PORT_E _ucPort)
-{
-    UART_T *pUart;
-
-    pUart = ComToUart(_ucPort);
-
-    if (pUart == 0)
-    {
-        return;
-    }
-
-    pUart->usTxWrite = 0;
-    pUart->usTxRead = 0;
-    pUart->usTxCount = 0;
-}
-
-/*
-*********************************************************************************************************
-*	函 数 名: comClearRxFifo
-*	功能说明: 清零串口接收缓冲区
-*	形    参: _ucPort: 端口号(COM1 - COM8)
-*	返 回 值: 无
-*********************************************************************************************************
-*/
-void comClearRxFifo(COM_PORT_E _ucPort)
-{
-    UART_T *pUart;
-
-    pUart = ComToUart(_ucPort);
-
-    if (pUart == 0)
-    {
-        return;
-    }
-
-    pUart->usRxWrite = 0;
-    pUart->usRxRead = 0;
-    pUart->usRxCount = 0;
-}
-
-/*
-*********************************************************************************************************
-*	函 数 名: comSetBaud
-*	功能说明: 设置串口的波特率. 本函数固定设置为无校验，收发都使能模式
-*	形    参: _ucPort: 端口号(COM1 - COM8)
-*			  _BaudRate: 波特率，8倍过采样  波特率.0-12.5Mbps
-*                                16倍过采样 波特率.0-6.25Mbps
-*	返 回 值: 无
-*********************************************************************************************************
-*/
-void comSetBaud(COM_PORT_E _ucPort, uint32_t _BaudRate)
-{
-    USART_TypeDef* USARTx;
-
-    USARTx = ComToUSARTx(_ucPort);
-
-    if (USARTx == 0)
-    {
-        return;
-    }
-
-    bsp_SetUartParam(USARTx,  _BaudRate, UART_PARITY_NONE, UART_MODE_TX_RX);
-}
-
 
 /*
 *********************************************************************************************************
@@ -519,48 +364,6 @@ static void UartVarInit(void)
 
 /*
 *********************************************************************************************************
-*	函 数 名: bsp_SetUartParam
-*	功能说明: 配置串口的硬件参数（波特率，数据位，停止位，起始位，校验位，中断使能）适合于STM32- H7开发板
-*	形    参: Instance   USART_TypeDef类型结构体
-*             BaudRate   波特率
-*             Parity     校验类型，奇校验或者偶校验
-*             Mode       发送和接收模式使能
-*	返 回 值: 无
-*********************************************************************************************************
-*/
-void bsp_SetUartParam(USART_TypeDef *Instance,  uint32_t BaudRate, uint32_t Parity, uint32_t Mode)
-{
-    UART_HandleTypeDef UartHandle;
-
-    /*##-1- 配置串口硬件参数 ######################################*/
-    /* 异步串口模式 (UART Mode) */
-    /* 配置如下:
-      - 字长    = 8 位
-      - 停止位  = 1 个停止位
-      - 校验    = 参数Parity
-      - 波特率  = 参数BaudRate
-      - 硬件流控制关闭 (RTS and CTS signals) */
-
-    UartHandle.Instance        = Instance;
-
-    UartHandle.Init.BaudRate   = BaudRate;
-    UartHandle.Init.WordLength = UART_WORDLENGTH_8B;
-    UartHandle.Init.StopBits   = UART_STOPBITS_1;
-    UartHandle.Init.Parity     = Parity;
-    UartHandle.Init.HwFlowCtl  = UART_HWCONTROL_NONE;
-    UartHandle.Init.Mode       = Mode;
-    UartHandle.Init.OverSampling = UART_OVERSAMPLING_16;
-    UartHandle.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
-    UartHandle.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-
-    if (HAL_UART_Init(&UartHandle) != HAL_OK)
-    {
-        Error_Handler();
-    }
-}
-
-/*
-*********************************************************************************************************
 *	函 数 名: InitHardUart
 *	功能说明: 配置串口的硬件参数（波特率，数据位，停止位，起始位，校验位，中断使能）适合于STM32-H7开发板
 *	形    参: 无
@@ -595,22 +398,6 @@ static void InitHardUart(void)
 *	返 回 值: 无
 *********************************************************************************************************
 */
-static void UartSendBlocking(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen)
-{
-    uint16_t i;
-    /* disable IRQ-driven TX so nothing else writes TDR */
-    CLEAR_BIT(_pUart->uart->CR1, USART_CR1_TXEIE);
-    CLEAR_BIT(_pUart->uart->CR1, USART_CR1_TCIE);
-    for (i = 0u; i < _usLen; i++)
-    {
-        while ((_pUart->uart->ISR & USART_ISR_TXE) == 0u) { }
-        _pUart->uart->TDR = _ucaBuf[i];
-    }
-    /* HAL-style: wait TC (last byte fully shifted out) */
-    while ((_pUart->uart->ISR & USART_ISR_TC) == 0u) { }
-    SET_BIT(_pUart->uart->ICR, USART_ICR_TCCF);
-}
-
 static void UartSend(UART_T *_pUart, uint8_t *_ucaBuf, uint16_t _usLen)
 {
     uint16_t i;
@@ -765,18 +552,6 @@ static uint8_t UartGetChar(UART_T *_pUart, uint8_t *_pByte)
     _pUart->usRxCount--;
     HAL_NVIC_EnableIRQ(_pUart->uartirq);
     return 1;
-}
-
-uint16_t UartGetRxcnt(COM_PORT_E _ucPort)
-{
-    uint16_t usCount;
-    UART_T  *_pUart;
-    _pUart = ComToUart(_ucPort);
-    /* usRxWrite 变量在中断函数中被改写，主程序读取该变量时，必须进行临界区保护 */
-    HAL_NVIC_DisableIRQ(_pUart->uartirq);
-    usCount = _pUart->usRxCount;
-    HAL_NVIC_EnableIRQ(_pUart->uartirq);
-    return usCount;
 }
 
 /*
@@ -1150,63 +925,6 @@ void USART3_6_IRQHandler(void)
 #endif
 
 
-
-
-/*
-*********************************************************************************************************
-*	函 数 名: fputc
-*	功能说明: 重定义putc函数，这样可以使用printf函数从串口1打印输出
-*	形    参: 无
-*	返 回 值: 无
-*********************************************************************************************************
-*/
-int fputc(int ch, FILE *f)
-{
-    #if 1	/* 将需要printf的字符通过串口中断FIFO发送出去，printf函数会立即返回 */
-    comSendChar(COM1, ch);
-
-    return ch;
-    #else	/* 采用阻塞方式发送每个字符,等待数据发送完毕 */
-    /* 写一个字节到USART1 */
-    USART1->TDR = ch;
-
-    /* 等待发送结束 */
-    while((USART1->ISR & USART_ISR_TC) == 0)
-    {}
-
-    return ch;
-    #endif
-}
-
-/*
-*********************************************************************************************************
-*	函 数 名: fgetc
-*	功能说明: 重定义getc函数，这样可以使用getchar函数从串口1输入数据
-*	形    参: 无
-*	返 回 值: 无
-*********************************************************************************************************
-*/
-int fgetc(FILE *f)
-{
-
-    #if 1	/* 从串口接收FIFO中取1个数据, 只有取到数据才返回 */
-    uint8_t ucData;
-
-    while(comGetChar(COM1, &ucData) == 0);
-
-    return ucData;
-    #else
-
-    /* 等待接收到数据 */
-    while((USART1->ISR & USART_ISR_RXNE) == 0)
-    {}
-
-    return (int)USART1->RDR;
-    #endif
-}
-
-
-
 static void MX_USART1_UART_Init(void)
 {
 
@@ -1311,7 +1029,6 @@ static void MX_USART4_UART_Init(void)
 {
 
 
-
     /* USER CODE END USART4_Init 1 */
     CH4_huart4.Instance = USART4;
     CH4_huart4.Init.BaudRate = UART4_BAUD;
@@ -1350,7 +1067,6 @@ static void MX_USART5_UART_Init(void)
 {
 
 
-
     /* USER CODE END USART5_Init 1 */
     CH5_huart5.Instance = USART5;
     CH5_huart5.Init.BaudRate = UART5_BAUD;
@@ -1362,7 +1078,6 @@ static void MX_USART5_UART_Init(void)
     CH5_huart5.Init.OverSampling = UART_OVERSAMPLING_16;
     CH5_huart5.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
     CH5_huart5.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-
 
 
     if (HAL_UART_Init(&CH5_huart5) != HAL_OK)
@@ -1414,27 +1129,4 @@ static void MX_USART6_UART_Init(void)
 }
 
 
-uint16_t uart_recv(COM_PORT_E _ucPorts, void *buf, uint32_t len)
-{
-    uint16_t i = 0;
-    uint8_t rdata = 0;
-    uint8_t *rptr = (uint8_t*)buf;
-
-    for( i = 0; i < len; i++)
-    {
-        if(comGetChar(_ucPorts, &rdata))
-        {
-            rptr[i] = rdata;
-        }
-        else
-        {
-            break;
-        }
-
-    }
-
-    return i;
-}
-
 /***************************** 安富莱电子 www.armfly.com (END OF FILE) *********************************/
-
