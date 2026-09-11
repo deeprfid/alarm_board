@@ -64,7 +64,7 @@ static int frame_rx_feed(frame_rx_t *rx, uint8_t b)
     uint16_t c;
     if (rx->state == 0u)
     {
-        if (b == FRAME_HDR_LEG_PDU)   /* 定长 32B 命令帧只有 PDUHEAD(0xFF), GPIOHEAD 已废弃 */
+        if (b == FRAME_HDR_LEG_PDU)   /* 定长 32B 命令帧: 只有 PDUHEAD(0xFF) */
         {
             rx->buf[0] = b; rx->idx = 1u; rx->state = 1u;
         }

@@ -491,7 +491,7 @@ void Radar_thread(void)
 }
 
 /* ===== Linux IPC (COM1) 唯一上行帧: PDUHEAD(0xFF) gpio_pdu 定长 32B =====
- * 帧头与 Linux 下行一致, 均为 PDUHEAD(0xFF); GPIOHEAD(0x55) 已废弃, 相关代码已删除
+ * 帧头与 Linux 下行一致, 均为 PDUHEAD(0xFF)
  * 触发: 变化即报 + ipcReportIdleMs 无变化心跳; Linux 下发 PDUHEAD 查询时立即应答一帧
  * 0xAA 变长上行后续要用, 以 ipcReportVar20En=0 保留代码
  */
@@ -623,7 +623,7 @@ static void ipcReportStatusVar20(uint32_t now)
 }
 #endif
 
-/* ===== Linux IPC (COM1) frame pump: 0x55/0xFF legacy 32B + 0xAA variable ===== */
+/* ===== Linux IPC (COM1) frame pump: PDUHEAD fixed 32B downlink + 0xAA variable (reserved) ===== */
 static frameRx_t sIpcRx;
 static uint8_t   sIpcInited = 0u;
 
