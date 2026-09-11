@@ -164,12 +164,12 @@ void ipc_hpm_message(uint8_t *upload, uint8_t dlen, uint8_t antid)
             comSendBuf(COM3, upload, dlen);	//mainboard CH3
             comSendBuf(COM4, upload, dlen); //mainboard CH4
             comSendBuf(COM5, upload, dlen);	//mainboard CH5
-					  LED_Start(&Port_1_LED, PORTLED_1, 10, 10, 1);
-					  LED_Start(&Port_2_LED, PORTLED_2, 10, 10, 1);
-					  LED_Start(&Port_3_LED, PORTLED_3, 10, 10, 1);
-					  LED_Start(&Port_4_LED, PORTLED_4, 10, 10, 1);
-					  LED_Start(&Port_5_LED, PORTLED_5, 10, 10, 1);
-					 //BEEP_Start(10, 10, 1);
+//					  LED_Start(&Port_1_LED, PORTLED_1, 10, 10, 1);
+//					  LED_Start(&Port_2_LED, PORTLED_2, 10, 10, 1);
+//					  LED_Start(&Port_3_LED, PORTLED_3, 10, 10, 1);
+//					  LED_Start(&Port_4_LED, PORTLED_4, 10, 10, 1);
+//					  LED_Start(&Port_5_LED, PORTLED_5, 10, 10, 1);
+//					  BEEP_Start(10, 10, 1);
             break;
         }
 
@@ -288,6 +288,7 @@ typedef struct
     uint8_t  alarmDone;     /* 0x10 reply Byte2 */
     uint8_t  varCmd;        /* last received 0xAA cmd */
     uint8_t  varPlen;       /* last received var payload len */
+    uint32_t lastRxMs;      /* 该口最后一次收到有效 Cmd 0x10 应答的时刻(新鲜度判定) */
 } portRx_t;
 static portRx_t sPorts[stmPortCnt];
 static const COM_PORT_E sPortCom[stmPortCnt] = { COM6, COM2, COM3, COM4, COM5 };
@@ -354,11 +355,24 @@ static void radarQueryAll(void)
 #define radarTrigHoldMs     (100u)   /* 触发信号与点灯的保持时间(ms) */
 #define radarTrigLedOn      (10u)     /* LED_Start 参数: 亮 10*10ms */
 #define radarTrigLedOff     (10u)     /* LED_Start 参数: 灭 10*10ms */
+#define radarStaleMs        (200u)    /* 该口有效应答过期时间(ms), 超时按"无人"处理 */
 
 static uint8_t  sTrigOn[stmPortCnt];      /* 1 = 该口处于触发保持窗口内 */
 static uint32_t sTrigMs[stmPortCnt];      /* 该口最近一次收到"有人"的时刻 */
 static LED_T *const sTrigLed[stmPortCnt] = { &Port_1_LED, &Port_2_LED, &Port_3_LED, &Port_4_LED, &Port_5_LED };
 static const uint8_t sTrigLedNo[stmPortCnt] = { PORTLED_1, PORTLED_2, PORTLED_3, PORTLED_4, PORTLED_5 };
+
+/* 该口应答是否仍在有效期内(超时=离线/该路雷达已关闭) */
+static uint8_t radarPortFresh(uint8_t i, uint32_t now)
+{
+    return ((now - sPorts[i].lastRxMs) <= radarStaleMs) ? 1u : 0u;
+}
+
+/* 取该口"有人"状态: 应答过期时按无人处理, 防止旧值冻结把 LED 顶在常亮/触发一直为 1 */
+static uint8_t radarPresence(uint8_t i, uint32_t now)
+{
+    return (radarPortFresh(i, now) != 0u) ? sPorts[i].radarVal : 0u;
+}
 
 static void radarTriggerOut(uint32_t now)
 {
@@ -367,20 +381,22 @@ static void radarTriggerOut(uint32_t now)
 
     for (i = 0u; i < stmPortCnt; i++)
     {
-        if (sPorts[i].radarVal != 0u)
+        if (radarPresence(i, now) != 0u)        /* 有人(且该口应答未过期) */
         {
-            sTrigOn[i] = 1u;                    /* 有人: 打开/刷新保持窗口 */
+            sTrigOn[i] = 1u;                    /* 打开/刷新保持窗口 */
             sTrigMs[i] = now;
         }
         else if ((sTrigOn[i] != 0u) && ((now - sTrigMs[i]) >= radarTrigHoldMs))
         {
             sTrigOn[i] = 0u;                    /* 保持时间内再没收到有人: 窗口结束 */
+            Led_Stop(sTrigLed[i], sTrigLedNo[i]);   /* 明确熄灭, 不留在常亮 */
         }
 
         if (sTrigOn[i] != 0u)
         {
             /* 窗口内每拍刷新一次, LED 保持点亮; 窗口结束后由 LED_Pro 收尾熄灭 */
             LED_Start(sTrigLed[i], sTrigLedNo[i], radarTrigLedOn, radarTrigLedOff, 1u);
+					//  BEEP_Start(10, 10, 1);
             active = 1u;
         }
     }
@@ -402,6 +418,10 @@ static void radarPumpPort(uint8_t i, uint32_t now)
         if (ev == frameEvVar)
         {
             stmHandleVar(&sPorts[i]);
+            if ((sPorts[i].varCmd == 0x10u) && (sPorts[i].varPlen >= 3u))
+            {
+                sPorts[i].lastRxMs = now;   /* 收到有效应答: 刷新该口新鲜度 */
+            }
         }
     }
 }
@@ -454,14 +474,15 @@ void Radar_thread(void)
 typedef char ipcGpioPduSizeChk[(sizeof(gpio_pdu) == APP_FRAME_LEN_MAX) ? 1 : -1];
 
 static gpio_pdu sIpcGpioPdu;                     /* 上行帧(Linux 给定格式) */
-static uint8_t  sIpcReportLast[stmPortCnt][3];   /* last reported per-port 3B */
+static uint8_t  sIpcReportVals[stmPortCnt][3];   /* 本拍实际组帧用的每口 3B(已按新鲜度门控) */
+static uint8_t  sIpcReportLast[stmPortCnt][3];   /* 上次已上报的每口 3B */
 static uint32_t sIpcReportMs = 0u;
 
 /* 组帧: 刷新 sIpcGpioPdu, 返回 1 = 相对上次已发内容有变化 */
-static uint8_t ipcReportBuild(void)
+static uint8_t ipcReportBuild(uint32_t now)
 {
     uint8_t changed = 0u;
-    uint8_t i, ch;
+    uint8_t i, ch, fresh;
 
     memset(&sIpcGpioPdu, 0, sizeof(sIpcGpioPdu));
     sIpcGpioPdu.FrameHead = PDUHEAD;   /* 上行响应帧头 = 下行帧头 = PDUHEAD(0xFF) */
@@ -471,20 +492,25 @@ static uint8_t ipcReportBuild(void)
 
     for (i = 0u; i < stmPortCnt; i++)
     {
+        fresh = radarPortFresh(i, now);   /* 该口应答过期(掉线/关闭)时按 0 上报 */
+        sIpcReportVals[i][0] = (fresh != 0u) ? sPorts[i].radarVal  : 0u;
+        sIpcReportVals[i][1] = (fresh != 0u) ? sPorts[i].workMode  : 0u;
+        sIpcReportVals[i][2] = (fresh != 0u) ? sPorts[i].alarmDone : 0u;
+
         /* 一个口可带 1~2 个通道: 通道号 1..8 -> Rad_Status/Alarm_Done 下标 0..7 */
         ch = (uint8_t)(sPortCh[i][0] - 1u);
-        sIpcGpioPdu.Rad_Status[ch] = sPorts[i].radarVal;
-        sIpcGpioPdu.Alarm_Done[ch] = sPorts[i].alarmDone;
+        sIpcGpioPdu.Rad_Status[ch] = sIpcReportVals[i][0];
+        sIpcGpioPdu.Alarm_Done[ch] = sIpcReportVals[i][2];
         if (sPortCh[i][1] != 0u)
         {
             ch = (uint8_t)(sPortCh[i][1] - 1u);
-            sIpcGpioPdu.Rad_Status[ch] = sPorts[i].radarVal;
-            sIpcGpioPdu.Alarm_Done[ch] = sPorts[i].alarmDone;
+            sIpcGpioPdu.Rad_Status[ch] = sIpcReportVals[i][0];
+            sIpcGpioPdu.Alarm_Done[ch] = sIpcReportVals[i][2];
         }
 
-        if ((sPorts[i].gpioIn    != sIpcReportLast[i][0]) ||
-            (sPorts[i].workMode  != sIpcReportLast[i][1]) ||
-            (sPorts[i].alarmDone != sIpcReportLast[i][2]))
+        if ((sIpcReportVals[i][0] != sIpcReportLast[i][0]) ||
+            (sIpcReportVals[i][1] != sIpcReportLast[i][1]) ||
+            (sIpcReportVals[i][2] != sIpcReportLast[i][2]))
         {
             changed = 1u;
         }
@@ -505,9 +531,9 @@ static void ipcReportSend(uint32_t now)
 
     for (i = 0u; i < stmPortCnt; i++)
     {
-        sIpcReportLast[i][0] = sPorts[i].gpioIn;
-        sIpcReportLast[i][1] = sPorts[i].workMode;
-        sIpcReportLast[i][2] = sPorts[i].alarmDone;
+        sIpcReportLast[i][0] = sIpcReportVals[i][0];
+        sIpcReportLast[i][1] = sIpcReportVals[i][1];
+        sIpcReportLast[i][2] = sIpcReportVals[i][2];
     }
     sIpcReportMs = now;
 }
@@ -515,7 +541,7 @@ static void ipcReportSend(uint32_t now)
 /* 周期调用: 变化即报 + ipcReportIdleMs 无变化心跳 */
 static void ipcReportStatus(uint32_t now)
 {
-    uint8_t changed = ipcReportBuild();
+    uint8_t changed = ipcReportBuild(now);
 
     if ((changed != 0u) || ((now - sIpcReportMs) >= ipcReportIdleMs))
     {
@@ -526,7 +552,7 @@ static void ipcReportStatus(uint32_t now)
 /* Linux 下发 PDUHEAD 查询时立即应答一帧 32B gpio_pdu(不走变化/心跳判定) */
 static void ipcReportForce(void)
 {
-    (void)ipcReportBuild();
+    (void)ipcReportBuild(HAL_GetTick());
     ipcReportSend(HAL_GetTick());
 }
 

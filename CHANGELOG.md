@@ -62,6 +62,12 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 - **docs**：新增《设计定稿备忘 2026-09-04》（`docs/decisions_2026-09-04.md`）：汇总当日决策——老格式冻结(0xFF/0x55)+0xAA 变长新帧(Len+Cmd+Addr+Payload+CRC16)、按帧头分流的状态机接收引擎与三判决点/滑窗重同步、实时性=事件+周期+迟滞、流水线轮询、OTA A/B 槽/代理缓存、已确认产品口径与明天开工顺序。未改动任何固件代码。
 ### [stm32f0] BSP / app
 
+- `[stm32f0]` **fix**: 修复"关闭某路雷达后 LED 常亮不更新 / 触发信号一直为 1"——根因:**STM32 侧的雷达状态只在收到 HC32 的 Cmd 0x10 应答时才写入**, 该口若不再应答(该路雷达被关闭、板子掉线、接线断开), `sPorts[i].radarVal` 会**冻结在最后一次的 1**, 保持窗口永不结束 → LED 常亮、`Host_IRQ` 恒为 1。修法(STM32 侧自己判活/实时刷新, 不依赖 HC32 侧):
+  - `portRx_t` 增加 `lastRxMs`(该口最后一次**有效** Cmd 0x10 应答时刻), `radarPumpPort()` 收到有效应答时刷新;
+  - 新增 `radarStaleMs = 200ms`(约 10 个轮询周期)与 `radarPortFresh()`/`radarPresence()`:**应答超时一律按"无人"处理**;
+  - `radarTriggerOut()` 改用 `radarPresence()`, 保持窗口结束时**显式 `Led_Stop()` 熄灭该口 LED**(不再只靠 LED 驱动收尾), `Host_IRQ` 每拍都按当前状态重写;
+  - 上行 `gpio_pdu` 组帧同样门控: 应答过期的口 `Rad_Status`/`Alarm_Done` 上报 0(新增 `sIpcReportVals` 存本拍实际值, 变化判定基于它), 避免 Linux 端看到冻结值。
+
 - `[stm32f0]` **refactor**: 简化雷达触发输出实现——去掉自定义的 LED 指针表/刷新逻辑，**直接调用已有驱动**：`switch(口)` → `LED_Start(&Port_x_LED, PORTLED_x, 10, 10, 1)` 仅在"有人"上升沿调用一次（闪烁节拍交给 LED 驱动，由 `bsp_RunPer10ms()`→`LED_Pro()` 推进）；触发保持只用一个时刻数组 `sTrigMs[stmPortCnt]` + `radarTrigHoldMs = 1000ms`，窗口内为 1、全部口超时后 `HAL_GPIO_WritePin(..., GPIO_PIN_RESET)`。
 
 - `[stm32f0]` **feat**: 新增**雷达有人触发输出** —— `app.c` 新增 `radarTriggerOut()`，在 `Radar_thread()` 每 `radarPollMs`(20ms) 一拍调用：任一口轮询到的雷达状态为"有人"（`sPorts[i].radarVal == 1`，来自 HC32 0xAA Cmd 0x10 应答 Byte0 的雷达位）时，①输出触发信号 `HAL_GPIO_WritePin(Host_IRQ_GPIO_Port, Host_IRQ_Pin, GPIO_PIN_SET)`；②点亮该口对应 LED `LED_Start(&Port_x_LED, PORTLED_x, 10, 10, 1)`；两者保持 `radarTrigHoldMs = 1000ms`（窗口内持续有人则每拍刷新续期，保持为 1/常亮；窗口结束后 `Host_IRQ` 拉低、LED 由 `LED_Pro` 收尾熄灭）。口→LED 映射：COM6→Port_1_LED/PORTLED_1、COM2→Port_2、COM3→Port_3、COM4→Port_4、COM5→Port_5。
