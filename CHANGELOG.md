@@ -80,6 +80,7 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 
 ### [hc32f460] projects/source
 
+- **clean**: 与 STM32 侧同步清除 GPIOHEAD —— 删除 `common.c` 的 `Send_RadarStatus_to_Master()`（32B `GPIOHEAD(0x55)` 应答，已无触发来源）与 `Get_pdu_data()` 里的 `GPIOHEAD` 分支（该分支只做应答，删除后落入原有 `else` 复位路径）、帧核心 `FRAME_HDR_LEG_GPIO`（定长 32B 分支只由 `0xFF` 触发）、`bsp_rs485.h` 原型、`main.h` 的 `GPIOHEAD` 宏。HC32↔STM32 仍为 0xAA Cmd 0x10 查询 / 3B 应答 + 0xFF 32B 报警命令转发，协议未改。README 协议章节同步更新（下行 PDUHEAD 唯一、上行 `gpio_pdu` 字段表、通道链路 0xAA 说明）。
 - **feat**: 新增 `bsp_report.c/.h`：`bsp_report_build()` 组 3B 上报负载——Byte0 GPIO_IN 位图（bit0..2 雷达 PC14/PC13/PH2 高有效、bit3 GPIO_IN1=摄像头 PB0 低有效、bit4 GPIO_IN2=继电器 PB1 低有效）、Byte1 安装模式位图（LIGHT/SYNC/RADAR/AICAM/EAS）、Byte2 alarm_done；`common.c` 0xAA **Cmd 0x10** 查询回该 3B，`CMD 0x01` 仍回 0x81 回显。
 - **refactor**: `Radar_Led_update()`（`bsp_exint.c`/`main.h` 原型）改为 **void 返回 + 直接 IO 控制**（旧 `LED_Start/Led_Stop` 定时闪烁逻辑 `#if 0` 保留）：报警(R/G) 优先；蓝灯 = presence 且**保持 1s**（`RADAR_PRESENCE_HOLD_MS`，消除雷达 ~100ms 脉冲间隙导致的闪烁）、`LIGHT_ON` 常亮；板载 Radar_LED 跟随实时 presence（不保持）。
 

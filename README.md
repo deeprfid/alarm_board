@@ -38,12 +38,12 @@ HC32F460 报警板 (Radar V4.2, Check_Uart_Pdu → Get_pdu_data)
 
 | 字段 | 长度 | 含义 |
 | --- | --- | --- |
-| FrameHead | 1 | 0xFF=报警/配置包 PDUHEAD；0x55=GPIO 扩展/查询包 GPIOHEAD |
+| FrameHead | 1 | 0xFF=PDUHEAD（Linux 链路唯一下行帧头；**GPIOHEAD 0x55 已废弃并删除**） |
 | Pdu_len | 1 | 帧长（=sizeof，32 字节） |
 | DeviceID | 1 | 设备号 |
 | AntID | 1 | 通道号（0 表示特殊命令：offline/LED test） |
 | Alarm_Duration[6] | 6 | [0]蜂鸣占空 buzz_duty [1]雷达距离门 radar_range [2]LED颜色码 [3]报警时长(秒) [4]EAS开关 [5]离线标志 |
-| Radarcfg[5] | 10 | 雷达配置/应答区（GPIOHEAD 查询应答用 bit0） |
+| Radarcfg[5] | 10 | 雷达配置区（历史 GPIOHEAD 应答已废弃，当前未用） |
 | time_stamp / random_forest / reserved | 4/4/2 | 时间戳/随机数/保留(IO回显) |
 | crc | 2 | CCITT CRC16（起始 0xFFFF，poly 0x1021） |
 
@@ -52,8 +52,30 @@ HC32F460 报警板 (Radar V4.2, Check_Uart_Pdu → Get_pdu_data)
 ## STM32F0 中继板 v4.31（BSP/app.c）
 
 - 主循环：`Check_Uart_Pdu()`（[GET_RADAR_ENABLE=0 时 Radar_thread 不编译]）+ IWDG 喂狗。
-- COM1 收到 GPIOHEAD：把 reserved 低4位写到 GPO1-4，再回读 GPI1-4 填入 reserved 原样回发（IO 扩展）。
-- COM1 收到 PDUHEAD：按 AntID 分发到 COM2..COM6，并闪对应端口 LED（Port_1..5_LED）。
+- COM1 下行只有 `PDUHEAD(0xFF)` 定长 32B 一种：CRC 校验通过后按 `AntID` 分发到 COM2..COM6 并闪对应端口 LED（Port_1..5_LED）；`0xAA` 变长下行已支持但业务预留。
+- COM1 上行只有 `PDUHEAD(0xFF)` 定长 32B **`gpio_pdu`** 一种：状态变化即报 + 1s 无变化心跳，Linux 下发查询时立即应答一帧（旧 8B `radar_pdu` 应答已删除）。
+
+### COM1 上行帧 `gpio_pdu`（32B，帧头 = PDUHEAD）
+
+| 偏移 | 字段 | 含义 |
+| --- | --- | --- |
+| 0 | FrameHead | 0xFF PDUHEAD |
+| 1 | Pdu_len | 32 |
+| 2 | DeviceID | 设备号（暂 0，语义待 Linux 侧确认） |
+| 3 | AntID | 通道号（暂 0 = 整机聚合） |
+| 4..11 | Rad_Status[8] | 通道 1..8 有人=1/无人=0（源：HC32 应答 Byte0 雷达位 bit0..2） |
+| 12..19 | Alarm_Done[8] | 通道 1..8 报警完成（源：HC32 应答 Byte2） |
+| 20..29 | GPIO[10] | 保留（暂 0，语义待确认） |
+| 30..31 | crc | CCITT CRC16（起始 0xFFFF，poly 0x1021），覆盖前 30B |
+
+### STM32↔HC32 通道链路（COM2..COM6 @460800，0xAA 变长）
+
+- 查询：`[AA][Len=2][Cmd=0x10][Addr=通道号][CRC16]`，STM32 每 `radarPollMs` 轮询 5 口。
+- 应答：同格式，负载 3B = `[GPIO_IN位图][工作模式位图][alarm_done]`（HC32 `bsp_report_build()`）：
+  - Byte0：bit0..2 雷达1/2/3（PC14/PC13/PH2，高有效）；bit3 GPIO_IN1=摄像头(PB0，低有效)；bit4 GPIO_IN2=继电器(PB1，低有效)
+  - Byte1：bit0 LIGHT_ON / bit1 SYNC / bit2 RADAR / bit3 AICAM / bit4 EAS
+  - Byte2：alarm_done
+- 定长 32B 命令帧（`PDUHEAD`）仍由 STM32 转发给 HC32 触发声光报警；HC32 侧的 `GPIOHEAD` 应答路径已删除。
 - 上电 UID 校验 `rd_idkey_fun()`（idcode==0xE882F340 正常；否则死循环）＋开机自检蜂鸣；IWDG 使能。
 - Host_IRQ(PA12) 下降沿 → 蜂鸣提示（外部主机拉低通知）。
 - beep = 有源蜂鸣器供电开关 GPO_BZ3V3(PB2) 电平节拍（BEEP_T 状态机，10ms 驱动）。

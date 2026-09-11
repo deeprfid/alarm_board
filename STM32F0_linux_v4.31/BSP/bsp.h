@@ -90,7 +90,7 @@
 #define GPO2_Pin                  GPIO_PIN_9
 #define GPO2_GPIO_Port            GPIOB
 #define CM4RESET_Pin              GPIO_PIN_8
-#define CM4RESET_GPIO_Port        GPIOB
+#define CM4RESET_GPIO_Port      GPIOB
 #define Host_IRQ_Pin            GPIO_PIN_12
 #define Host_IRQ_GPIO_Port      GPIOA
 

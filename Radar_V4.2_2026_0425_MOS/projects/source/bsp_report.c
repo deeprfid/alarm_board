@@ -23,8 +23,8 @@ uint8_t bsp_report_build(uint8_t *out)
     if (HIGH_ACTIVE_ON(GPIO_ReadInputPins(RADAR_PORT0, RADAR_PIN0))) { gpio_in |= BSP_REPORT_BIT_RADAR1; }
     if (HIGH_ACTIVE_ON(GPIO_ReadInputPins(RADAR_PORT1, RADAR_PIN1))) { gpio_in |= BSP_REPORT_BIT_RADAR2; }
     if (HIGH_ACTIVE_ON(GPIO_ReadInputPins(RADAR_PORT2, RADAR_PIN2))) { gpio_in |= BSP_REPORT_BIT_RADAR3; }
-    if (LOW_ACTIVE_ON(switch_decoder_pio_read(AI_CAMERA)))           { gpio_in |= BSP_REPORT_BIT_GPIO_IN1; }
-    if (LOW_ACTIVE_ON(switch_decoder_pio_read(INput_RELAY)))         { gpio_in |= BSP_REPORT_BIT_GPIO_IN2; }
+    if (LOW_ACTIVE_ON(switch_decoder_pio_read(AI_CAMERA)))           { gpio_in |= BSP_REPORT_BIT_GPIO_IN1;}
+    if (LOW_ACTIVE_ON(switch_decoder_pio_read(INput_RELAY)))         { gpio_in |= BSP_REPORT_BIT_GPIO_IN2;}
     out[0] = gpio_in;
 
     /* ---- Byte1: workmode bitmap (each switch read alone, low = switch on) ---- */

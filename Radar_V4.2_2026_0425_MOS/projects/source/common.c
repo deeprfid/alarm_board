@@ -17,7 +17,6 @@ extern stc_ring_buf_t g_AlarmRing;
 /* ===== variable-length frame core (0xAA) + legacy scan ===== */
 #define FRAME_HDR_AA           (0xAAu)
 #define FRAME_HDR_LEG_PDU      (0xFFu)
-#define FRAME_HDR_LEG_GPIO     (0x55u)
 #define FRAME_MAX_PAYLOAD      (251u)
 #define FRAME_RX_GUARD_MS      (50u)
 #define FRAME_VAR_TOTAL_MAX    (257u)
@@ -65,7 +64,7 @@ static int frame_rx_feed(frame_rx_t *rx, uint8_t b)
     uint16_t c;
     if (rx->state == 0u)
     {
-        if ((b == FRAME_HDR_LEG_PDU) || (b == FRAME_HDR_LEG_GPIO))
+        if (b == FRAME_HDR_LEG_PDU)   /* 定长 32B 命令帧只有 PDUHEAD(0xFF), GPIOHEAD 已废弃 */
         {
             rx->buf[0] = b; rx->idx = 1u; rx->state = 1u;
         }
@@ -228,13 +227,6 @@ int8_t Get_pdu_data(uint8_t *pdubuff)
 
         return LL_OK + offline_flag;
     }
-    else if(getpdupack->FrameHead == GPIOHEAD && temp == crcdata && idkey)
-    {
-        // LED_Start(&Radar_LED,BOARD_GLED,1,5,1);
-        Send_RadarStatus_to_Master();
-        return  LL_ERR;
-
-    }
     else
     {
         (void)BUF_Init(&m_stcRingBuf, m_au8DataBuf, sizeof(m_au8DataBuf));
@@ -243,18 +235,6 @@ int8_t Get_pdu_data(uint8_t *pdubuff)
 }
 
 
-
-void Send_RadarStatus_to_Master(void)
-{
-    alarm_pdu Get_Radar_Data;
-    en_pin_state_t aicamsingal = switch_decoder_pio_read(AI_CAMERA);
-    uint8_t radarsingal = bsp_get_radar_singal();
-    memset(&Get_Radar_Data, 0, sizeof(Get_Radar_Data));
-    Get_Radar_Data.FrameHead  = GPIOHEAD;
-    Get_Radar_Data.Radarcfg[0] = (radarsingal || (PIN_RESET == aicamsingal)) ? 1U : 0U;
-    Get_Radar_Data.crc = CalcCRC((uint8_t *)&Get_Radar_Data, sizeof(Get_Radar_Data) - 2);
-    USART_UART_Trans(USART_UNIT, &Get_Radar_Data, sizeof(Get_Radar_Data), 100);
-}
 
 void Check_alarm_state(void)
 {

@@ -51,7 +51,6 @@
 #define Custom_By_SZBMA             (0x00)
 #define SYNC_WITH_LINUX_MAINBOARD   (0x00)
 #define PDUHEAD                     (0xFF)
-#define GPIOHEAD                    (0x55)
 #define ALARM_G_CODE                (0xA5)
 #define ALARM_R_CODE                (0x5A)
 #define NONE_EAS_CODE               (0x64)
