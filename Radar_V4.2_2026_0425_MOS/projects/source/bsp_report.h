@@ -7,7 +7,7 @@
  *   Byte1 workmode bitmap: bit0=LIGHT_ON bit1=SYNC_MODE bit2=RADAR_MODE
  *                          bit3=AICAM_MODE bit4=EAS_MODE
  *                          (each 0/1 via switch_decoder_pio_read, single channel)
- *   Byte2 alarm_done:    fixed 1 while answering
+ *   Byte2 alarm_done:    1 = 本板正在声光报警(红灯 LED 或蜂鸣器在动作), 否则 0
  * This file only assembles payload and only calls switch_decoder_pio_read.
  ******************************************************************************/
 #ifndef __BSP_REPORT_H__
@@ -36,7 +36,7 @@
  * bsp_report_build - build 3-byte query reply payload
  *   out[0] = GPIO_IN bitmap
  *   out[1] = workmode bitmap
- *   out[2] = alarm_done (fixed 1)
+ *   out[2] = alarm_done (0/1, 实时报警状态)
  * returns BSP_REPORT_LEN (3)
  */
 uint8_t bsp_report_build(uint8_t *out);

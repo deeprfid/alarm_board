@@ -7,6 +7,10 @@
 #include "main.h"        /* pulls in bsp_radar.h (RADAR_PORT..PIN), mode macros, decoder decl */
 #include "bsp_report.h"
 
+/* 声光报警进行中的判据对象(定义在 bsp_led.c / bsp_beep.c) */
+extern LED_T  R_tLED;
+extern BEEP_T g_tBeep;
+
 /* low-active input -> active=1 */
 #define LOW_ACTIVE_ON(x)   ((x) == PIN_RESET ? 1u : 0u)
 /* high-active input -> active=1 */
@@ -35,8 +39,8 @@ uint8_t bsp_report_build(uint8_t *out)
     if (LOW_ACTIVE_ON(switch_decoder_pio_read(EAS_MODE)))   { wm |= BSP_REPORT_BIT_EAS_MODE; }
     out[1] = wm;
 
-    /* ---- Byte2: alarm_done: fixed 1 while answering ---- */
-    out[2] = 1u;
+    /* ---- Byte2: alarm_done: 1 = 本板正在声光报警(红灯或蜂鸣器在动作) ---- */
+    out[2] = ((R_tLED.ucEnalbe != 0u) || (g_tBeep.ucEnalbe != 0u)) ? 1u : 0u;
 
     return BSP_REPORT_LEN;
 }
