@@ -17,7 +17,7 @@
 #define NONE_EAS_CODE      (0x64)
 #define AUX_EAS_CODE       (0x32)
 #define PDUHEAD            (0xFF)
-#define GPIOHEAD           (0x55)
+//#define GPIOHEAD           (0x55)
 #define NONE_EAS_CODE      (0x64)
 #define AUX_EAS_CODE       (0x32)
 #define ALARM_G_CODE       (0xA5)
@@ -50,14 +50,28 @@ typedef struct
     uint16_t  crc;
 } alarm_pdu;
 
+
 typedef struct
 {
-    unsigned char FrameHead;
-    unsigned char Pdu_len;
-    unsigned char channel;
-    unsigned char alarm_done;
-	  unsigned char alarm_r;
-		unsigned char alarm_g;
+    uint8_t  FrameHead;
+    uint8_t  Pdu_len;
+    uint8_t  DeviceID;
+    uint8_t  AntID;
+    uint8_t  Rad_Status[8];
+    uint8_t  Alarm_Done[8];	
+	  uint8_t  GPIO[10];
+    uint16_t crc;
+} gpio_pdu;
+
+
+typedef struct
+{
+    uint8_t FrameHead;
+    uint8_t Pdu_len;
+    uint8_t channel;
+    uint8_t alarm_done;
+	  uint8_t alarm_r;
+		uint8_t alarm_g;
     uint16_t  crc;
 } radar_pdu;
 

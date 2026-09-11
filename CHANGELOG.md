@@ -62,6 +62,9 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 - **docs**：新增《设计定稿备忘 2026-09-04》（`docs/decisions_2026-09-04.md`）：汇总当日决策——老格式冻结(0xFF/0x55)+0xAA 变长新帧(Len+Cmd+Addr+Payload+CRC16)、按帧头分流的状态机接收引擎与三判决点/滑窗重同步、实时性=事件+周期+迟滞、流水线轮询、OTA A/B 槽/代理缓存、已确认产品口径与明天开工顺序。未改动任何固件代码。
 ### [stm32f0] BSP / app
 
+- `[stm32f0]` **change**: STM32→Linux(COM1) 上行格式改为 **Linux 给定的 `gpio_pdu` 定长 32B 帧**（`app.h` 新增该结构体）：`[0x55][Pdu_len=32][DeviceID][AntID][Rad_Status[8]][Alarm_Done[8]][GPIO[10]][CRC16_L][CRC16_H]`（CRC 覆盖前 30B，与老帧一致）——**变化即报 + 1s 心跳**。`Rad_Status[n]`/`Alarm_Done[n]` 由 5 个通道口状态按“通道号 1..8 → 下标 0..7”填入（一个口可覆盖 2 个通道）；顺带把 `Chaneel_ID[8]` 扩为 `Chaneel_ID[9]`，修掉通道 8 的越界写。`GPIO[10]`/DeviceID/AntID 语义待 Linux 侧确认（暂填 0）。旧 0xAA Cmd 0x20（5×3B）上报以 `ipcReportVar20En=0` **代码保留**（`ipcReportStatusVar20()`）。**STM32↔HC32 侧 0xAA Cmd 0x10 查询/3B 应答完全不变。**
+
+
 - **fix**: COM1(Linux IPC) 接收由“`UartGetRxcnt>=32` 定长取包”改为**帧头分流状态机**（`app.c` 新帧核心 `frameRxInit/frameRxGuard/frameRxFeed` + `frCrc16`）：`0x55`/`0xFF` 按 32B 定长、`0xAA` 按 `AA+Len+Cmd+Addr+Payload+CRC16` 变长；`PDUHEAD` 帧分发 `ipc_hpm_message()`（GPIOHEAD 查询应答暂 `#if 0`）。修复两处接收失效：泵内未刷新 `lastByteMs` 导致 `frameRxGuard` 每拍误复位状态机（Linux 包收不到）；CRC 失败时误调 `comClearRxFifo` 破坏与中断共享的 FIFO 索引（改为直接丢弃、下一个帧头重同步）。
 - **feat**: 上行新增 **0xAA Cmd 0x20 五口状态聚合帧**：`[AA][Len=17][0x20][00][5×(gpioIn,workMode,alarmDone)][CRC16]`，数据源为 0xAA Cmd 0x10 应答（雷达位图 / 安装模式位图 / 报警完成），**变化即报 + 1s 无变化心跳**；`Radar_thread` 周期（`radarPollMs=2000`）向 5 口发 Cmd 0x10 查询（COM6/COM2/COM3/COM4/COM5 ↔ 通道 1..9）。
 - **fix**: 发送前增加 **TX 空闲等待** `UartTxWait(port, 5ms)`（`bsp_uart_fifo.c/.h` 新增，基于 `UartTxEmpty`）：消除 UART4/UART6 DMA 忙时 `uart4/6_dma_tx_start` **静默丢包**（雷达查询与 Linux 报警包并发时丢报警）。

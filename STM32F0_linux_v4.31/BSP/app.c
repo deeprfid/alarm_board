@@ -293,7 +293,7 @@ void Broadcast_Get_Radar_Status(void)
 
 }
 
-uint8_t Chaneel_ID[8]={0};
+uint8_t Chaneel_ID[9]={0};   /* [1..8]=通道号, [0] 未用 */
 
 #if frameAaEn
 /* ===== variable-length frame core (0xAA) - channel links only ===== */
@@ -619,20 +619,84 @@ void Radar_thread(void)
     /* 2) broadcast Cmd 0x10 query */
     radarQueryAll();
 
-    /* 2b) report 5-port status to Linux on change (Cmd 0x20, 0xAA var frame) */
+    /* 2b) report port/channel status to Linux (0x55 gpio_pdu 32B, on change) */
     ipcReportStatus(now);
 }
 
-/* ===== Linux IPC (COM1) report: 0xAA Cmd 0x20, 5x3B payload, send on change ===== */
-#define ipcReportCmd       (0x20u)
-#define ipcReportAddr      (0x00u)
-#define ipcReportPort3b    (3u)
-#define ipcReportIdleMs   (1000u)   /* keepalive fallback when no change */
+/* ===== Linux IPC (COM1) 上行: 0x55 GPIOHEAD gpio_pdu 定长 32B (Linux 给定格式) =====
+ * 变化即报 + ipcReportIdleMs 无变化心跳; HC32 侧 0xAA Cmd 0x10 查询/3B 应答完全不变
+ */
+#define ipcReportIdleMs      (1000u)  /* 无变化时的心跳周期(ms) */
+#define ipcReportDeviceId    (0x00u)  /* TODO: Linux 侧 DeviceID 语义待确认 */
+#define ipcReportAntId       (0x00u)  /* 0 = 整机聚合上报(不分通道) */
+#define ipcReportVar20En     (0u)     /* 1 = 启用旧的 0xAA Cmd 0x20 (5口x3B) 聚合帧 */
 
+/* 编译期校验: gpio_pdu 必须正好 32B(无结构体填充), 与 APP_FRAME_LEN_MAX 一致 */
+typedef char ipcGpioPduSizeChk[(sizeof(gpio_pdu) == APP_FRAME_LEN_MAX) ? 1 : -1];
+
+static gpio_pdu sIpcGpioPdu;                     /* 上行帧(Linux 给定格式) */
 static uint8_t  sIpcReportLast[stmPortCnt][3];   /* last reported per-port 3B */
 static uint32_t sIpcReportMs = 0u;
 
 static void ipcReportStatus(uint32_t now)
+{
+    uint8_t changed = 0u;
+    uint8_t i, ch;
+
+    memset(&sIpcGpioPdu, 0, sizeof(sIpcGpioPdu));
+    sIpcGpioPdu.FrameHead = GPIOHEAD;
+    sIpcGpioPdu.Pdu_len   = (uint8_t)sizeof(sIpcGpioPdu);
+    sIpcGpioPdu.DeviceID  = ipcReportDeviceId;
+    sIpcGpioPdu.AntID     = ipcReportAntId;
+
+    for (i = 0u; i < stmPortCnt; i++)
+    {
+        /* 一个口可带 1~2 个通道: 通道号 1..8 -> Rad_Status/Alarm_Done 下标 0..7 */
+        ch = (uint8_t)(sPortCh[i][0] - 1u);
+        sIpcGpioPdu.Rad_Status[ch] = sPorts[i].radarVal;
+        sIpcGpioPdu.Alarm_Done[ch] = sPorts[i].alarmDone;
+        if (sPortCh[i][1] != 0u)
+        {
+            ch = (uint8_t)(sPortCh[i][1] - 1u);
+            sIpcGpioPdu.Rad_Status[ch] = sPorts[i].radarVal;
+            sIpcGpioPdu.Alarm_Done[ch] = sPorts[i].alarmDone;
+        }
+
+        if ((sPorts[i].gpioIn    != sIpcReportLast[i][0]) ||
+            (sPorts[i].workMode  != sIpcReportLast[i][1]) ||
+            (sPorts[i].alarmDone != sIpcReportLast[i][2]))
+        {
+            changed = 1u;
+        }
+    }
+    /* GPIO[10]: Linux 侧字段语义待确认, 暂填 0 */
+
+    sIpcGpioPdu.crc = ipcCrc((uint8_t *)&sIpcGpioPdu, sizeof(sIpcGpioPdu) - 2);
+
+    if ((changed != 0u) || ((now - sIpcReportMs) >= ipcReportIdleMs))
+    {
+        (void)UartTxWait(COM1, 5u);
+        comSendBuf(COM1, (uint8_t *)&sIpcGpioPdu, sizeof(sIpcGpioPdu));
+        for (i = 0u; i < stmPortCnt; i++)
+        {
+            sIpcReportLast[i][0] = sPorts[i].gpioIn;
+            sIpcReportLast[i][1] = sPorts[i].workMode;
+            sIpcReportLast[i][2] = sPorts[i].alarmDone;
+        }
+        sIpcReportMs = now;
+    }
+}
+
+#if ipcReportVar20En
+/* ===== 旧的 0xAA Cmd 0x20 (5口 x 3B = 15B) 聚合上报, 已被 gpio_pdu 取代, 代码保留 =====
+ * 需要改回旧格式时: 置 ipcReportVar20En=1 并把 Radar_thread 里的 ipcReportStatus()
+ * 换成 ipcReportStatusVar20()
+ */
+#define ipcReportCmd       (0x20u)
+#define ipcReportAddr      (0x00u)
+#define ipcReportPort3b    (3u)
+
+static void ipcReportStatusVar20(uint32_t now)
 {
     uint8_t payload[stmPortCnt * 3u];
     uint8_t changed = 0u;
@@ -664,6 +728,7 @@ static void ipcReportStatus(uint32_t now)
         sIpcReportMs = now;
     }
 }
+#endif
 
 /* ===== Linux IPC (COM1) frame pump: 0x55/0xFF legacy 32B + 0xAA variable ===== */
 static frameRx_t sIpcRx;
