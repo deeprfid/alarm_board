@@ -292,6 +292,10 @@ typedef struct
 } portRx_t;
 static portRx_t sPorts[stmPortCnt];
 static const COM_PORT_E sPortCom[stmPortCnt] = { COM6, COM2, COM3, COM4, COM5 };
+/* 5 路雷达板 -> RFID 模块 8 支天线的映射(下标 = 天线号 1..8, 0 = 该口不带天线)
+ *   COM6 -> 天线1 ; COM2 -> 天线2,3 ; COM3 -> 天线4,5 ; COM4 -> 天线6,7 ; COM5 -> 天线8
+ * 一块雷达板覆盖 1~2 支天线, 因此该板的雷达有人/报警状态复制到它对应的所有天线上
+ */
 static const uint8_t sPortCh[stmPortCnt][2] = { {1,0},{2,3},{4,5},{6,7},{8,0} };
 static int stmVarSend(COM_PORT_E port, uint8_t cmd, uint8_t addr, const uint8_t *pl, uint8_t plen)
 {
@@ -497,7 +501,7 @@ static uint8_t ipcReportBuild(uint32_t now)
         sIpcReportVals[i][1] = (fresh != 0u) ? sPorts[i].workMode  : 0u;
         sIpcReportVals[i][2] = (fresh != 0u) ? sPorts[i].alarmDone : 0u;
 
-        /* 一个口可带 1~2 个通道: 通道号 1..8 -> Rad_Status/Alarm_Done 下标 0..7 */
+        /* 一个雷达口可带 1~2 支 RFID 天线: 天线号 1..8 -> Rad_Status/Alarm_Done 下标 0..7 */
         ch = (uint8_t)(sPortCh[i][0] - 1u);
         sIpcGpioPdu.Rad_Status[ch] = sIpcReportVals[i][0];
         sIpcGpioPdu.Alarm_Done[ch] = sIpcReportVals[i][2];
