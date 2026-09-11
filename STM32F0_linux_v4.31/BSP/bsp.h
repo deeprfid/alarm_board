@@ -26,8 +26,6 @@
 	#error "Please define the board model : STM32_V7"
 #endif
 
-/* 定义 BSP 版本号 */
-#define __STM32H7_BSP_VERSION		"1.10"
 
 #define  USE_RTX    1
 
@@ -42,9 +40,6 @@
 #define BSP_Printf		printf
 //#define BSP_Printf(...)
 
-#define EXTI9_5_ISR_MOVE_OUT		/* bsp.h 中定义此行，表示本函数移到 stam32f4xx_it.c。 避免重复定义 */
-
-#define ERROR_HANDLER()		 Error_Handler();
 
 /* 默认是关闭状态 */
 
@@ -58,11 +53,8 @@
 #include <stdbool.h>
 
 #define GPI_IN1_Pin               GPIO_PIN_13
-#define GPI_IN1_GPIO_Port         GPIOC
 #define GPI_IN2_Pin               GPIO_PIN_14
-#define GPI_IN2_GPIO_Port         GPIOC
 #define GPI_IN3_Pin               GPIO_PIN_15
-#define GPI_IN3_GPIO_Port         GPIOC
 #define GPI_IN4_Pin               GPIO_PIN_1
 #define GPI_IN4_GPIO_Port         GPIOB
 #define GPO_BZ3V3_Pin             GPIO_PIN_2
@@ -74,7 +66,6 @@
 #define LED_G_Pin                 GPIO_PIN_14
 #define LED_G_GPIO_Port           GPIOB
 #define GPO_BZ_Pin                GPIO_PIN_15
-#define GPO_BZ_GPIO_Port          GPIOB
 #define MCULED_1_Pin              GPIO_PIN_6
 #define MCULED_1_GPIO_Port        GPIOA
 #define MCULED_2_Pin              GPIO_PIN_7
@@ -94,7 +85,7 @@
 #define Host_IRQ_Pin            GPIO_PIN_12
 #define Host_IRQ_GPIO_Port      GPIOA
 
-#define STM32F0_IWDG_ENABLE   (0U)
+#define STM32F0_IWDG_ENABLE   (1U)
 #define GET_RADAR_ENABLE      (1U)
 
 #ifndef TRUE
@@ -116,7 +107,6 @@
 void bsp_Init(void);
 void bsp_Idle(void);
 void System_Init(void);
-void bsp_GetCpuID(uint32_t *_id);
 void Error_Handler(void);
 void STM32F030_delay(__IO uint32_t nCount);
 void CM4_System_Reset(void);
