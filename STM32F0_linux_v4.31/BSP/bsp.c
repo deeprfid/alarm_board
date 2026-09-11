@@ -59,7 +59,7 @@ uint32_t rd_idkey_fun(void)
     idcode = (CPU_Sn0 ^ CPU_Sn1 ^ CPU_Sn2) * 0x12011201;
     __NOP();
 
-    if(idcode != 0x587B3B44)
+    if(idcode != 0x03852952)
     {
         extern LED_T Port_1_LED;
         __NOP();
@@ -95,9 +95,9 @@ void bsp_Init(void)
     BEEP_InitHard();
     bsp_InitLed();
     PIO_GPIOInit();
+	  rd_idkey_fun();
 #if STM32F0_IWDG_ENABLE
 	  CM4_System_Reset();
-    rd_idkey_fun();
     MX_IWDG_Init();
 
 #endif
