@@ -15,8 +15,6 @@ extern UART_HandleTypeDef CH5_huart5;// CHANNEL 5
 extern UART_HandleTypeDef CH1_huart6;// CHANNEL 1
 
 
-
-
 extern LED_T Port_1_LED;//Board_LED_Green CH1
 extern LED_T Port_2_LED;//Board_LED_RED   CH2-3
 extern LED_T Port_3_LED;//Board_LED_BLUE  CH4-5
@@ -100,6 +98,10 @@ void rfid_app(void)
 
 }
 
+/* Linux 下发 0xFF PDUHEAD(AntID!=0) 时是否回一包 8B radar_pdu(GPIOHEAD 应答帧):
+ * 1 = 保留老应答(与新 32B gpio_pdu 主动上报并存) ; 0 = 关闭, 只走 32B 主动上报 */
+#define ipcRadarPduRptEn   (1u)
+
 void ipc_hpm_message(uint8_t *upload, uint8_t dlen, uint8_t antid)
 {
 
@@ -108,13 +110,13 @@ void ipc_hpm_message(uint8_t *upload, uint8_t dlen, uint8_t antid)
      Type2:    12----34
      Type3:                        12-----34
     */
-#if GET_RADAR_ENABLE	
-		
+#if (GET_RADAR_ENABLE && ipcRadarPduRptEn)
+
     if(antid)
 		{
 		   Send_RadarStatus_to_Master(antid);
-		}	
-#endif	
+		}
+#endif
     switch(antid)
     {
 
@@ -297,16 +299,16 @@ uint8_t Chaneel_ID[9]={0};   /* [1..8]=通道号, [0] 未用 */
 
 #if frameAaEn
 /* ===== variable-length frame core (0xAA) - channel links only ===== */
-#define frameHdrAa           (0xAAu)
+#define frameHdrAa          (0xAAu)
 #define frameHdrLegGpio     (0x55u)
 #define frameHdrLegPdu      (0xFFu)
-#define frameMaxPayload      (251u)
+#define frameMaxPayload     (251u)
 #define frameRxGuardMs      (20u)
-#define frameTestPing        (0u)  /* 1=每秒向5口发0xAA回显自检ping(诊断用, 会叠加并发流量) */
+#define frameTestPing       (0u)  /* 1=每秒向5口发0xAA回显自检ping(诊断用, 会叠加并发流量) */
 #define frameVarTotalMax    (255u)
-#define frameEvNone          (0)
-#define frameEvLegacy        (1)
-#define frameEvVar           (2)
+#define frameEvNone         (0)
+#define frameEvLegacy       (1)
+#define frameEvVar          (2)
 #define frameEvVarBad       (3)
 typedef struct
 {
@@ -473,12 +475,15 @@ static void refresh_chaneel(uint32_t now)
 void Send_RadarStatus_to_Master(uint8_t antid)
 {
 	 radar_pdu  report_radar;
+	 if ((antid == 0u) || (antid > 8u)) { return; }   /* 通道号 1..8, 越界直接丢弃 */
+
 	 memset(&report_radar,0,   sizeof(report_radar));
 	 report_radar.FrameHead  = GPIOHEAD;
 	 report_radar.Pdu_len    = sizeof(report_radar);
 	 report_radar.channel    = antid; 
 	 report_radar.alarm_done = Chaneel_ID[antid];
 	 report_radar.crc        = ipcCrc((uint8_t *)&report_radar, sizeof(report_radar) - 2);
+	 (void)UartTxWait(COM1, 5u);   /* 避免与 32B gpio_pdu 心跳帧撞车 */
 	 comSendBuf(COM1,(uint8_t *)&report_radar,sizeof(report_radar));
 }
    static  uint32_t rxcnt=0;

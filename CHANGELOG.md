@@ -62,6 +62,8 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 - **docs**：新增《设计定稿备忘 2026-09-04》（`docs/decisions_2026-09-04.md`）：汇总当日决策——老格式冻结(0xFF/0x55)+0xAA 变长新帧(Len+Cmd+Addr+Payload+CRC16)、按帧头分流的状态机接收引擎与三判决点/滑窗重同步、实时性=事件+周期+迟滞、流水线轮询、OTA A/B 槽/代理缓存、已确认产品口径与明天开工顺序。未改动任何固件代码。
 ### [stm32f0] BSP / app
 
+- `[stm32f0]` **chore**: 明确 COM1 上行**两路并存**并加开关——①主动：32B `gpio_pdu`（变化即报 + 1s 心跳）；②应答：Linux 下发 `0xFF` PDUHEAD 且 AntID≠0 时回 8B `radar_pdu`（`GPIOHEAD`，`alarm_done=Chaneel_ID[AntID]`）。新增 `ipcRadarPduRptEn`（默认 1=保留老应答，置 0 即只走 32B 主动上报）；`Send_RadarStatus_to_Master()` 增加通道号 1..8 越界保护（Linux 可下发任意 AntID，原实现 `Chaneel_ID[antid]` 会越界读）并在发送前 `UartTxWait(COM1,5ms)`，避免与 32B 心跳帧撞车。
+
 - `[stm32f0]` **change**: STM32→Linux(COM1) 上行格式改为 **Linux 给定的 `gpio_pdu` 定长 32B 帧**（`app.h` 新增该结构体）：`[0x55][Pdu_len=32][DeviceID][AntID][Rad_Status[8]][Alarm_Done[8]][GPIO[10]][CRC16_L][CRC16_H]`（CRC 覆盖前 30B，与老帧一致）——**变化即报 + 1s 心跳**。`Rad_Status[n]`/`Alarm_Done[n]` 由 5 个通道口状态按“通道号 1..8 → 下标 0..7”填入（一个口可覆盖 2 个通道）；顺带把 `Chaneel_ID[8]` 扩为 `Chaneel_ID[9]`，修掉通道 8 的越界写。`GPIO[10]`/DeviceID/AntID 语义待 Linux 侧确认（暂填 0）。旧 0xAA Cmd 0x20（5×3B）上报以 `ipcReportVar20En=0` **代码保留**（`ipcReportStatusVar20()`）。**STM32↔HC32 侧 0xAA Cmd 0x10 查询/3B 应答完全不变。**
 
 
