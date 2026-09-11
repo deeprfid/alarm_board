@@ -98,9 +98,6 @@ void rfid_app(void)
 
 }
 
-/* Linux 下发 0xFF PDUHEAD(AntID!=0) 时是否回一包老的 8B radar_pdu(GPIOHEAD):
- * 0 = 停用(默认) —— 上行统一为 32B gpio_pdu; 1 = 恢复老 8B 应答(代码保留) */
-#define ipcRadarPduRptEn   (0u)
 #define ipcReportOnQuery  (1u)   /* 1 = Linux 0xFF PDUHEAD(AntID!=0) 查询到达时立即应答一帧 32B gpio_pdu */
 
 #if (GET_RADAR_ENABLE && frameAaEn && ipcReportOnQuery)
@@ -115,14 +112,6 @@ void ipc_hpm_message(uint8_t *upload, uint8_t dlen, uint8_t antid)
      Type2:    12----34
      Type3:                        12-----34
     */
-#if (GET_RADAR_ENABLE && frameAaEn && ipcRadarPduRptEn)
-    /* 老 8B radar_pdu 应答, 默认停用(上行统一 gpio_pdu), 代码保留 */
-    if(antid)
-		{
-		   Send_RadarStatus_to_Master(antid);
-		}
-#endif
-
 #if (GET_RADAR_ENABLE && frameAaEn && ipcReportOnQuery)
     /* Linux 下发 0xFF PDUHEAD(AntID!=0) 时立即应答一帧 32B gpio_pdu */
     if(antid)
@@ -240,80 +229,14 @@ void Alarm_CMD(void)
 
 }
 
-#if !frameAaEn  /* legacy count-32B COM1 rx (kept, used when AA pump disabled) */
-void Check_Uart_Pdu(void)
-{
-    uint32_t tickcount = HAL_GetTick();
-    extern LED_T Port_1_LED;
-
-    if ((UartGetRxcnt(COM1) >= APP_FRAME_LEN_MAX))
-        //if ((UartGetRxcnt(COM1)>=APP_FRAME_LEN_MAX) && (tickcount%20==0))
-    {
-        uart_recv(COM1, (uint8_t *)&alarmboard, sizeof(alarmboard));
-        uint16_t crcdata = ipcCrc((uint8_t *)&alarmboard, sizeof(alarmboard) - 2);
-
-        if((alarmboard.crc == crcdata) && (alarmboard.FrameHead == GPIOHEAD))
-        {
-            uint8_t gpi_val = 0;
-            PIO_GpioRead(&gpi_val);
-            PIO_GpioSet(0xF, alarmboard.reserved & 0xF);
-            alarmboard.reserved = gpi_val;
-            crcdata = ipcCrc((uint8_t *)&alarmboard, sizeof(alarmboard) - 2);
-            alarmboard.crc = crcdata;
-            comSendBuf(COM1, (uint8_t *)&alarmboard, sizeof(alarmboard));
-        }
-
-        if(alarmboard.crc == crcdata  && alarmboard.FrameHead == PDUHEAD)
-        {
-
-            ipc_hpm_message((uint8_t *)&alarmboard, sizeof(alarmboard), alarmboard.AntID);
-            //BEEP_Start(20,10,2);
-           
-        }
-        else
-        {
-            comClearRxFifo(COM1);
-            return;
-        }
-    }
-
-    if(Port_5_LED.ucEnalbe == 0)
-    {
-        LED_Start(&Port_5_LED, PORTLED_5, 5, 50, 1);
-    }
-}
-#endif /* !frameAaEn */
 
 
 
 #if GET_RADAR_ENABLE
-static  uint32_t txcnt=0;
-void Broadcast_Get_Radar_Status(void)
-{
-	  
-    alarm_pdu Get_Radar_Data;
-    memset(&Get_Radar_Data, 0, sizeof(Get_Radar_Data));
-    Get_Radar_Data.FrameHead  = GPIOHEAD;
-	  Get_Radar_Data.Pdu_len    = sizeof(Get_Radar_Data);
-    Get_Radar_Data.Radarcfg[0]= 0xFF;
-    Get_Radar_Data.crc= ipcCrc((uint8_t *)&Get_Radar_Data, sizeof(Get_Radar_Data) -2);
-	
-    comSendBuf(COM6, (uint8_t *)&Get_Radar_Data,sizeof(Get_Radar_Data));  //mainboard CH1
-    comSendBuf(COM2, (uint8_t *)&Get_Radar_Data,sizeof(Get_Radar_Data));  //mainboard CH2
-    comSendBuf(COM3, (uint8_t *)&Get_Radar_Data,sizeof(Get_Radar_Data));	//mainboard CH3
-    comSendBuf(COM4, (uint8_t *)&Get_Radar_Data,sizeof(Get_Radar_Data));  //mainboard CH4
-    comSendBuf(COM5, (uint8_t *)&Get_Radar_Data,sizeof(Get_Radar_Data));	//mainboard CH5
-    txcnt += 5u;
-
-
-}
-
-uint8_t Chaneel_ID[9]={0};   /* [1..8]=通道号, [0] 未用 */
 
 #if frameAaEn
-/* ===== variable-length frame core (0xAA) - channel links only ===== */
+/* ===== frame core: 0xAA variable-length (both links) + 0xFF fixed 32B (COM1 downlink) ===== */
 #define frameHdrAa          (0xAAu)
-#define frameHdrLegGpio     (0x55u)
 #define frameHdrLegPdu      (0xFFu)
 #define frameMaxPayload     (251u)
 #define frameRxGuardMs      (20u)
@@ -363,7 +286,7 @@ static int frameRxFeed(frameRx_t *rx, uint8_t b)
     uint16_t c;
     if (rx->state == 0u)
     {
-        if ((b == frameHdrLegGpio) || (b == frameHdrLegPdu))
+        if (b == frameHdrLegPdu)                      /* Linux 下行定长 32B: 仅 PDUHEAD */
         {
             rx->buf[0] = b; rx->idx = 1u; rx->state = 1u;
         }
@@ -432,17 +355,6 @@ static int stmVarSend(COM_PORT_E port, uint8_t cmd, uint8_t addr, const uint8_t 
     comSendBuf(port, out, total);
     return (int)total;
 }
-static void stmHandleLegacy(portRx_t *pr, uint32_t now)
-{
-    uint16_t c;
-    uint16_t r0;
-    if (pr->rx.buf[0] != GPIOHEAD) { return; }
-    c = ipcCrc(pr->rx.buf, APP_FRAME_LEN_MAX - 2u);
-    if ((uint16_t)(pr->rx.buf[30] | ((uint16_t)pr->rx.buf[31] << 8)) != c) { return; }
-    r0 = (uint16_t)(pr->rx.buf[10] | ((uint16_t)pr->rx.buf[11] << 8));
-    pr->radarVal = (r0 == 1u) ? 1u : 0u;
-    pr->lastRcvMs = now;
-}
 static void stmHandleVar(portRx_t *pr)
 {
     pr->varCmd  = pr->rx.buf[2];
@@ -471,65 +383,9 @@ static void pingOne(uint8_t portIdx)
     (void)stmVarSend(sPortCom[portIdx], 0x01u, (uint8_t)(portIdx + 1u), pl, plen);
 }
 #endif
-static void refresh_chaneel(uint32_t now)
-{
-    uint8_t i, v;
-    memset(Chaneel_ID, 0, sizeof(Chaneel_ID));
-    for (i = 0u; i < stmPortCnt; i++)
-    {
-        v = ((now - sPorts[i].lastRcvMs) <= 150u) ? sPorts[i].radarVal : 0u;
-        Chaneel_ID[sPortCh[i][0]] = v;
-        if (sPortCh[i][1] != 0u) { Chaneel_ID[sPortCh[i][1]] = v; }
-    }
-}
 /* ===== end frame core part2 ===== */
 #endif /* frameAaEn */
 
-void Send_RadarStatus_to_Master(uint8_t antid)
-{
-	 radar_pdu  report_radar;
-	 if ((antid == 0u) || (antid > 8u)) { return; }   /* 通道号 1..8, 越界直接丢弃 */
-
-	 memset(&report_radar,0,   sizeof(report_radar));
-	 report_radar.FrameHead  = GPIOHEAD;
-	 report_radar.Pdu_len    = sizeof(report_radar);
-	 report_radar.channel    = antid; 
-	 report_radar.alarm_done = Chaneel_ID[antid];
-	 report_radar.crc        = ipcCrc((uint8_t *)&report_radar, sizeof(report_radar) - 2);
-	 (void)UartTxWait(COM1, 5u);   /* 避免与 32B gpio_pdu 心跳帧撞车 */
-	 comSendBuf(COM1,(uint8_t *)&report_radar,sizeof(report_radar));
-}
-   static  uint32_t rxcnt=0;
-void Check_RadarStatus(COM_PORT_E _ucPort,uint8_t *alarm_done)
-{
-
-	
-  if ((UartGetRxcnt(_ucPort) >= APP_FRAME_LEN_MAX))
-	{
-		    alarm_pdu Res_Radar_Data;
-	      memset(&Res_Radar_Data,0, sizeof(Res_Radar_Data));
-	      uart_recv(_ucPort, (uint8_t *)&Res_Radar_Data, sizeof(Res_Radar_Data));
-        uint16_t crcdata = ipcCrc((uint8_t *)&Res_Radar_Data, sizeof(Res_Radar_Data) - 2);
-
-        if((Res_Radar_Data.crc == crcdata) && (Res_Radar_Data.FrameHead == GPIOHEAD) && Res_Radar_Data.Radarcfg[0] == true)
-        {
-					  *alarm_done=1;
-					   rxcnt++;
-					
-				}	
-				else if ((Res_Radar_Data.crc == crcdata) && (Res_Radar_Data.FrameHead == GPIOHEAD) && Res_Radar_Data.Radarcfg[0] == false)
-				{
-				    *alarm_done=0;
-					   rxcnt++;
-				}
-        else
-				{
-				  comClearRxFifo(_ucPort);
-				}					
-	}
-
-
-}
 
 
 
@@ -591,11 +447,7 @@ static void radarPumpPort(uint8_t i, uint32_t now)
     {
         sPorts[i].rx.lastByteMs = now;   /* refresh liveness so guard cannot clear mid-frame */
         ev = frameRxFeed(&sPorts[i].rx, b);
-        if (ev == frameEvLegacy)
-        {
-            stmHandleLegacy(&sPorts[i], now);
-        }
-        else if (ev == frameEvVar)
+        if (ev == frameEvVar)
         {
             stmHandleVar(&sPorts[i]);
             if (sPorts[i].varCmd == 0x10u)   /* valid 0x10 reply */
@@ -631,19 +483,17 @@ void Radar_thread(void)
         radarPumpPort(i, now);
     }
 
-    /* 1b) refresh Chaneel_ID from per-port radar state (internal only) */
-    refresh_chaneel(now);
-
     /* 2) broadcast Cmd 0x10 query */
     radarQueryAll();
 
-    /* 2b) report port/channel status to Linux (0x55 gpio_pdu 32B, on change) */
+    /* 2b) report port/channel status to Linux (PDUHEAD gpio_pdu 32B, on change) */
     ipcReportStatus(now);
 }
 
-/* ===== Linux IPC (COM1) 唯一上行帧: 0x55 GPIOHEAD gpio_pdu 定长 32B (Linux 给定格式) =====
- * 触发: 变化即报 + ipcReportIdleMs 无变化心跳; Linux 下发 0xFF PDUHEAD 查询时立即补发一帧
- * 老的 8B radar_pdu 应答已停用(ipcRadarPduRptEn=0, 代码保留); 0xAA 变长上行后续要用, 代码保留
+/* ===== Linux IPC (COM1) 唯一上行帧: PDUHEAD(0xFF) gpio_pdu 定长 32B =====
+ * 帧头与 Linux 下行一致, 均为 PDUHEAD(0xFF); GPIOHEAD(0x55) 已废弃, 相关代码已删除
+ * 触发: 变化即报 + ipcReportIdleMs 无变化心跳; Linux 下发 PDUHEAD 查询时立即应答一帧
+ * 0xAA 变长上行后续要用, 以 ipcReportVar20En=0 保留代码
  */
 #define ipcReportIdleMs      (1000u)  /* 无变化时的心跳周期(ms) */
 #define ipcReportDeviceId    (0x00u)  /* TODO: Linux 侧 DeviceID 语义待确认 */
@@ -664,7 +514,7 @@ static uint8_t ipcReportBuild(void)
     uint8_t i, ch;
 
     memset(&sIpcGpioPdu, 0, sizeof(sIpcGpioPdu));
-    sIpcGpioPdu.FrameHead = GPIOHEAD;
+    sIpcGpioPdu.FrameHead = PDUHEAD;   /* 上行响应帧头 = 下行帧头 = PDUHEAD(0xFF) */
     sIpcGpioPdu.Pdu_len   = (uint8_t)sizeof(sIpcGpioPdu);
     sIpcGpioPdu.DeviceID  = ipcReportDeviceId;
     sIpcGpioPdu.AntID     = ipcReportAntId;
@@ -723,7 +573,7 @@ static void ipcReportStatus(uint32_t now)
     }
 }
 
-/* Linux 下发 0xFF PDUHEAD 时立即应答一帧(替换老的 8B radar_pdu 应答) */
+/* Linux 下发 PDUHEAD 查询时立即应答一帧 32B gpio_pdu(不走变化/心跳判定) */
 static void ipcReportForce(void)
 {
     (void)ipcReportBuild();
@@ -777,36 +627,20 @@ static void ipcReportStatusVar20(uint32_t now)
 static frameRx_t sIpcRx;
 static uint8_t   sIpcInited = 0u;
 
-/* 32B fixed frame from Linux: PDUHEAD dispatch; GPIOHEAD query disabled for now */
+/* Linux 下行定长 32B 帧: 只有 PDUHEAD(0xFF) 一种, CRC 通过后按 AntID 分发 */
 static void ipcHandleLegacy(void)
 {
     uint16_t c;
     uint16_t crcRcv;
 
-    if ((sIpcRx.buf[0] != PDUHEAD) && (sIpcRx.buf[0] != GPIOHEAD)) { return; }
+    if (sIpcRx.buf[0] != PDUHEAD) { return; }
     c = ipcCrc(sIpcRx.buf, APP_FRAME_LEN_MAX - 2u);
     crcRcv = (uint16_t)(sIpcRx.buf[30] | ((uint16_t)sIpcRx.buf[31] << 8));
     if (crcRcv != c) { return; }   /* drop bad frame; state machine resyncs on next header */
 
     memcpy(&alarmboard, sIpcRx.buf, sizeof(alarm_pdu));
 
-    if (alarmboard.FrameHead == PDUHEAD)
-    {
-        ipc_hpm_message((uint8_t *)&alarmboard, sizeof(alarmboard), alarmboard.AntID);
-        return;
-    }
-
-#if 0 /* GPIOHEAD query reply disabled for now */
-    if (alarmboard.FrameHead == GPIOHEAD)
-    {
-        uint8_t gpi_val = 0;
-        PIO_GpioRead(&gpi_val);
-        PIO_GpioSet(0xF, alarmboard.reserved & 0xF);
-        alarmboard.reserved = gpi_val;
-        alarmboard.crc = ipcCrc((uint8_t *)&alarmboard, sizeof(alarmboard) - 2);
-        comSendBuf(COM1, (uint8_t *)&alarmboard, sizeof(alarmboard));
-    }
-#endif
+    ipc_hpm_message((uint8_t *)&alarmboard, sizeof(alarmboard), alarmboard.AntID);
 }
 
 /* 0xAA variable frame from Linux - received, business reserved for future */
