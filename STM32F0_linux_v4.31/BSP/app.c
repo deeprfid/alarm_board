@@ -302,7 +302,7 @@ uint8_t Chaneel_ID[8]={0};
 #define frameHdrLegPdu      (0xFFu)
 #define frameMaxPayload      (251u)
 #define frameRxGuardMs      (20u)
-#define frameTestPing        (0u)  /* 1=æ¯ç§’å‘5å£å‘0xAAå›æ˜¾è‡ªæ£€ping(è¯Šæ–­ç”¨, ä¼šå åŠ å¹¶å‘æµé‡) */
+#define frameTestPing        (0u)  /* 1=Ã¿ÃëÏò5¿Ú·¢0xAA»ØÏÔ×Ô¼ìping(Õï¶ÏÓÃ, »áµş¼Ó²¢·¢Á÷Á¿) */
 #define frameVarTotalMax    (255u)
 #define frameEvNone          (0)
 #define frameEvLegacy        (1)
