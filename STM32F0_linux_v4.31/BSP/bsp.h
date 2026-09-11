@@ -108,7 +108,6 @@ void bsp_Init(void);
 void bsp_Idle(void);
 void System_Init(void);
 void Error_Handler(void);
-void STM32F030_delay(__IO uint32_t nCount);
 void CM4_System_Reset(void);
 #endif
 

@@ -18,8 +18,6 @@
 
 #include "bsp.h"
 
- //  #define BEEP_ENABLE()	 HAL_GPIO_WritePin(GPO_BZ_GPIO_Port,GPO_BZ_Pin,GPIO_PIN_SET)			/* 使能蜂鸣器鸣叫 */
-//	 #define BEEP_DISABLE()	 HAL_GPIO_WritePin(GPO_BZ_GPIO_Port,GPO_BZ_Pin,GPIO_PIN_RESET)			/* 禁止蜂鸣器鸣叫 */
 
 	 #define BEEP_ENABLE()	 HAL_GPIO_WritePin(GPO_BZ3V3_GPIO_Port,GPO_BZ3V3_Pin,GPIO_PIN_SET)			/* 使能蜂鸣器鸣叫 */
 	 #define BEEP_DISABLE()	 HAL_GPIO_WritePin(GPO_BZ3V3_GPIO_Port,GPO_BZ3V3_Pin,GPIO_PIN_RESET)			/* 禁止蜂鸣器鸣叫 */
@@ -27,18 +25,7 @@
 
 BEEP_T g_tBeep;		/* 定义蜂鸣器全局结构体变量 */
 
-static volatile uint8_t mutex_beep = 0;
 
-void mutex_beep_lock(void) {
-
-  mutex_beep = 1;
-  HAL_SuspendTick(); 
-}
-
-void mutex_beep_unlock(void) {
-  mutex_beep = 0;
-  HAL_ResumeTick();   
-}
 /*
 *********************************************************************************************************
 *	函 数 名: BEEP_InitHard
@@ -49,12 +36,6 @@ void mutex_beep_unlock(void) {
 */
 void BEEP_InitHard(void)
 {
-//    stc_gpio_init_t stcGpioInit;
-//    (void)GPIO_StructInit(&stcGpioInit);
-//    stcGpioInit.u16PinState = PIN_STAT_RST;
-//    stcGpioInit.u16PinDir = PIN_DIR_OUT;
-//    stcGpioInit.u16PinDrv=PIN_HIGH_DRV;
-//    (void)GPIO_Init(BEEP_PORT , BEEP_PIN , &stcGpioInit);
 	
 	g_tBeep.ucMute = 0;	/* 关闭静音 */
 }
@@ -85,77 +66,6 @@ void BEEP_Start(uint16_t _usBeepTime, uint16_t _usStopTime, uint16_t _usCycle)
 	g_tBeep.ucEnalbe = 1;	/* 设置完全局参数后再使能发声标志 */
 
 	BEEP_ENABLE();			/* 开始发声 */
-}
-
-/*
-*********************************************************************************************************
-*	函 数 名: BEEP_Stop
-*	功能说明: 停止蜂鸣音。
-*	形    参: 无
-*	返 回 值: 无
-*********************************************************************************************************
-*/
-void BEEP_Stop(void)
-{
-  mutex_beep_lock(); 
-  
-  g_tBeep.ucEnalbe=0;
-  g_tBeep.ucMute=0;
-  g_tBeep.ucState=0;    
-  g_tBeep.usBeepTime=0;
-  g_tBeep.usCount=0;
-  g_tBeep.usCycle=0; 
-  g_tBeep.usCycleCount=0;
-  g_tBeep.usStopTime=0;    
-  BEEP_DISABLE();
-	mutex_beep_unlock();  
-//	if ((g_tBeep.usStopTime == 0) || (g_tBeep.usCycle == 0))
-//	{
-//		BEEP_DISABLE();	/* 必须在清控制标志后再停止发声，避免停止后在中断中又开启 */
-//	}
-}
-
-/*
-*********************************************************************************************************
-*	函 数 名: BEEP_Pause
-*	功能说明: 由于TIM冲突等原因，临时屏蔽蜂鸣音。通过 BEEP_Resume 恢复
-*	形    参: 无
-*	返 回 值: 无
-*********************************************************************************************************
-*/
-void BEEP_Pause(void)
-{
-	BEEP_Stop();
-	
-	g_tBeep.ucMute = 1;		/* 静音 */
-}
-
-/*
-*********************************************************************************************************
-*	函 数 名: BEEP_Resume
-*	功能说明: 恢复蜂鸣器正常功能
-*	形    参: 无
-*	返 回 值: 无
-*********************************************************************************************************
-*/
-void BEEP_Resume(void)
-{
-	BEEP_Stop();
-	
-	g_tBeep.ucMute = 0;		/* 静音 */
-}
-
-/*
-*********************************************************************************************************
-*	函 数 名: BEEP_KeyTone
-*	功能说明: 发送按键音
-*	形    参: 无
-*	返 回 值: 无
-*********************************************************************************************************
-*/
-void BEEP_KeyTone(void)
-{
-	BEEP_Start(5, 1, 1);	/* 鸣叫50ms，停10ms， 1次 */
 }
 
 /*

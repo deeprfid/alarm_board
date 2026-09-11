@@ -87,12 +87,10 @@ uint32_t rd_idkey_fun(void)
 */
 
 
-
 void bsp_Init(void)
 {
 
     MX_GPIO_Init();
- //   EXTI4_15_IRQHandler_Config();  // input irq#
     bsp_InitUart();
     BEEP_InitHard();
     bsp_InitLed();
@@ -294,7 +292,6 @@ static void MX_GPIO_Init(void)
 }
 
 
-
 /**
   * @brief  This function is executed in case of error occurrence.
   * @retval None
@@ -310,43 +307,6 @@ void Error_Handler(void)
     }
 
     /* USER CODE END Error_Handler_Debug */
-}
-
-#ifdef  USE_FULL_ASSERT
-/**
-  * @brief  Reports the name of the source file and the source line number
-  *         where the assert_param error has occurred.
-  * @param  file: pointer to the source file name
-  * @param  line: assert_param error line source number
-  * @retval None
-  */
-void assert_failed(uint8_t *file, uint32_t line)
-{
-    /* USER CODE BEGIN 6 */
-    /* User can add his own implementation to report the file name and line number,
-       ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-    /* USER CODE END 6 */
-}
-
-#endif /* USE_FULL_ASSERT */
-
-/*
-*********************************************************************************************************
-*	函 数 名: HAL_Delay
-*	功能说明: 重定向毫秒延迟函数。替换HAL中的函数。因为HAL中的缺省函数依赖于Systick中断，如果在USB、SD卡
-*             中断中有延迟函数，则会锁死。也可以通过函数HAL_NVIC_SetPriority提升Systick中断
-*	形    参: 无
-*	返 回 值: 无
-*********************************************************************************************************
-*/
-/* 当前例子使用stm32h7xx_hal.c默认方式实现，未使用下面重定向的函数 */
-void STM32F030_delay(__IO uint32_t nCount)
-{
-    __IO uint32_t index = 0;
-
-    for(index = (100000 * nCount); index != 0; index--)
-    {
-    }
 }
 
 /***************************** 安富莱电子 www.armfly.com (END OF FILE) *********************************/
