@@ -98,9 +98,14 @@ void rfid_app(void)
 
 }
 
-/* Linux 下发 0xFF PDUHEAD(AntID!=0) 时是否回一包 8B radar_pdu(GPIOHEAD 应答帧):
- * 1 = 保留老应答(与新 32B gpio_pdu 主动上报并存) ; 0 = 关闭, 只走 32B 主动上报 */
-#define ipcRadarPduRptEn   (1u)
+/* Linux 下发 0xFF PDUHEAD(AntID!=0) 时是否回一包老的 8B radar_pdu(GPIOHEAD):
+ * 0 = 停用(默认) —— 上行统一为 32B gpio_pdu; 1 = 恢复老 8B 应答(代码保留) */
+#define ipcRadarPduRptEn   (0u)
+#define ipcReportOnQuery  (1u)   /* 1 = Linux 0xFF PDUHEAD(AntID!=0) 查询到达时立即应答一帧 32B gpio_pdu */
+
+#if (GET_RADAR_ENABLE && frameAaEn && ipcReportOnQuery)
+static void ipcReportForce(void);   /* 立即应答一帧 32B gpio_pdu */
+#endif
 
 void ipc_hpm_message(uint8_t *upload, uint8_t dlen, uint8_t antid)
 {
@@ -110,11 +115,19 @@ void ipc_hpm_message(uint8_t *upload, uint8_t dlen, uint8_t antid)
      Type2:    12----34
      Type3:                        12-----34
     */
-#if (GET_RADAR_ENABLE && ipcRadarPduRptEn)
-
+#if (GET_RADAR_ENABLE && frameAaEn && ipcRadarPduRptEn)
+    /* 老 8B radar_pdu 应答, 默认停用(上行统一 gpio_pdu), 代码保留 */
     if(antid)
 		{
 		   Send_RadarStatus_to_Master(antid);
+		}
+#endif
+
+#if (GET_RADAR_ENABLE && frameAaEn && ipcReportOnQuery)
+    /* Linux 下发 0xFF PDUHEAD(AntID!=0) 时立即应答一帧 32B gpio_pdu */
+    if(antid)
+		{
+		   ipcReportForce();
 		}
 #endif
     switch(antid)
@@ -628,13 +641,14 @@ void Radar_thread(void)
     ipcReportStatus(now);
 }
 
-/* ===== Linux IPC (COM1) 上行: 0x55 GPIOHEAD gpio_pdu 定长 32B (Linux 给定格式) =====
- * 变化即报 + ipcReportIdleMs 无变化心跳; HC32 侧 0xAA Cmd 0x10 查询/3B 应答完全不变
+/* ===== Linux IPC (COM1) 唯一上行帧: 0x55 GPIOHEAD gpio_pdu 定长 32B (Linux 给定格式) =====
+ * 触发: 变化即报 + ipcReportIdleMs 无变化心跳; Linux 下发 0xFF PDUHEAD 查询时立即补发一帧
+ * 老的 8B radar_pdu 应答已停用(ipcRadarPduRptEn=0, 代码保留); 0xAA 变长上行后续要用, 代码保留
  */
 #define ipcReportIdleMs      (1000u)  /* 无变化时的心跳周期(ms) */
 #define ipcReportDeviceId    (0x00u)  /* TODO: Linux 侧 DeviceID 语义待确认 */
 #define ipcReportAntId       (0x00u)  /* 0 = 整机聚合上报(不分通道) */
-#define ipcReportVar20En     (0u)     /* 1 = 启用旧的 0xAA Cmd 0x20 (5口x3B) 聚合帧 */
+#define ipcReportVar20En     (0u)     /* 1 = 启用旧的 0xAA Cmd 0x20 (5口x3B) 变长聚合帧 */
 
 /* 编译期校验: gpio_pdu 必须正好 32B(无结构体填充), 与 APP_FRAME_LEN_MAX 一致 */
 typedef char ipcGpioPduSizeChk[(sizeof(gpio_pdu) == APP_FRAME_LEN_MAX) ? 1 : -1];
@@ -643,7 +657,8 @@ static gpio_pdu sIpcGpioPdu;                     /* 上行帧(Linux 给定格式) */
 static uint8_t  sIpcReportLast[stmPortCnt][3];   /* last reported per-port 3B */
 static uint32_t sIpcReportMs = 0u;
 
-static void ipcReportStatus(uint32_t now)
+/* 组帧: 刷新 sIpcGpioPdu, 返回 1 = 相对上次已发内容有变化 */
+static uint8_t ipcReportBuild(void)
 {
     uint8_t changed = 0u;
     uint8_t i, ch;
@@ -677,19 +692,42 @@ static void ipcReportStatus(uint32_t now)
     /* GPIO[10]: Linux 侧字段语义待确认, 暂填 0 */
 
     sIpcGpioPdu.crc = ipcCrc((uint8_t *)&sIpcGpioPdu, sizeof(sIpcGpioPdu) - 2);
+    return changed;
+}
+
+/* 发送当前 sIpcGpioPdu 并记录"已发快照" */
+static void ipcReportSend(uint32_t now)
+{
+    uint8_t i;
+
+    (void)UartTxWait(COM1, 5u);
+    comSendBuf(COM1, (uint8_t *)&sIpcGpioPdu, sizeof(sIpcGpioPdu));
+
+    for (i = 0u; i < stmPortCnt; i++)
+    {
+        sIpcReportLast[i][0] = sPorts[i].gpioIn;
+        sIpcReportLast[i][1] = sPorts[i].workMode;
+        sIpcReportLast[i][2] = sPorts[i].alarmDone;
+    }
+    sIpcReportMs = now;
+}
+
+/* 周期调用: 变化即报 + ipcReportIdleMs 无变化心跳 */
+static void ipcReportStatus(uint32_t now)
+{
+    uint8_t changed = ipcReportBuild();
 
     if ((changed != 0u) || ((now - sIpcReportMs) >= ipcReportIdleMs))
     {
-        (void)UartTxWait(COM1, 5u);
-        comSendBuf(COM1, (uint8_t *)&sIpcGpioPdu, sizeof(sIpcGpioPdu));
-        for (i = 0u; i < stmPortCnt; i++)
-        {
-            sIpcReportLast[i][0] = sPorts[i].gpioIn;
-            sIpcReportLast[i][1] = sPorts[i].workMode;
-            sIpcReportLast[i][2] = sPorts[i].alarmDone;
-        }
-        sIpcReportMs = now;
+        ipcReportSend(now);
     }
+}
+
+/* Linux 下发 0xFF PDUHEAD 时立即应答一帧(替换老的 8B radar_pdu 应答) */
+static void ipcReportForce(void)
+{
+    (void)ipcReportBuild();
+    ipcReportSend(HAL_GetTick());
 }
 
 #if ipcReportVar20En
