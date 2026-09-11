@@ -39,7 +39,6 @@ typedef struct _LED_T
 void bsp_InitLed(void);
 void bsp_LedOn(uint8_t _no);
 void bsp_LedOff(uint8_t _no);
-void bsp_LedToggle(uint8_t _no);
 void LED_Pro(LED_T *g_tled,uint8_t ledid);
 void Led_Stop(LED_T *g_tled,uint8_t ledid);
 void Led_status_update(void);

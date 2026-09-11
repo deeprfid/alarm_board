@@ -24,9 +24,6 @@ LED_T Port_3_LED;//Board_LED_BLUE  CH4-5
 LED_T Port_4_LED;//Board_LED_Green CH6-7
 LED_T Port_5_LED;//Board_LED_WHITE CH8
 
-uint8_t rgb_led_status;
-
-
 LED_T R_tLED;
 LED_T G_tLED;
 LED_T B_tLED;
@@ -46,28 +43,6 @@ void mutex_led_unlock(void)
     mutex_led = 0;
     HAL_ResumeTick();
 }
-
-
-/*
-*********************************************************************************************************
-*	函 数 名: bsp_InitLed
-*	功能说明: 配置LED指示灯相关的GPIO,  该函数被 bsp_Init() 调用。
-*	形    参:  无
-*	返 回 值: 无
-*********************************************************************************************************
-*/
-void LED_GPIO_Init(void)
-{
-    Port_1_LED.ucMute = 0;
-    Port_2_LED.ucMute = 0;
-    Port_3_LED.ucMute = 0;
-    Port_4_LED.ucMute = 0;
-    Port_5_LED.ucMute = 0;
-    R_tLED.ucMute = 0;
-    G_tLED.ucMute = 0;
-    B_tLED.ucMute = 0;
-}
-
 void bsp_InitLed(void)
 {
     Led_Stop(&Port_1_LED, PORTLED_1);
@@ -327,90 +302,6 @@ void bsp_RunPer10ms(void)
         Led_status_update();
         BEEP_Pro();
     }
-}
-
-void Alarm_Off(void)
-{
-    LED_Start(&B_tLED, LED_BLED, 1, 0, 0);
-    BEEP_Stop();
-    Led_Stop(&R_tLED, LED_RLED);
-    Led_Stop(&G_tLED, LED_GLED);
-}
-
-extern BEEP_T g_tBeep;
-uint8_t Check_alarm_status(void)
-{
-    if(R_tLED.ucEnalbe == 0 && G_tLED.ucEnalbe == 0 && g_tBeep.ucEnalbe == 0 && B_tLED.ucEnalbe == 0)
-    {
-        Alarm_Off();
-        return true;
-    }
-    else
-    {
-        return false;
-
-    }
-
-
-}
-
-
-
-uint8_t alarm_duration = 2;
-void Green_pass_Tag(void)
-{
-    Led_Stop(&R_tLED, LED_RLED);
-    Led_Stop(&B_tLED, LED_BLED);
-    LED_Start(&G_tLED, LED_GLED, alarm_duration * 30, 1, 1);
-    BEEP_Stop();
-}
-
-void Reguler_Tag(void)
-{
-    Led_Stop(&G_tLED, LED_GLED);
-    Led_Stop(&B_tLED, LED_BLED);
-    BEEP_Start(20, 5, alarm_duration);
-    LED_Start(&R_tLED, LED_RLED, alarm_duration * 30, 1, 1);
-}
-
-void Relay_AM_EAS(void)
-{
-    Led_Stop(&G_tLED, LED_GLED);
-    Led_Stop(&B_tLED, LED_BLED);
-    BEEP_Start(20, 5, alarm_duration);
-    LED_Start(&R_tLED, LED_RLED, alarm_duration * 30, 1, 1);
-}
-
-void Alarm_SilenceCmd(void)
-{
-    BEEP_Stop();
-    Led_Stop(&R_tLED, LED_RLED);
-    Led_Stop(&G_tLED, LED_GLED);
-    Led_Stop(&B_tLED, LED_BLED);
-}
-
-
-
-void Alarm_On(void)
-{
-
-    if(rgb_led_status == ALARM_G_CODE)
-    {
-        Green_pass_Tag();
-    }
-    else if(rgb_led_status == ALARM_R_CODE)
-    {
-        Reguler_Tag();
-    }
-    else if(rgb_led_status == ALARM_RELAY_CODE)
-    {
-        Relay_AM_EAS();
-    }
-    else
-    {
-        Alarm_Off();
-    }
-
 }
 
 /***************************** 安富莱电子 www.armfly.com (END OF FILE) *********************************/
