@@ -132,6 +132,13 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
   - **集成**：`main.c` 在 `SysTick_Init()` 之后 `radar_init()`、主循环 `radar_poll()`（替换原 `Check_Radar_state()`）；`main.h` 改 include `radar.h`；`common.c` 老 32B 确认帧的雷达字段改取 `radar_report(0)`；`bsp_report.c` 注释同步；`alarm_board.uvprojx` 增删源文件；
   - **删除**：`bsp_radar.c`/`bsp_radar.h` —— 含从未被调用的 `Rardar_init()`、阻塞收发、固定 45B 匹配、`get_pdu_len`/`config_frame_init` 调试代码，以及 3 个只有声明没有定义的 `Radar_singal_input/output`/`Alarm_Out_Enable`；
   - **待硬件确认**：雷达串口按旧宏沿用 **USART1 / PA2(TX,FUNC32) / PA3(RX,FUNC33)**（旧文件注释里的 PB9/PE6 是错的）；若 PCB 实际不同，只需改 `radar_cfg.h` 中的 8 行。
+- `[hc32f460]` **fix**: 雷达驱动重构后的**编译修复**（Keil MDK ARMCC V5.06 update 7，目标 `usart_uart_dma_Debug`）：
+  - `main.h`：补回 `stc_radar_scan_data_t` 结构体（老 32B 确认帧的雷达字段，字段名与 `common.c` 中 `radar_report_t` 的赋值一一对应）与 `HashConfig()` 原型；
+  - `bsp_led.h` / `bsp_led.c` / `bsp_gpio.h`：补回 `BOARD_LED_1/2_PORT/PIN`、`RADAR_BOARD_LED_G_PORT/PIN` 宏与 `Board_LED_Init()`（板载指示灯初始化，`main.c` 上电自检调用；`Board_LED_On/Off/Toggle` 无调用者，未恢复）；
+  - `radar.c`：补 `#include "radar_port.h"` —— 原先缺失导致 9 个 `radar_port_*` **隐式声明**告警（C 中隐式声明按 int 返回，`radar_port_get_baud()` 的返回值会被截断，属实质缺陷而非纯告警）；
+  - **构建验证**：以 Keil 命令行无头构建复核（`UV4.exe -b alarm_board.uvprojx -j0 -o <log>`）—— `Code=29636 RO-data=760 RW-data=80 ZI-data=8232`，**0 Error / 0 Warning**（Debug 目标；Release 目标共用同一份源文件清单）；
+  - **硬件配置复核**（与 git 历史中的旧 `bsp_radar.c/.h` 逐项比对，非推测）：串口 `CM_USART1`、TX=**PA2/FUNC32**、RX=**PA3/FUNC33**、OUT0/1/2=**PC14/PC13/PH02** —— 新 `radar_cfg.h` 与旧工程完全一致（旧文件里的 `PB9`/`PE6` 是写错的残留注释）。
+
 - **clean**: 与 STM32 侧同步清除 GPIOHEAD —— 删除 `common.c` 的 `Send_RadarStatus_to_Master()`（32B `GPIOHEAD(0x55)` 应答，已无触发来源）与 `Get_pdu_data()` 里的 `GPIOHEAD` 分支（该分支只做应答，删除后落入原有 `else` 复位路径）、帧核心 `FRAME_HDR_LEG_GPIO`（定长 32B 分支只由 `0xFF` 触发）、`bsp_rs485.h` 原型、`main.h` 的 `GPIOHEAD` 宏。HC32↔STM32 仍为 0xAA Cmd 0x10 查询 / 3B 应答 + 0xFF 32B 报警命令转发，协议未改。README 协议章节同步更新（下行 PDUHEAD 唯一、上行 `gpio_pdu` 字段表、通道链路 0xAA 说明）。
 - **feat**: 新增 `bsp_report.c/.h`：`bsp_report_build()` 组 3B 上报负载——Byte0 GPIO_IN 位图（bit0..2 雷达 PC14/PC13/PH2 高有效、bit3 GPIO_IN1=摄像头 PB0 低有效、bit4 GPIO_IN2=继电器 PB1 低有效）、Byte1 安装模式位图（LIGHT/SYNC/RADAR/AICAM/EAS）、Byte2 alarm_done；`common.c` 0xAA **Cmd 0x10** 查询回该 3B，`CMD 0x01` 仍回 0x81 回显。
 - **refactor**: `Radar_Led_update()`（`bsp_exint.c`/`main.h` 原型）改为 **void 返回 + 直接 IO 控制**（旧 `LED_Start/Led_Stop` 定时闪烁逻辑 `#if 0` 保留）：报警(R/G) 优先；蓝灯 = presence 且**保持 1s**（`RADAR_PRESENCE_HOLD_MS`，消除雷达 ~100ms 脉冲间隙导致的闪烁）、`LIGHT_ON` 常亮；板载 Radar_LED 跟随实时 presence（不保持）。
