@@ -28,20 +28,25 @@ LED_T R_tLED;
 LED_T G_tLED;
 LED_T B_tLED;
 
-static volatile uint8_t mutex_led = 0;
+/* LED_T 的互斥: LED 状态机 LED_Pro() 在 SysTick 中断里跑, 主循环(Led_Stop/Led_Start)
+ * 修改同一个 LED_T 时需要短暂的临界区。这里用标准的 PRIMASK 保存/恢复:
+ *   - 不再调用 HAL_SuspendTick()/HAL_ResumeTick()(那是低功耗 API, 会停掉 SysTick 中断使能,
+ *     导致临界区期间的 tick 被丢失、HAL_GetTick() 少走);
+ *   - 屏蔽中断期间 SysTick 异常只是被挂起, 解锁后立刻补执行, 时基不受影响;
+ *   - 临界区只有几十条指令(约 1~2us), 对 460800 的串口中断无影响。
+ * 注意: lock/unlock 必须成对, 且不可嵌套(单一备份变量)。
+ */
+static uint32_t s_ledCritPrimask = 0u;
 
 void mutex_led_lock(void)
 {
-
-    mutex_led = 1;
-    HAL_SuspendTick();
+    s_ledCritPrimask = __get_PRIMASK();
+    __disable_irq();
 }
-
 
 void mutex_led_unlock(void)
 {
-    mutex_led = 0;
-    HAL_ResumeTick();
+    __set_PRIMASK(s_ledCritPrimask);
 }
 void bsp_InitLed(void)
 {

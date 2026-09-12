@@ -62,6 +62,8 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 - **docs**：新增《设计定稿备忘 2026-09-04》（`docs/decisions_2026-09-04.md`）：汇总当日决策——老格式冻结(0xFF/0x55)+0xAA 变长新帧(Len+Cmd+Addr+Payload+CRC16)、按帧头分流的状态机接收引擎与三判决点/滑窗重同步、实时性=事件+周期+迟滞、流水线轮询、OTA A/B 槽/代理缓存、已确认产品口径与明天开工顺序。未改动任何固件代码。
 ### [stm32f0] BSP / app
 
+- `[stm32f0]` **refactor**: `bsp_led.c` 的 LED 互斥改为标准临界区。原来 `mutex_led_lock/unlock` 用 `HAL_SuspendTick()/HAL_ResumeTick()`（低功耗 API）来挡 SysTick，等于**每次 `Led_Stop()` 都停掉全局时基** —— 临界区内的 tick 被永久丢失、`HAL_GetTick()` 少走，而 `bsp_RunPer10ms`/`BEEP_Pro`/雷达判活(`radarStaleMs`)/触发保持窗口/上行心跳全部依赖该时基；同时 `mutex_led` 标志只写不读，是假互斥。现改为 `__get_PRIMASK()` + `__disable_irq()` / `__set_PRIMASK()`：屏蔽期间 SysTick 异常只是**挂起**、解锁后立即补执行，**时基不丢**，也不再动用 HAL 低功耗 API；临界区仅几十条指令（约 1~2µs），对 460800 串口中断无影响。删除只写不读的 `mutex_led`；`bsp_led.h` 注明 lock/unlock 需成对且不可嵌套。
+
 - `[stm32f0]` **chore**: 调试期配置调整（现场调试用）—— `bsp.h` 关闭看门狗 `STM32F0_IWDG_ENABLE (1U) → (0U)`；`bsp.c` 把 `rd_idkey_fun()` 移出 `#if STM32F0_IWDG_ENABLE` 改为**上电必调**（UID 校验不再随看门狗开关失效），并把本板 UID 期望值由 `0x587B3B44` 更新为 `0x03852952`；`MDK-ARM/STM32F030.uvprojx` 编译优化由 `-O3/oTime` 改为 `-O0`（便于单步调试）。**注：量产烧录前需把 IWDG 打开、优化调回。**
 
 - `[stm32f0]` **fix**: 修复"关闭某路雷达后 LED 常亮不更新 / 触发信号一直为 1"——根因:**STM32 侧的雷达状态只在收到 HC32 的 Cmd 0x10 应答时才写入**, 该口若不再应答(该路雷达被关闭、板子掉线、接线断开), `sPorts[i].radarVal` 会**冻结在最后一次的 1**, 保持窗口永不结束 → LED 常亮、`Host_IRQ` 恒为 1。修法(STM32 侧自己判活/实时刷新, 不依赖 HC32 侧):

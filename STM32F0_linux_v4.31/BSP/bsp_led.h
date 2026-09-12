@@ -42,6 +42,7 @@ void bsp_LedOff(uint8_t _no);
 void LED_Pro(LED_T *g_tled,uint8_t ledid);
 void Led_Stop(LED_T *g_tled,uint8_t ledid);
 void Led_status_update(void);
+/* LED_T 访问临界区: 内部用 PRIMASK 保存/恢复, 必须成对调用且不可嵌套(见 bsp_led.c) */
 void mutex_led_lock(void);
 void mutex_led_unlock(void);
 void Led_pwr_init(LED_T *g_tled,uint8_t ledid);
