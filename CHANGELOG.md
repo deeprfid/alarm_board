@@ -62,6 +62,12 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 - **docs**：新增《设计定稿备忘 2026-09-04》（`docs/decisions_2026-09-04.md`）：汇总当日决策——老格式冻结(0xFF/0x55)+0xAA 变长新帧(Len+Cmd+Addr+Payload+CRC16)、按帧头分流的状态机接收引擎与三判决点/滑窗重同步、实时性=事件+周期+迟滞、流水线轮询、OTA A/B 槽/代理缓存、已确认产品口径与明天开工顺序。未改动任何固件代码。
 ### [stm32f0] BSP / app
 
+- **docs**: 新增 **Linux 侧接口文档 + 解析库**（供 Linux 主机解析 STM32F0 中继板上行帧）：
+  - `docs/stm32_uplink_interface.md` **v1.0**：串口参数（COM1 @115200 8N1）、0xFF/32B 定长帧壳与 CRC-16/CCITT-FALSE（poly 0x1021/init 0xFFFF，覆盖 0..29，小端，自检向量 `"123456789"`→`0x29B1`）、上行 `gpio_pdu` 字段表（`Rad_Status[8]`/`Alarm_Done[8]` 按 **8 支 RFID 天线**、`GPIO[10]` 预留）、5 路雷达板→8 天线映射、发送时机（变化即报 / 1s 心跳 / 命令回执）、下行 `alarm_pdu` 字段表与 `AntID`=天线号 1..8 语义、LED 颜色码、键壮性/超时建议、CRC 参考实现（C/Python）与待定字段清单；
+  - `docs/cpp/stm32_gpio_pdu.hpp`：仅头文件 C++11 解析库 —— `crc16_ccitt()`、`GpioPdu`（按天线号 1..8 的 `present()/alarming()`）、流式 `GpioPduParser`（任意切分喂入、逐字节重同步、CRC 校验、帧/CRC 错/重同步统计、回调或 `pop()` 取帧）、`GpioPduStatus`（状态快照 + 变化判定 + 链路判活，默认 2.5s）、`build_frame()` 自测组帧；
+  - `docs/cpp/example_gpio_pdu.cpp` + `docs/cpp/README.md`：示例程序（`--selftest` 无硬件自测 / `-d /dev/ttySx -b 115200` 读串口 / 从 stdin 读）与编译说明（`g++ -std=c++11 -I docs/cpp ...`）。
+  - 解析算法已用等价 Python 镜像验证：CRC 自检向量、整帧/逐字节喂入、噪声+半帧重同步、坏 CRC 丢弃、心跳帧不判变化。
+
 - `[stm32f0]` **refactor**: LED 并发策略改为**"单一所有者 + 请求标志"**（承接上一条）：`LED_T` 增加 `ucStopReq`；`LED_Pro()`（SysTick 中断里运行，是 `LED_T` 的唯一所有者）开头先处理停止请求并调用 `Led_pwr_init()` 收尾（清全部计数 + `bsp_LedOff`）；`Led_Stop()` 退化为**只投递请求** —— 写 `ucEnalbe=0` + `ucStopReq=1` + 立即 `bsp_LedOff()`，**不再调用 `Led_pwr_init()`、彻底不需要临界区**（`mutex_led_lock/unlock` 与其 PRIMASK 备份变量整体删除），可在任意上下文安全调用；`LED_Start()` 改为"先写完整参数、最后置 `ucEnalbe=1`（单字节写原子）并撤销未决停止请求"，消除中断读到半套参数的撕裂。代价：`Led_Stop()` 后状态机最迟在下一个 10ms tick 内彻底停止（物理熄灭是立即的）。`bsp_led.h` 同步更新 `LED_T` 定义与注释。
 
 - `[stm32f0]` **refactor**: `bsp_led.c` 的 LED 互斥改为标准临界区。原来 `mutex_led_lock/unlock` 用 `HAL_SuspendTick()/HAL_ResumeTick()`（低功耗 API）来挡 SysTick，等于**每次 `Led_Stop()` 都停掉全局时基** —— 临界区内的 tick 被永久丢失、`HAL_GetTick()` 少走，而 `bsp_RunPer10ms`/`BEEP_Pro`/雷达判活(`radarStaleMs`)/触发保持窗口/上行心跳全部依赖该时基；同时 `mutex_led` 标志只写不读，是假互斥。现改为 `__get_PRIMASK()` + `__disable_irq()` / `__set_PRIMASK()`：屏蔽期间 SysTick 异常只是**挂起**、解锁后立即补执行，**时基不丢**，也不再动用 HAL 低功耗 API；临界区仅几十条指令（约 1~2µs），对 460800 串口中断无影响。删除只写不读的 `mutex_led`；`bsp_led.h` 注明 lock/unlock 需成对且不可嵌套。
