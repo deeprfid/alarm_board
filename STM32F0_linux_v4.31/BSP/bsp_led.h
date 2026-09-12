@@ -23,7 +23,8 @@ typedef struct _LED_T
 	uint16_t usCycle;
 	uint16_t usCount;
 	uint16_t usCycleCount;
-	uint8_t  ucMute;		/* 1表示静音 */	
+	uint8_t  ucMute;		/* 1表示静音 */
+	uint8_t  ucStopReq;		/* 1 = 有停止请求, 由 LED_Pro() 在中断里收尾 */
 }LED_T;
 
 #define PORTLED_1  (1UL)
@@ -42,9 +43,6 @@ void bsp_LedOff(uint8_t _no);
 void LED_Pro(LED_T *g_tled,uint8_t ledid);
 void Led_Stop(LED_T *g_tled,uint8_t ledid);
 void Led_status_update(void);
-/* LED_T 访问临界区: 内部用 PRIMASK 保存/恢复, 必须成对调用且不可嵌套(见 bsp_led.c) */
-void mutex_led_lock(void);
-void mutex_led_unlock(void);
 void Led_pwr_init(LED_T *g_tled,uint8_t ledid);
 void LED_Start(LED_T *g_tled,uint8_t ledid,uint16_t _usBeepTime, uint16_t _usStopTime, uint16_t _usCycle);
 #endif

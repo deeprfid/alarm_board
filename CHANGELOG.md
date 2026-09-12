@@ -62,6 +62,8 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 - **docs**：新增《设计定稿备忘 2026-09-04》（`docs/decisions_2026-09-04.md`）：汇总当日决策——老格式冻结(0xFF/0x55)+0xAA 变长新帧(Len+Cmd+Addr+Payload+CRC16)、按帧头分流的状态机接收引擎与三判决点/滑窗重同步、实时性=事件+周期+迟滞、流水线轮询、OTA A/B 槽/代理缓存、已确认产品口径与明天开工顺序。未改动任何固件代码。
 ### [stm32f0] BSP / app
 
+- `[stm32f0]` **refactor**: LED 并发策略改为**"单一所有者 + 请求标志"**（承接上一条）：`LED_T` 增加 `ucStopReq`；`LED_Pro()`（SysTick 中断里运行，是 `LED_T` 的唯一所有者）开头先处理停止请求并调用 `Led_pwr_init()` 收尾（清全部计数 + `bsp_LedOff`）；`Led_Stop()` 退化为**只投递请求** —— 写 `ucEnalbe=0` + `ucStopReq=1` + 立即 `bsp_LedOff()`，**不再调用 `Led_pwr_init()`、彻底不需要临界区**（`mutex_led_lock/unlock` 与其 PRIMASK 备份变量整体删除），可在任意上下文安全调用；`LED_Start()` 改为"先写完整参数、最后置 `ucEnalbe=1`（单字节写原子）并撤销未决停止请求"，消除中断读到半套参数的撕裂。代价：`Led_Stop()` 后状态机最迟在下一个 10ms tick 内彻底停止（物理熄灭是立即的）。`bsp_led.h` 同步更新 `LED_T` 定义与注释。
+
 - `[stm32f0]` **refactor**: `bsp_led.c` 的 LED 互斥改为标准临界区。原来 `mutex_led_lock/unlock` 用 `HAL_SuspendTick()/HAL_ResumeTick()`（低功耗 API）来挡 SysTick，等于**每次 `Led_Stop()` 都停掉全局时基** —— 临界区内的 tick 被永久丢失、`HAL_GetTick()` 少走，而 `bsp_RunPer10ms`/`BEEP_Pro`/雷达判活(`radarStaleMs`)/触发保持窗口/上行心跳全部依赖该时基；同时 `mutex_led` 标志只写不读，是假互斥。现改为 `__get_PRIMASK()` + `__disable_irq()` / `__set_PRIMASK()`：屏蔽期间 SysTick 异常只是**挂起**、解锁后立即补执行，**时基不丢**，也不再动用 HAL 低功耗 API；临界区仅几十条指令（约 1~2µs），对 460800 串口中断无影响。删除只写不读的 `mutex_led`；`bsp_led.h` 注明 lock/unlock 需成对且不可嵌套。
 
 - `[stm32f0]` **chore**: 调试期配置调整（现场调试用）—— `bsp.h` 关闭看门狗 `STM32F0_IWDG_ENABLE (1U) → (0U)`；`bsp.c` 把 `rd_idkey_fun()` 移出 `#if STM32F0_IWDG_ENABLE` 改为**上电必调**（UID 校验不再随看门狗开关失效），并把本板 UID 期望值由 `0x587B3B44` 更新为 `0x03852952`；`MDK-ARM/STM32F030.uvprojx` 编译优化由 `-O3/oTime` 改为 `-O0`（便于单步调试）。**注：量产烧录前需把 IWDG 打开、优化调回。**

@@ -28,26 +28,12 @@ LED_T R_tLED;
 LED_T G_tLED;
 LED_T B_tLED;
 
-/* LED_T 的互斥: LED 状态机 LED_Pro() 在 SysTick 中断里跑, 主循环(Led_Stop/Led_Start)
- * 修改同一个 LED_T 时需要短暂的临界区。这里用标准的 PRIMASK 保存/恢复:
- *   - 不再调用 HAL_SuspendTick()/HAL_ResumeTick()(那是低功耗 API, 会停掉 SysTick 中断使能,
- *     导致临界区期间的 tick 被丢失、HAL_GetTick() 少走);
- *   - 屏蔽中断期间 SysTick 异常只是被挂起, 解锁后立刻补执行, 时基不受影响;
- *   - 临界区只有几十条指令(约 1~2us), 对 460800 的串口中断无影响。
- * 注意: lock/unlock 必须成对, 且不可嵌套(单一备份变量)。
+/* LED_T 的并发策略: 状态机所有者唯一 —— LED_Pro() 在 SysTick 中断里跑, 独占读写
+ * usCount/ucState/ucEnalbe 等; 主循环只做两件事:
+ *   请求启动: LED_Start() 先写完整参数, 最后才写 ucEnalbe=1(单字节写天然原子);
+ *   请求停止: Led_Stop() 写 ucEnalbe=0 + ucStopReq=1, 由 LED_Pro() 在中断里收尾。
+ * 因此不再需要任何临界区(原先的 mutex_led_lock/unlock 及其 HAL_SuspendTick 已删除)。
  */
-static uint32_t s_ledCritPrimask = 0u;
-
-void mutex_led_lock(void)
-{
-    s_ledCritPrimask = __get_PRIMASK();
-    __disable_irq();
-}
-
-void mutex_led_unlock(void)
-{
-    __set_PRIMASK(s_ledCritPrimask);
-}
 void bsp_InitLed(void)
 {
     Led_Stop(&Port_1_LED, PORTLED_1);
@@ -181,6 +167,13 @@ void bsp_LedOff(uint8_t _no)
 */
 void LED_Pro(LED_T *g_tled, uint8_t ledid)
 {
+    /* 停止请求: 由本中断收尾(清计数 + 物理熄灭), 主循环的 Led_Stop() 只负责投递 */
+    if (g_tled->ucStopReq != 0u)
+    {
+        g_tled->ucStopReq = 0u;
+        Led_pwr_init(g_tled, ledid);      /* 内部会清全部参数并 bsp_LedOff() */
+        return;
+    }
 
     if ((g_tled->ucEnalbe == 0) || (g_tled->usStopTime == 0) || (g_tled->ucMute == 1))
     {
@@ -239,12 +232,14 @@ void LED_Start(LED_T *g_tled, uint8_t ledid, uint16_t _usBeepTime, uint16_t _usS
         return;
     }
 
+    /* 先写完整参数, 最后才置 ucEnalbe(单字节写原子), 避免中断里读到半套参数 */
     g_tled->usBeepTime = _usBeepTime;
     g_tled->usStopTime = _usStopTime;
     g_tled->usCycle = _usCycle;
     g_tled->usCount = 0;
     g_tled->usCycleCount = 0;
     g_tled->ucState = 0;
+    g_tled->ucStopReq = 0u;     /* 撤销可能未决的停止请求(最后一次调用生效) */
     g_tled->ucEnalbe = 1;	    /* 设置完全局参数后再使能发声标志 */
     bsp_LedOn(ledid);			    /* 开始发声 */
 }
@@ -257,12 +252,14 @@ void LED_Start(LED_T *g_tled, uint8_t ledid, uint16_t _usBeepTime, uint16_t _usS
 *	返 回 值: 无
 *********************************************************************************************************
 */
+/* 停止: 只投递请求, 真正的状态机清理由 LED_Pro()(SysTick 中断) 完成
+ * (先关使能并立即熄灭, 保证最多 10ms 内彻底停止, 且可与中断安全并发)
+ */
 void Led_Stop(LED_T *g_tled, uint8_t ledid)
 {
-    mutex_led_lock();
-    g_tled->ucEnalbe = 0;
-    Led_pwr_init(g_tled, ledid);
-    mutex_led_unlock();
+    g_tled->ucEnalbe  = 0u;
+    g_tled->ucStopReq = 1u;
+    bsp_LedOff(ledid);
 }
 
 
