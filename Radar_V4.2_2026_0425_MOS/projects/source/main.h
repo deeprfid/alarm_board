@@ -72,6 +72,19 @@
 
 
 
+/* 雷达扫描数据(老 32B 确认帧字段)
+ * 字段含义见 radar_proto.h 的 radar_report_t */
+typedef struct {
+    uint16_t target_state;
+    uint16_t moving_target_distance;
+    uint16_t moving_target_energy;
+    uint16_t stationary_target_distance;
+    uint16_t stationary_target_energy;
+    uint16_t detection_distance;
+    uint16_t pinout;
+    uint16_t targeted;
+} stc_radar_scan_data_t;
+
 typedef struct
 {
     unsigned char framehead;
@@ -101,6 +114,8 @@ en_pin_state_t switch_decoder_pio_read(uint8_t channel);
 void switch_decoder_init(void);
 void Relay_status_check(void);
 void system_power_on(void);
+void HashConfig(void);
+
 #endif /* __MAIN_H__ */
 
 /*******************************************************************************

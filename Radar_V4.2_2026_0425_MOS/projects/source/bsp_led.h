@@ -31,6 +31,11 @@ typedef struct _LED_T
 #define LED_RLED     (1UL)
 #define LED_GLED     (2UL)
 #define LED_BLED     (3UL)
+/* 板载指示灯(用于上电自检/状态) */
+#define BOARD_LED_1_PORT   (GPIO_PORT_A)
+#define BOARD_LED_1_PIN    (GPIO_PIN_11)
+#define BOARD_LED_2_PIN    (GPIO_PIN_12)
+
 #define OPA_BUZZLED  (4UL)
 #define RADARLED     (5UL)
 #define RELAYGPO     (6UL)
@@ -61,6 +66,7 @@ typedef struct _LED_T
 
 /* 供外部调用的函数声明 */
 void bsp_InitLed(void);
+void Board_LED_Init(void);
 void bsp_LedOn(uint8_t _no);
 void bsp_LedOff(uint8_t _no);
 void bsp_LedToggle(uint8_t _no);

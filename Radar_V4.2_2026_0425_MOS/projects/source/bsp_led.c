@@ -91,6 +91,26 @@ void bsp_InitLed(void)
 
 /*
 *********************************************************************************************************
+*    板载指示灯初始化(上电自检用): 绿指示灯 PB3 + BOARD_LED_1/2(PA11/PA12)
+*********************************************************************************************************
+*/
+void Board_LED_Init(void)
+{
+    stc_gpio_init_t stcGpioInit;
+
+    (void)GPIO_StructInit(&stcGpioInit);
+    stcGpioInit.u16PinState = PIN_STAT_RST;
+    stcGpioInit.u16PinDir   = PIN_DIR_OUT;
+    stcGpioInit.u16PinDrv   = PIN_MID_DRV;
+    GPIO_SetDebugPort(GPIO_PIN_SWO, DISABLE);
+
+    (void)GPIO_Init(RADAR_BOARD_LED_G_PORT, RADAR_BOARD_LED_G_PIN, &stcGpioInit);
+    (void)GPIO_Init(BOARD_LED_1_PORT, BOARD_LED_1_PIN, &stcGpioInit);
+    (void)GPIO_Init(BOARD_LED_1_PORT, BOARD_LED_2_PIN, &stcGpioInit);
+}
+
+/*
+*********************************************************************************************************
 *	函 数 名: bsp_LedOn
 *	功能说明: 点亮指定的LED指示灯。
 *	形    参:  _no : 指示灯序号，范围 1 - 4

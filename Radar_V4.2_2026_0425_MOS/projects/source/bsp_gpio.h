@@ -22,6 +22,10 @@ void WDT_Config(void);
 #define GPID4_RADAR1   (0x4)
 #define GPID5_RADAR2   (0x5)
 
+/* 雷达板绿色指示灯 */
+#define RADAR_BOARD_LED_G_PORT   (GPIO_PORT_B)
+#define RADAR_BOARD_LED_G_PIN    (GPIO_PIN_03)
+
 #endif
 
 
