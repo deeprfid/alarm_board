@@ -2,6 +2,7 @@
  * radar.c -- LD2410C 雷达服务层实现
  ******************************************************************************/
 #include "radar.h"
+#include "radar_port.h"       /* 硬件层: init/write/tx_busy/set_baud/poll */
 #include <string.h>           /* memset */
 
 /* 1ms 计数(定义在 bsp_exint.c) */
