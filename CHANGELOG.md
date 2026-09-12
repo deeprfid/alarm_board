@@ -62,6 +62,10 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 - **docs**：新增《设计定稿备忘 2026-09-04》（`docs/decisions_2026-09-04.md`）：汇总当日决策——老格式冻结(0xFF/0x55)+0xAA 变长新帧(Len+Cmd+Addr+Payload+CRC16)、按帧头分流的状态机接收引擎与三判决点/滑窗重同步、实时性=事件+周期+迟滞、流水线轮询、OTA A/B 槽/代理缓存、已确认产品口径与明天开工顺序。未改动任何固件代码。
 ### [stm32f0] BSP / app
 
+- **docs**: 按要求**精简**为"上行包格式定义 + 数据包解析"：
+  - `docs/stm32_uplink_interface.md` 只保留：上行包帧结构表(32B/帧头 `0xFF`/CRC 覆盖 0..29 小端)、**数据包结构体定义**（与固件 `BSP/app.h` 的 `gpio_pdu` 完全一致：`FrameHead/Pdu_len/DeviceID/AntID/Rad_Status[8]/Alarm_Done[8]/GPIO[10]/uint16 crc`，32B 无填充）、字段定义与示例帧；删除了下行协议、串口参数、时序/心跳、健壮性建议、天线映射推导等与"上传包格式"无关的内容；
+  - 解析代码收敛为单文件 `docs/stm32_gpio_pdu.hpp`：`crc16_ccitt()` + `GpioPdu` + `parse_gpio_pdu()`（校验帧头/帧长/CRC 后取字段），**不含收发、缓存、状态管理、统计与示例程序**；删除 `docs/cpp/`（示例程序、README、旧解析器）。
+
 - **docs**: 新增 **Linux 侧接口文档 + 解析库**（供 Linux 主机解析 STM32F0 中继板上行帧）：
   - `docs/stm32_uplink_interface.md` **v1.0**：串口参数（COM1 @115200 8N1）、0xFF/32B 定长帧壳与 CRC-16/CCITT-FALSE（poly 0x1021/init 0xFFFF，覆盖 0..29，小端，自检向量 `"123456789"`→`0x29B1`）、上行 `gpio_pdu` 字段表（`Rad_Status[8]`/`Alarm_Done[8]` 按 **8 支 RFID 天线**、`GPIO[10]` 预留）、5 路雷达板→8 天线映射、发送时机（变化即报 / 1s 心跳 / 命令回执）、下行 `alarm_pdu` 字段表与 `AntID`=天线号 1..8 语义、LED 颜色码、键壮性/超时建议、CRC 参考实现（C/Python）与待定字段清单；
   - `docs/cpp/stm32_gpio_pdu.hpp`：仅头文件 C++11 解析库 —— `crc16_ccitt()`、`GpioPdu`（按天线号 1..8 的 `present()/alarming()`）、流式 `GpioPduParser`（任意切分喂入、逐字节重同步、CRC 校验、帧/CRC 错/重同步统计、回调或 `pop()` 取帧）、`GpioPduStatus`（状态快照 + 变化判定 + 链路判活，默认 2.5s）、`build_frame()` 自测组帧；
