@@ -9,7 +9,6 @@ extern LED_T Board_LED_1;
 extern LED_T Board_LED_2;
 
 
-extern stc_radar_scan_data_t  HLKLD2410_Radar;
 uint8_t rgb_led_status = 0, EAS_switch = 0, offline_flag = 0;
 __align(64) alarm_confirm_package  HC32_RS485_corfirm_PDU;
 extern stc_ring_buf_t m_stcRingBuf;
@@ -218,7 +217,20 @@ int8_t Get_pdu_data(uint8_t *pdubuff)
         HC32_RS485_corfirm_PDU.framehead = PDUHEAD;
         HC32_RS485_corfirm_PDU.deviceID = getpdupack->DeviceID;
         HC32_RS485_corfirm_PDU.alarm_done = 1;
-        memcpy(&HC32_RS485_corfirm_PDU.radar, &HLKLD2410_Radar.target_state, sizeof(HLKLD2410_Radar));
+        {
+            const radar_report_t *rr = radar_report(0);
+
+            if (rr != 0)
+            {
+                HC32_RS485_corfirm_PDU.radar.target_state              = rr->target_state;
+                HC32_RS485_corfirm_PDU.radar.moving_target_distance    = rr->moving_distance_cm;
+                HC32_RS485_corfirm_PDU.radar.moving_target_energy      = rr->moving_energy;
+                HC32_RS485_corfirm_PDU.radar.stationary_target_distance = rr->still_distance_cm;
+                HC32_RS485_corfirm_PDU.radar.stationary_target_energy  = rr->still_energy;
+                HC32_RS485_corfirm_PDU.radar.detection_distance        = rr->detect_distance_cm;
+                HC32_RS485_corfirm_PDU.radar.pinout                    = rr->out_pin;
+            }
+        }
         HC32_RS485_corfirm_PDU.crc = CalcCRC((uint8_t *)&HC32_RS485_corfirm_PDU, sizeof(HC32_RS485_corfirm_PDU) -2);
         return LL_OK;
     }
@@ -289,9 +301,19 @@ uint8_t bsp_get_radar_singal(void)
 static void hc32_handle_legacy_frame(void)
 {
     uint8_t alarm_databuf[APP_FRAME_LEN_MAX];
-    uint8_t radarsingal = bsp_get_radar_singal();
+	  uint8_t radarsingal =PIN_RESET,aicamsingal=PIN_SET;
+	  if(PIN_RESET==switch_decoder_pio_read(RADAR_MODE))
+		{
+		  radarsingal=   bsp_get_radar_singal();
+		}	
+     
+     if(PIN_RESET==switch_decoder_pio_read(AICAM_MODE))
+		 {
+		    aicamsingal = switch_decoder_pio_read(AI_CAMERA);	
+		 }			 
+   	
     en_pin_state_t p_Easmode   = switch_decoder_pio_read(EAS_MODE);
-    en_pin_state_t aicamsingal = switch_decoder_pio_read(AI_CAMERA);
+   
     int8_t pduflag;
 
     memcpy(alarm_databuf, s_hc32_rx.buf, APP_FRAME_LEN_MAX);

@@ -4,7 +4,7 @@
  * This file only assembles the payload: GPIO/radar by direct GPIO read,
  * workmode bit by bit via switch_decoder_pio_read.
  ******************************************************************************/
-#include "main.h"        /* pulls in bsp_radar.h (RADAR_PORT..PIN), mode macros, decoder decl */
+#include "main.h"        /* pulls in radar.h (RADAR_PORT..PIN), mode macros, decoder decl */
 #include "bsp_report.h"
 
 /* 声光报警进行中的判据对象(定义在 bsp_led.c / bsp_beep.c) */

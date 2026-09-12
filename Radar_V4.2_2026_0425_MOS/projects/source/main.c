@@ -29,11 +29,13 @@ int32_t main(void)
     system_power_on();
     (void)WDT_Config();
 
+    (void)radar_init();          /* 雷达串口: USART1+DMA(波特率自适应由 radar_poll 推进) */
+
     for (;;)
     {
         Check_Uart_Pdu();
         Check_alarm_state();
-        Check_Radar_state();
+        radar_poll();            /* 雷达字节->分帧->解析(非阻塞) */
         Check_UidKey();
 
     }

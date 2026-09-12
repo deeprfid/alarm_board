@@ -90,12 +90,12 @@ COM6 -> 天线1 ; COM2 -> 天线2,3 ; COM3 -> 天线4,5 ; COM4 -> 天线6,7 ; CO
 
 ## HC32F460 报警板 V4.2（Radar_V4.2_2026_0425_MOS）
 
-- 主循环 `main.c`：Check_Uart_Pdu（收 PDU）→ Check_alarm_state（alarm_thread 消费 g_AlarmRing 消息）→ Check_Radar_state（雷达帧，当前仅清零）→ Check_UidKey（1s 例行 + 喂狗）。
+- 主循环 `main.c`：Check_Uart_Pdu（收 PDU）→ Check_alarm_state（alarm_thread 消费 g_AlarmRing 消息）→ radar_poll（雷达字节→分帧→解析，当前仅清零）→ Check_UidKey（1s 例行 + 喂狗）。
 - UART4 @460800 收主机 alarm_pdu（DMA + 超时收包，32B/包，入 m_stcRingBuf）。
 - 本地触发消息（g_AlarmRing）：MSG_485_TAG_RTU(1)/MSG_Relay_RX(5)→Alarm_On；MSG_NETWORK_OFFLINE(3)→蓝灯闪12次；MSG_LEDTEST(7)→RGB自检。
 - 合法包后回填 `HC32_RS485_corfirm_PDU`（帧头+DeviceID+alarm_done+雷达扫描数据+rng/uid key+CRC），当前版本未接发送。
 - 防拷贝：`Ucode_read()` 用 EFM 唯一ID+哈希+CRC 算 magic（Custom_By_SZBMA=1 时须等于 0xC1A53979，否则一切报警被拒）。
-- 雷达(LD2410 帧协议 USART1) 解析当前为占位清零；触发依赖雷达 OUT GPIO 与摄像头/继电器输入。
+- 雷达(LD2410C)：**新驱动分层实现**（`radar_cfg.h` 配置 / `radar_port.c` USART1+DMA / `radar_frame.c` 变长分帧 / `radar_proto.c` 协议 / `radar.c` 服务与命令）；上电非阻塞自适应波特率(256000/460800/115200)，可解析上报帧(目标状态/运动与静止距离、能量/探测距离，工程模式另有 9 门能量+光感+OUT)，支持参数读写(0x60/0x61/0x64/0xAA/0xA1/0x62/0x63)与底噪自检(0x0B/0x1B)；"有人"判定可选 OUT(默认)/串口/二者取或/串口优先掉线回落 OUT。
 - 硬件拨码开关（switch_decoder）选择工作模式：SYNC/RADAR/AICAM/EAS/LIGHT_ON 等影响蓝灯/雷达灯显示策略（bsp_exint.c Radar_Led_update）。
 
 ## 维护约定

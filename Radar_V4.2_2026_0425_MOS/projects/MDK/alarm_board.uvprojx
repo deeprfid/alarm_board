@@ -53,7 +53,7 @@
           <CreateExecutable>1</CreateExecutable>
           <CreateLib>0</CreateLib>
           <CreateHexFile>1</CreateHexFile>
-          <DebugInformation>1</DebugInformation>
+          <DebugInformation>0</DebugInformation>
           <BrowseInformation>0</BrowseInformation>
           <ListingPath>.\output\debug\</ListingPath>
           <HexFormatSelection>1</HexFormatSelection>
@@ -313,8 +313,8 @@
           </ArmAdsMisc>
           <Cads>
             <interw>1</interw>
-            <Optim>0</Optim>
-            <oTime>0</oTime>
+            <Optim>4</Optim>
+            <oTime>1</oTime>
             <SplitLS>0</SplitLS>
             <OneElfS>1</OneElfS>
             <Strict>0</Strict>
@@ -664,9 +664,24 @@
               <FilePath>..\source\bsp_alarm.c</FilePath>
             </File>
             <File>
-              <FileName>bsp_radar.c</FileName>
+              <FileName>radar.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\source\bsp_radar.c</FilePath>
+              <FilePath>..\source\radar.c</FilePath>
+            </File>
+            <File>
+              <FileName>radar_frame.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\radar_frame.c</FilePath>
+            </File>
+            <File>
+              <FileName>radar_port.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\radar_port.c</FilePath>
+            </File>
+            <File>
+              <FileName>radar_proto.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\radar_proto.c</FilePath>
             </File>
             <File>
               <FileName>bsp_rs485.c</FileName>
@@ -1360,9 +1375,24 @@
               <FilePath>..\source\bsp_alarm.c</FilePath>
             </File>
             <File>
-              <FileName>bsp_radar.c</FileName>
+              <FileName>radar.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\source\bsp_radar.c</FilePath>
+              <FilePath>..\source\radar.c</FilePath>
+            </File>
+            <File>
+              <FileName>radar_frame.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\radar_frame.c</FilePath>
+            </File>
+            <File>
+              <FileName>radar_port.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\radar_port.c</FilePath>
+            </File>
+            <File>
+              <FileName>radar_proto.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\radar_proto.c</FilePath>
             </File>
             <File>
               <FileName>bsp_rs485.c</FileName>
