@@ -124,6 +124,29 @@
 /* ============================ 设备数量 ============================ */
 #define RADAR_DEV_CNT                   (1U)        /* 第一版只调通 1 路串口雷达 */
 
+/* ============================ A. 探测行为参数(掉电保存, 按现场调) ============================
+ * RADAR_PARAM_EN = 1: 上电(自适应锁定波特率后)自动把下面这组参数写进模块, **幂等** ——
+ *   先 0x0061/0x00AE 读回当前配置与目标逐项比对, 只写不一致的项, 全一致则一条命令都不发;
+ *   写完再读回复检, 结果见 radar_param_state() (4 = 成功/本来就一致, 5 = 失败)。
+ * 数值按现场调; 每块模块只需配置一次(参数存在模块 flash 里)。
+ * 注意: 距离分辨率(0x00AA)不在此列 —— 它要重启模块才生效, 用 radar_set_resolution() 手动设。
+ * 光感辅助(0x00AD): 本产品不启用光感, 且 OUT 默认电平必须为 0(有人=高), 否则有人/无人会反。
+ */
+#define RADAR_PARAM_EN                  (0U)        /* 0 = 不自动配置(只读); 1 = 上电自动配置 */
+#define RADAR_PARAM_MAX_MOVE_GATE       (3U)        /* 最大运动距离门 2~8 (0.75m/门) */
+#define RADAR_PARAM_MAX_STILL_GATE      (3U)        /* 最大静止距离门 2~8 */
+#define RADAR_PARAM_NO_BODY_SEC         (3U)        /* 无人持续时间(秒), 出厂 5 */
+#define RADAR_PARAM_AUX_MODE            (0U)        /* 0 关闭光感辅助 / 1 光感<阈值 / 2 光感>阈值 */
+#define RADAR_PARAM_AUX_THRESHOLD       (0x80U)     /* 光感阈值 0~255 */
+#define RADAR_PARAM_AUX_OUT_LEVEL       (0U)        /* OUT 默认电平: 0 默认低(有人=高, 必须) */
+/* 各距离门灵敏度 0~100 (100 = 忽略该门), 下标 0..8 */
+#define RADAR_PARAM_MOVE_SENS           { 50U, 50U, 40U, 30U, 20U, 15U, 15U, 15U, 15U }
+#define RADAR_PARAM_STILL_SENS          {  0U,  0U, 40U, 40U, 30U, 30U, 20U, 20U, 20U }  /* 门0/1 静止灵敏度不可设 */
+
+/* C. 上电读回一次只读信息(读参数/分辨率/辅助控制/固件版本/MAC)到 s_dump, 供 Keil Watch 查看。
+ * 只读不写, 无害; 出厂可置 0。 */
+#define RADAR_DUMP_ONCE                 (1U)
+
 /* ============================ 调试输出(上板验证用, 事后删除) ============================
  * RADAR_DBG_EN : 1 = 打开(临时, 见 docs/hc32_radar_bringup.md), 0 = 关闭(空实现/不占空间)
  *               验证通过后置 0, 或整体删除 radar_dbg.c/.h 并去掉 main.c 里的调用

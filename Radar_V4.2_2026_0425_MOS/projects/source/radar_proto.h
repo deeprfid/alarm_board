@@ -29,6 +29,8 @@
 #define RADAR_CMD_RESOLUTION_GET    (0x00ABU)   /* 查询距离分辨率 */
 #define RADAR_CMD_NOISE_START       (0x000BU)   /* 开始底噪检测+灵敏度自动配置(值=秒) */
 #define RADAR_CMD_NOISE_STATUS      (0x001BU)   /* 查询底噪检测状态 0/1/2 */
+#define RADAR_CMD_AUX_SET           (0x00ADU)   /* 辅助控制(光感)功能设置 */
+#define RADAR_CMD_AUX_GET           (0x00AEU)   /* 查询辅助控制配置 */
 
 /* 上报数据类型 */
 #define RADAR_REPORT_TYPE_BASIC     (0x02U)     /* 目标基本信息 */
@@ -84,6 +86,20 @@ typedef struct {
     uint16_t no_body_sec;                       /* 无人持续时间(秒) */
 } radar_params_t;
 
+/* ------------------------------ 辅助控制 / 固件信息 ------------------------------ */
+typedef struct {
+    uint8_t mode;                               /* 0 关闭光感辅助 / 1 光感<阈值 / 2 光感>阈值 */
+    uint8_t threshold;                          /* 光感阈值 0..255 (出厂 0x80) */
+    uint8_t out_level;                          /* OUT 默认电平: 0 默认低(有人=高) / 1 反相 */
+    uint8_t reserved;
+} radar_aux_t;
+
+typedef struct {
+    uint16_t type;                              /* 固件类型(小端, 通常 0x0001) */
+    uint16_t major;                             /* 主版本号(小端): 0x0102 = V1.02 */
+    uint32_t minor_be;                          /* 次版本号 4 字节按大端读数(= 文档版本串, 如 0x22062416) */
+} radar_fw_t;
+
 /* ------------------------------ API ------------------------------ */
 /* 组一帧命令, 返回整帧长度(0 = 参数错误) */
 uint16_t radar_proto_build_cmd(uint16_t cmd, const uint8_t *val, uint8_t val_len,
@@ -93,5 +109,8 @@ int radar_proto_parse_ack(const radar_frame_t *f, radar_ack_t *out);
 int radar_proto_parse_report(const radar_frame_t *f, radar_report_t *out);
 int radar_proto_parse_params(const radar_ack_t *ack, radar_params_t *out);
 int radar_proto_parse_u16(const radar_ack_t *ack, uint16_t *out);   /* 取 2 字节返回值 */
+int radar_proto_parse_aux(const radar_ack_t *ack, radar_aux_t *out);
+int radar_proto_parse_fw(const radar_ack_t *ack, radar_fw_t *out);
+int radar_proto_parse_bytes(const radar_ack_t *ack, uint8_t *out, uint8_t want, uint8_t *got);
 
 #endif /* __RADAR_PROTO_H__ */

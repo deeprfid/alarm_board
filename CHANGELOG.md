@@ -156,6 +156,13 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
   - `RADAR_DBG_SET_BAUD_IDX` 一次性改模块波特率改为**完整时序**：0x00A1 设置 → 0x00A3 重启模块（协议规定配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动再切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧，每步都记事件。
   - 构建验证：4 种组合（FORCE=0 自适应8档 / FORCE=460800 / FORCE=0+SET_BAUD_IDX=8 / FORCE=256000）均 0 Error 0 Warning。
 - `[hc32f460]` **feat(把模块波特率改成 460800)**: `RADAR_DBG_SET_BAUD_IDX=8` 的一次性流程补齐**自检与回退**——使能配置 → `0x00A1(0x0008)` → `0x00A3` 重启模块（协议规定该配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧 → 自检 2.5s 看有无上报帧：成功记 `baud verify OK 460800`；失败自动回退旧波特率再看 2.5s，分别记 `old baud still OK` / `no data on either baud: check wiring`。注：厂家固件里的"出厂默认 256000"无法更改（`0x00A2` 恢复出厂即回到 256000），本流程是把 460800 写进**模块自己的 flash**，从此这块模块上电就是 460800（每块需各做一次）。
+- `[hc32f460]` **feat(雷达参数: A 探测行为参数 + C 只读/维护)**:
+  - **A 组新增写接口**: `radar_set_aux_control(mode, threshold, out_level)`（0x00AD 光感辅助/OUT 默认电平）—— 补齐 A 组最后一条；其余（`radar_set_max_gate` 0x0060 / `radar_set_sensitivity` 0x0064 / `radar_set_resolution` 0x00AA / `radar_eng_mode` 0x0062·0x0063 / `radar_noise_start·status` 0x000B·0x001B）此前已有；
+  - **A 组自动配置（幂等，默认关闭）**: `radar_cfg.h` 的 `RADAR_PARAM_EN` + 一组目标值宏（最大运动/静止距离门、无人持续时间、9+9 门灵敏度、光感辅助、OUT 默认电平）。上电在自适应锁定波特率后：先 `0x0061`/`0x00AE` 读回当前配置与目标逐项比对 → **只写不一致的项**（每拍只发一条命令，不长时间占住主循环）→ 写后读回复检；全一致则一条命令都不发。状态 `radar_param_state()`（4 成功/本来就一致, 5 失败）。门 0/1 的静止灵敏度按协议不可设置，比对与写入均跳过；距离分辨率（需重启生效）不纳入自动配置；
+  - **C 组新增只读/维护接口**: `radar_read_resolution()`（0x00AB）、`radar_read_aux_control()`（0x00AE，配 `radar_aux_t`）、`radar_read_fw_version()`（0x00A0，配 `radar_fw_t`）、`radar_read_mac()`（0x00A5）、`radar_factory_reset()`（0x00A2）—— 加上已有的 `radar_read_params()`（0x0061）与 `radar_restart()`（0x00A3），C 组全部补齐；
+  - 新增 `radar_read_all()` + 汇总结构 `radar_dump_t`（`s_dump`）：一次把 参数/分辨率/辅助控制/固件版本/MAC 全读回，`RADAR_DUMP_ONCE(默认 1)` 时上电自动读一次，Keil Watch 直接看 `s_dump`（`ok=5` 表示 5 项全读回成功）—— 无串口条件下唯一的"看当前配置"手段；
+  - `radar_proto` 层新增 `radar_proto_parse_aux/parse_fw/parse_bytes` 与命令字 `0x00AD/0x00AE`；`radar_link_ready()`（探测结束且产线配置跑完才允许发命令）；
+  - 构建验证: 参数配置=0/1 × 读回=0/1 × 调试开/关 共 6 种组合均 0 Error 0 Warning（Code 27712 ~ 29056）。
 - `[hc32f460]` **clean(删除 `out_pin`)**: 删掉 `radar_report_t.out_pin` —— 它是"**工程模式**上报帧里的 OUT 脚状态"字节，正常工作模式帧里根本没有该字段，我们工程模式默认关闭 → 该字段恒 0，纯死数据；OUT 的真实电平用 `radar_dev_t.out_present`（直接读 PC14，与模块配置无关）即可，两者信息重复。改动：
   - `radar_proto.h` 删除字段；`radar_proto.c` 删除普通帧的清 0 与工程模式帧的解析；`common.c` 删除 `HC32_RS485_corfirm_PDU.radar.pinout = rr->out_pin;`（该确认帧目前**只填不发**，其 32B 布局里的 `pinout` 占位保留、恒 0，已加注释说明）；
   - 构建验证: 0 Error 0 Warning（Code 27712，比改动前少 20 字节）。

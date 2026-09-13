@@ -239,6 +239,310 @@ static void radar_probe_tick(void)
     }
 }
 
+#if ((RADAR_PARAM_EN != 0U) || (RADAR_DUMP_ONCE != 0U))
+/* 命令通道是否可用: 自适应探测已结束, 且产线配置(若有)已跑完 */
+static uint8_t radar_link_ready(void)
+{
+#if (RADAR_BAUD_TARGET != 0UL)
+    if (s_prov_st < 4U) { return 0U; }
+#endif
+    return radar_ready();
+}
+#endif
+
+/* ------------------------------ A/C: 参数配置 · 只读维护 ------------------------------ */
+/* 前向声明: radar_cfg_cmd 定义在文件后部(命令事务: 使能配置->命令->结束配置) */
+static int32_t radar_cfg_cmd(uint16_t cmd, const uint8_t *val, uint8_t val_len,
+                             radar_ack_t *ack, uint32_t timeout_ms);
+/* 只读信息汇总(Keil Watch 里看 s_dump) */
+static radar_dump_t     s_dump;
+#if (RADAR_PARAM_EN != 0U)
+static uint8_t          s_param_st;
+static uint8_t          s_param_idx;
+static uint8_t          s_param_done;
+#endif
+#if (RADAR_DUMP_ONCE != 0U)
+static uint8_t          s_dump_done;
+#endif
+
+#if (RADAR_PARAM_EN != 0U)
+static const uint8_t s_param_move_sens[RADAR_GATE_MAX + 1U]  = RADAR_PARAM_MOVE_SENS;
+static const uint8_t s_param_still_sens[RADAR_GATE_MAX + 1U] = RADAR_PARAM_STILL_SENS;
+#endif
+
+const radar_dump_t *radar_dump(void)
+{
+    return &s_dump;
+}
+
+/* ------------------------------ A. 探测行为参数 ------------------------------ */
+/* 光感辅助控制(0x00AD): mode 0=关闭 / 1=光感<阈值 / 2=光感>阈值; out_level 0=默认低(有人=高) */
+int32_t radar_set_aux_control(uint8_t mode, uint8_t threshold, uint8_t out_level)
+{
+    uint8_t v[4];
+
+    if (mode > 2U) { return LL_ERR_INVD_PARAM; }
+    if (out_level > 1U) { return LL_ERR_INVD_PARAM; }
+
+    v[0] = mode;
+    v[1] = threshold;
+    v[2] = out_level;
+    v[3] = 0x00U;
+
+    return radar_cfg_cmd(RADAR_CMD_AUX_SET, v, sizeof(v), 0, RADAR_CMD_TIMEOUT_MS);
+}
+
+/* 把 A 组参数与目标值比对: 需要写返回 1, 否则 0 */
+#if (RADAR_PARAM_EN != 0U)
+static uint8_t radar_param_diff(const radar_params_t *p, const radar_aux_t *a, uint8_t *which)
+{
+    uint8_t i;
+
+    *which = 0U;                                /* 0 = 无差异 */
+
+    if ((p->max_move_gate != (uint8_t)RADAR_PARAM_MAX_MOVE_GATE) ||
+        (p->max_still_gate != (uint8_t)RADAR_PARAM_MAX_STILL_GATE) ||
+        (p->no_body_sec != (uint16_t)RADAR_PARAM_NO_BODY_SEC))
+    {
+        *which = 1U;                            /* 需要写 0x0060 */
+        return 1U;
+    }
+
+    for (i = 0U; i <= (uint8_t)RADAR_GATE_MAX; i++)
+    {
+        if (p->move_sens[i] != s_param_move_sens[i]) { *which = 2U; s_param_idx = i; return 1U; }
+        if (i >= 2U)                            /* 门 0/1 的静止灵敏度不可设置 */
+        {
+            if (p->still_sens[i] != s_param_still_sens[i]) { *which = 2U; s_param_idx = i; return 1U; }
+        }
+    }
+
+    if ((a->mode != (uint8_t)RADAR_PARAM_AUX_MODE) ||
+        (a->threshold != (uint8_t)RADAR_PARAM_AUX_THRESHOLD) ||
+        (a->out_level != (uint8_t)RADAR_PARAM_AUX_OUT_LEVEL))
+    {
+        *which = 3U;                            /* 需要写 0x00AD */
+        return 1U;
+    }
+
+    return 0U;
+}
+
+/* 幂等应用流程: 0 等链路 -> 1 读回 -> 2 逐项写 -> 3 复检 -> 4 成功/本来就一致, 5 失败 */
+static void radar_param_tick(void)
+{
+    int32_t ret;
+    uint8_t which;
+
+    if (s_param_st >= 4U) { return; }
+    if (radar_link_ready() == 0U) { return; }
+
+    switch (s_param_st)
+    {
+        case 0U:
+            s_param_st = 1U;
+            break;
+
+        case 1U:                                /* 读回当前配置 */
+            ret = radar_read_params(&s_dump.params);
+            if (ret != LL_OK) { s_param_st = 5U; s_dump.last_ret = ret; break; }
+
+            ret = radar_read_aux_control(&s_dump.aux);
+            if (ret != LL_OK) { s_param_st = 5U; s_dump.last_ret = ret; break; }
+
+            if (radar_param_diff(&s_dump.params, &s_dump.aux, &which) == 0U)
+            {
+                s_param_st = 4U;                /* 已经一致: 一条命令都不发 */
+                break;
+            }
+            s_param_st = 2U;
+            break;
+
+        case 2U:                                /* 逐项写(每拍只写一条命令, 不长时间占住主循环) */
+            if (s_param_done == 0U)
+            {
+                ret = radar_read_params(&s_dump.params);
+                if (ret == LL_OK)
+                {
+                    ret = radar_read_aux_control(&s_dump.aux);
+                }
+                if (ret != LL_OK) { s_param_st = 5U; s_dump.last_ret = ret; break; }
+
+                if (radar_param_diff(&s_dump.params, &s_dump.aux, &which) == 0U)
+                {
+                    s_param_st = 3U;            /* 都写完了 -> 复检 */
+                    break;
+                }
+
+                if (which == 1U)
+                {
+                    ret = radar_set_max_gate((uint16_t)RADAR_PARAM_MAX_MOVE_GATE,
+                                             (uint16_t)RADAR_PARAM_MAX_STILL_GATE,
+                                             (uint16_t)RADAR_PARAM_NO_BODY_SEC);
+                }
+                else if (which == 2U)
+                {
+                    ret = radar_set_sensitivity((uint16_t)s_param_idx,
+                                                (uint16_t)s_param_move_sens[s_param_idx],
+                                                (uint16_t)s_param_still_sens[s_param_idx]);
+                }
+                else
+                {
+                    ret = radar_set_aux_control((uint8_t)RADAR_PARAM_AUX_MODE,
+                                                (uint8_t)RADAR_PARAM_AUX_THRESHOLD,
+                                                (uint8_t)RADAR_PARAM_AUX_OUT_LEVEL);
+                }
+
+                s_dump.last_ret = ret;
+                if (ret != LL_OK) { s_param_st = 5U; }
+            }
+            break;
+
+        case 3U:                                /* 复检: 再读回一遍 */
+            ret = radar_read_params(&s_dump.params);
+            if (ret == LL_OK) { ret = radar_read_aux_control(&s_dump.aux); }
+            s_dump.last_ret = ret;
+            if (ret != LL_OK) { s_param_st = 5U; break; }
+
+            if (radar_param_diff(&s_dump.params, &s_dump.aux, &which) == 0U) { s_param_st = 4U; }
+            else                                                            { s_param_st = 5U; }
+            break;
+
+        default:
+            s_param_st = 5U;
+            break;
+    }
+}
+
+uint8_t radar_param_state(void)
+{
+    return s_param_st;
+}
+#else
+uint8_t radar_param_state(void)
+{
+    return 0U;                                  /* 未启用参数自动配置 */
+}
+#endif
+
+/* ------------------------------ C. 只读 / 维护 ------------------------------ */
+int32_t radar_read_resolution(uint8_t *idx)
+{
+    radar_ack_t ack;
+    uint16_t    v;
+    int32_t     ret;
+
+    if (idx == 0) { return LL_ERR_INVD_PARAM; }
+
+    ret = radar_cfg_cmd(RADAR_CMD_RESOLUTION_GET, 0, 0U, &ack, RADAR_CMD_TIMEOUT_MS);
+    if (ret != LL_OK) { return ret; }
+    if (radar_proto_parse_u16(&ack, &v) == 0) { return LL_ERR; }
+
+    *idx = (uint8_t)(v & 0x00FFU);
+    return LL_OK;
+}
+
+int32_t radar_read_aux_control(radar_aux_t *out)
+{
+    radar_ack_t ack;
+    int32_t     ret;
+
+    if (out == 0) { return LL_ERR_INVD_PARAM; }
+
+    ret = radar_cfg_cmd(RADAR_CMD_AUX_GET, 0, 0U, &ack, RADAR_CMD_TIMEOUT_MS);
+    if (ret != LL_OK) { return ret; }
+
+    return (radar_proto_parse_aux(&ack, out) != 0) ? LL_OK : LL_ERR;
+}
+
+int32_t radar_read_fw_version(radar_fw_t *out)
+{
+    radar_ack_t ack;
+    int32_t     ret;
+
+    if (out == 0) { return LL_ERR_INVD_PARAM; }
+
+    ret = radar_cfg_cmd(RADAR_CMD_FW_VERSION, 0, 0U, &ack, RADAR_CMD_TIMEOUT_MS);
+    if (ret != LL_OK) { return ret; }
+
+    return (radar_proto_parse_fw(&ack, out) != 0) ? LL_OK : LL_ERR;
+}
+
+int32_t radar_read_mac(uint8_t *mac, uint8_t *len)
+{
+    radar_ack_t ack;
+    uint8_t     v[2];
+    int32_t     ret;
+    uint8_t     got = 0U;
+
+    if (mac == 0) { return LL_ERR_INVD_PARAM; }
+
+    v[0] = 0x01U; v[1] = 0x00U;                 /* 命令值 0x0001 */
+    ret = radar_cfg_cmd(RADAR_CMD_MAC, v, sizeof(v), &ack, RADAR_CMD_TIMEOUT_MS);
+    if (ret != LL_OK) { return ret; }
+    if (radar_proto_parse_bytes(&ack, mac, 6U, &got) == 0) { return LL_ERR; }
+
+    if (len != 0) { *len = got; }
+    return LL_OK;
+}
+
+int32_t radar_factory_reset(void)
+{
+    return radar_cfg_cmd(RADAR_CMD_FACTORY_RESET, 0, 0U, 0, RADAR_CMD_TIMEOUT_MS);
+}
+
+/* 依次读回所有只读信息到 s_dump(阻塞约几百 ms, 结果看 Keil Watch 的 s_dump) */
+int32_t radar_read_all(void)
+{
+    int32_t ret;
+    uint8_t n = 0U;
+
+    s_dump.ok = 0U;
+    s_dump.last_ret = LL_OK;
+
+    ret = radar_read_params(&s_dump.params);
+    s_dump.last_ret = ret;
+    if (ret == LL_OK) { n++; }
+
+    ret = radar_read_resolution(&s_dump.resolution);
+    s_dump.last_ret = ret;
+    if (ret == LL_OK) { n++; }
+
+    ret = radar_read_aux_control(&s_dump.aux);
+    s_dump.last_ret = ret;
+    if (ret == LL_OK) { n++; }
+
+    ret = radar_read_fw_version(&s_dump.fw);
+    s_dump.last_ret = ret;
+    if (ret == LL_OK) { n++; }
+
+    ret = radar_read_mac(s_dump.mac, &s_dump.mac_len);
+    s_dump.last_ret = ret;
+    if (ret == LL_OK) { n++; }
+
+    s_dump.ok = (uint32_t)n;                    /* 5 = 全部读回成功 */
+    return s_dump.last_ret;
+}
+
+/* 上电后把只读信息读回一次(供 Keil Watch 查看); 也可在调试器里手动调 radar_read_all() */
+#if (RADAR_DUMP_ONCE != 0U)
+static void radar_dump_tick(void)
+{
+#if (RADAR_PARAM_EN != 0U)
+    if (s_param_st < 4U) { return; }            /* 等参数配置先做完 */
+#endif
+    if (s_dump_done != 0U) { return; }
+    if (radar_link_ready() == 0U) { return; }
+
+    s_dump_done = 1U;
+    (void)radar_read_all();
+}
+#else
+static void radar_dump_tick(void)
+{
+}
+#endif
+
 /* ------------------------------ 产线配置: 模块波特率 ------------------------------ */
 #if (RADAR_BAUD_TARGET != 0UL)
 /* 波特率 -> 协议表 6 的索引(0x00A1 用); 不在表里返回 0 */
@@ -363,6 +667,10 @@ void radar_poll(void)
 #if (RADAR_BAUD_TARGET != 0UL)
     radar_provision_tick();              /* 产线配置: 把模块波特率配成 RADAR_BAUD_TARGET */
 #endif
+#if (RADAR_PARAM_EN != 0UL)
+    radar_param_tick();                  /* A: 把探测行为参数写成目标值(幂等) */
+#endif
+    radar_dump_tick();                   /* C: 上电读回一次只读信息到 s_dump */
 
     /* 与串口同一模块的 OUT 脚(可选判定源) */
     s_dev[0].out_present = (GPIO_ReadInputPins(RADAR_UART_DEV_OUT_PORT, RADAR_UART_DEV_OUT_PIN) == PIN_SET) ? 1U : 0U;

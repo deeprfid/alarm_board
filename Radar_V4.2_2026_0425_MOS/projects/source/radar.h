@@ -51,6 +51,31 @@ uint8_t radar_presence_src(void);
 /* ---------------- Í³¼Æ ---------------- */
 uint32_t radar_frames_ok(void);
 uint32_t radar_frames_err(void);
+/* ---------------- C. Ö»¶Á / Î¬»¤ ---------------- */
+int32_t radar_read_resolution(uint8_t *idx);                 /* 0x00AB: 0=0.75m/ÃÅ 1=0.2m/ÃÅ */
+int32_t radar_read_aux_control(radar_aux_t *out);            /* 0x00AE */
+int32_t radar_read_fw_version(radar_fw_t *out);              /* 0x00A0 */
+int32_t radar_read_mac(uint8_t *mac, uint8_t *len);          /* 0x00A5 */
+int32_t radar_factory_reset(void);                           /* 0x00A2(ÖØÆôºóÉúĞ§) */
+int32_t radar_read_all(void);                                /* ÒÀ´Î¶Á»ØÈ«²¿Ö»¶ÁĞÅÏ¢µ½ s_dump */
+
+/* Ö»¶ÁĞÅÏ¢»ã×Ü: Keil Watch Àï¼Ó s_dump, »ò¿´ radar_dump() */
+typedef struct {
+    uint32_t       ok;          /* ±¾´Î¶Á»Ø³É¹¦µÄÏîÊı(5 = È«²¿³É¹¦) */
+    int32_t        last_ret;    /* ×îºóÒ»ÌõÃüÁîµÄ·µ»ØÂë(LL_OK = 0) */
+    radar_params_t params;      /* 0x0061: ×î´óÃÅ/¸÷ÃÅÁéÃô¶È/ÎŞÈË³ÖĞøÊ±¼ä */
+    uint8_t        resolution;  /* 0x00AB */
+    radar_aux_t    aux;         /* 0x00AE */
+    radar_fw_t     fw;          /* 0x00A0 */
+    uint8_t        mac[6];      /* 0x00A5 */
+    uint8_t        mac_len;
+} radar_dump_t;
+
+const radar_dump_t *radar_dump(void);
+
+/* ---------------- A ²ÎÊı×Ô¶¯ÅäÖÃ(ÃİµÈ) ---------------- */
+uint8_t radar_param_state(void);    /* 0 ´ı×ö / 1 ¶Á»ØÖĞ / 2 Ğ´ÈëÖĞ / 3 ¸´¼ìÖĞ / 4 ³É¹¦»ò±¾À´¾ÍÒ»ÖÂ / 5 Ê§°Ü */
+
 uint32_t radar_reports(void);
 uint32_t radar_rx_bytes(void);                         /* ´®¿ÚÀÛ¼ÆÊÕµ½×Ö½ÚÊı(Õï¶Ï) */
 uint32_t radar_rx_drop(void);                          /* ½ÓÊÕ»º³å¶ªÆú×Ö½ÚÊı(Õï¶Ï) */
@@ -70,5 +95,6 @@ int32_t radar_restart(void);                                      /* 0x00A3: Ó¦´
 int32_t radar_eng_mode(uint8_t on);                                 /* 0x0062 / 0x0063 */
 int32_t radar_noise_start(uint16_t sec);                            /* 0x000B */
 int32_t radar_noise_status(uint16_t *status);                       /* 0x001B: 0 Î´Ö´ĞĞ 1 Ö´ĞĞÖĞ 2 Íê³É */
+int32_t radar_set_aux_control(uint8_t mode, uint8_t threshold, uint8_t out_level);  /* 0x00AD */
 
 #endif /* __RADAR_H__ */

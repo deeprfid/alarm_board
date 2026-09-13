@@ -151,7 +151,9 @@ int radar_proto_parse_report(const radar_frame_t *f, radar_report_t *out)
         return 0;
     }
 
-    /* 工程模式: 基本信息之后追加 最大运动门/最大静止门 + 9+9 门能量 + 光感 + OUT */
+    
+
+/* 工程模式: 基本信息之后追加 最大运动门/最大静止门 + 9+9 门能量 + 光感 + OUT */
     if (f->data_len < 35U) { return 0; }
 
     idx = 11U;
@@ -165,4 +167,45 @@ int radar_proto_parse_report(const radar_frame_t *f, radar_report_t *out)
     out->eng_mode = 1U;
 
     return 1;
+}
+
+int radar_proto_parse_aux(const radar_ack_t *ack, radar_aux_t *out)
+{
+    if ((ack == 0) || (out == 0)) { return 0; }
+    if (ack->ret_len < 3U) { return 0; }
+
+    out->mode       = ack->ret[0];
+    out->threshold  = ack->ret[1];
+    out->out_level  = ack->ret[2];
+    out->reserved   = (ack->ret_len >= 4U) ? ack->ret[3] : 0U;
+
+    return 1;
+}
+
+int radar_proto_parse_fw(const radar_ack_t *ack, radar_fw_t *out)
+{
+    if ((ack == 0) || (out == 0)) { return 0; }
+    if (ack->ret_len < 8U) { return 0; }
+
+    out->type     = rp_u16_le(&ack->ret[0]);
+    out->major    = rp_u16_le(&ack->ret[2]);
+    out->minor_be = ((uint32_t)ack->ret[4] << 24) | ((uint32_t)ack->ret[5] << 16) |
+                    ((uint32_t)ack->ret[6] << 8) | (uint32_t)ack->ret[7];
+
+    return 1;
+}
+
+/* 把 ACK 的返回值原样拷出(用于 MAC 等定长数据) */
+int radar_proto_parse_bytes(const radar_ack_t *ack, uint8_t *out, uint8_t want, uint8_t *got)
+{
+    uint8_t n;
+    uint8_t i;
+
+    if ((ack == 0) || (out == 0)) { return 0; }
+
+    n = (ack->ret_len < want) ? ack->ret_len : want;
+    for (i = 0U; i < n; i++) { out[i] = ack->ret[i]; }
+    if (got != 0) { *got = n; }
+
+    return (n > 0U) ? 1 : 0;
 }
