@@ -130,7 +130,7 @@
  * 输出方式: 只有结构体 g_radar_dbg(Keil Watch 展开看, 纯数值)。
  *           本板没有连电脑的串口, 因此不做串口/printf/文本输出。
  */
-#define RADAR_DBG_EN                    (1U)
+#define RADAR_DBG_EN                    (0U)      /* 调试已关闭: 只剩空实现, 不占 Flash */
 #define RADAR_DBG_PERIOD_MS             (500U)      /* 状态行刷新周期 */
 #define RADAR_DBG_RX_STALL_MS           (3000U)     /* 收字节停滞多久报一次事件 */
 
