@@ -51,7 +51,7 @@ typedef struct {
     uint32_t baud;          /* 当前波特率 */
     uint32_t probe_st;      /* 探测状态机状态(0 待启动 / 1 已切档待发 / 2 判定 / 4 验证 / 9 结束) */
     uint32_t probe_idx;     /* 当前候选档序号(0..7) */
-    uint32_t prov_st;       /* 产线配置状态(RADAR_PROVISION_BAUD 启用时): 4=成功/已是目标值 5=失败已回退 */
+    uint32_t prov_st;       /* 产线配置状态(RADAR_BAUD_TARGET 启用时): 4=成功/已是目标值 5=失败已回退 */
     uint32_t rep;           /* 解析成功的目标上报数 */
     uint32_t repf;          /* 收到的上报帧数(F4F3F2F1, 按档清零) */
     uint32_t ackf;          /* 收到的 ACK 帧数(FDFCFBFA, 按档清零) */

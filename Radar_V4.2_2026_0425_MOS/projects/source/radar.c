@@ -22,7 +22,7 @@ static uint32_t         s_probe_t0;
 static uint32_t         s_probe_base;      /* 验证窗口的"上报帧数"基线 */
 static uint32_t         s_rep_frames;      /* 本档收到的上报帧数(换档清零) */
 static uint32_t         s_ack_frames;      /* 本档收到的 ACK 帧数(换档清零) */
-#if (RADAR_PROVISION_BAUD != 0UL)
+#if (RADAR_BAUD_TARGET != 0UL)
 static uint8_t          s_prov_st;          /* 产线配置状态: 0 待做 1 写入中 2 等重启 3 自检中 4 成功 5 失败 6 无法配置 */
 static uint32_t         s_prov_t0;
 static uint8_t          s_prov_busy;        /* 1 = 正在执行阻塞式命令(防重入兜底) */
@@ -88,16 +88,10 @@ int32_t radar_init(void)
     radar_port_init();
     radar_port_set_rx_handler(radar_on_bytes);
 
-#if (RADAR_BAUD_FORCE != 0UL)
-    radar_port_set_baud(RADAR_BAUD_FORCE);   /* 固定波特率: 跳过自适应探测 */
-    s_baud_locked = 1U;
-    s_probe_st    = 9U;
-#else
     s_probe_st   = 0U;               /* 波特率自适应由 radar_poll() 推进(非阻塞) */
     s_probe_t0   = m_u32Tickms;      /* 启动延时基准: 等模块上电启动完成再探测 */
     s_rep_frames = 0U;
     s_ack_frames = 0U;
-#endif
 
     for (i = 0U; i < RADAR_DEV_CNT; i++)
     {
@@ -260,7 +254,7 @@ static void radar_probe_tick(void)
 }
 
 /* ------------------------------ 产线配置: 模块波特率 ------------------------------ */
-#if (RADAR_PROVISION_BAUD != 0UL)
+#if (RADAR_BAUD_TARGET != 0UL)
 /* 波特率 -> 协议表 6 的索引(0x00A1 用); 不在表里返回 0 */
 static uint8_t radar_baud_to_index(uint32_t baud)
 {
@@ -275,10 +269,10 @@ static uint8_t radar_baud_to_index(uint32_t baud)
     return 0U;
 }
 
-/* 把模块波特率配置成 RADAR_PROVISION_BAUD(掉电保存), 幂等:
+/* 把模块波特率配置成 RADAR_BAUD_TARGET(掉电保存), 幂等:
  *   0 等探测结束 -> 若已是目标值则直接结束(什么都不发)
- *   1 写配置(0x00A1) -> 重启模块(0x00A3, 配置重启后生效) -> 等 RADAR_PROVISION_RESTART_MS
- *   2 等模块重启(RADAR_PROVISION_RESTART_MS)后**重新跑一遍自适应探测**
+ *   1 写配置(0x00A1) -> 重启模块(0x00A3, 配置重启后生效) -> 等 RADAR_PROV_RESTART_MS
+ *   2 等模块重启(RADAR_PROV_RESTART_MS)后**重新跑一遍自适应探测**
  *   3 复检: 探测锁定在目标波特率 = 成功; 锁定在别的值 = 模块没切成, 保持该波特率继续用
  * 结果见 radar_provision_state() 与 g_radar_dbg.prov_st */
 static void radar_provision_tick(void)
@@ -290,12 +284,12 @@ static void radar_provision_tick(void)
     {
         case 0U:                             /* 等自适应探测结束 */
             if ((radar_ready() == 0U) || (radar_baud_locked() == 0U)) { break; }
-            if (radar_get_baud() == RADAR_PROVISION_BAUD)
+            if (radar_get_baud() == RADAR_BAUD_TARGET)
             {
                 s_prov_st = 4U;              /* 已经是目标值: 幂等, 不发任何命令 */
                 break;
             }
-            if (radar_baud_to_index(RADAR_PROVISION_BAUD) == 0U)
+            if (radar_baud_to_index(RADAR_BAUD_TARGET) == 0U)
             {
                 s_prov_st = 6U;              /* 目标值不在协议表 6 里 */
                 break;
@@ -306,7 +300,7 @@ static void radar_provision_tick(void)
         case 1U:                             /* 写配置 + 重启模块(下面两步是阻塞的, 见 radar_cmd) */
             s_prov_busy = 1U;
 
-            if (radar_set_uart_baud_index(radar_baud_to_index(RADAR_PROVISION_BAUD)) != LL_OK)
+            if (radar_set_uart_baud_index(radar_baud_to_index(RADAR_BAUD_TARGET)) != LL_OK)
             {
                 s_prov_st = 5U;
             }
@@ -324,19 +318,19 @@ static void radar_provision_tick(void)
 
             if (s_prov_st == 2U)
             {
-                radar_dbg_note_u32(RADAR_DBG_EV_SETBAUD_OK, (uint32_t)radar_baud_to_index(RADAR_PROVISION_BAUD));
-                radar_dbg_note_u32(RADAR_DBG_EV_RESTART_SENT, RADAR_PROVISION_BAUD);
+                radar_dbg_note_u32(RADAR_DBG_EV_SETBAUD_OK, (uint32_t)radar_baud_to_index(RADAR_BAUD_TARGET));
+                radar_dbg_note_u32(RADAR_DBG_EV_RESTART_SENT, RADAR_BAUD_TARGET);
             }
             else
             {
-                radar_dbg_note_u32(RADAR_DBG_EV_SETBAUD_FAIL, RADAR_PROVISION_BAUD);
+                radar_dbg_note_u32(RADAR_DBG_EV_SETBAUD_FAIL, RADAR_BAUD_TARGET);
             }
             break;
 
         case 2U:                             /* 等模块重启, 然后重新跑一遍自适应探测来复检 */
-            if ((m_u32Tickms - s_prov_t0) >= RADAR_PROVISION_RESTART_MS)
+            if ((m_u32Tickms - s_prov_t0) >= RADAR_PROV_RESTART_MS)
             {
-                radar_dbg_note_u32(RADAR_DBG_EV_DRIVER_BAUD, RADAR_PROVISION_BAUD);
+                radar_dbg_note_u32(RADAR_DBG_EV_DRIVER_BAUD, RADAR_BAUD_TARGET);
                 s_probe_st    = 0U;          /* 重新武装探测: 状态 0 里自带 RADAR_PROBE_BOOT_MS 启动延时 */
                 s_probe_t0    = m_u32Tickms;
                 s_probe_idx   = 0U;
@@ -350,9 +344,9 @@ static void radar_provision_tick(void)
         case 3U:                             /* 复检: 探测锁定在目标波特率 = 成功 */
             if (radar_ready() == 0U) { break; }
 
-            if ((radar_baud_locked() != 0U) && (radar_get_baud() == RADAR_PROVISION_BAUD))
+            if ((radar_baud_locked() != 0U) && (radar_get_baud() == RADAR_BAUD_TARGET))
             {
-                radar_dbg_note_u32(RADAR_DBG_EV_VERIFY_OK, RADAR_PROVISION_BAUD);
+                radar_dbg_note_u32(RADAR_DBG_EV_VERIFY_OK, RADAR_BAUD_TARGET);
                 s_prov_st = 4U;
             }
             else
@@ -393,8 +387,8 @@ void radar_poll(void)
 {
     radar_pump();
     radar_probe_tick();
-#if (RADAR_PROVISION_BAUD != 0UL)
-    radar_provision_tick();              /* 产线配置: 把模块波特率配成 RADAR_PROVISION_BAUD */
+#if (RADAR_BAUD_TARGET != 0UL)
+    radar_provision_tick();              /* 产线配置: 把模块波特率配成 RADAR_BAUD_TARGET */
 #endif
 
     /* 与串口同一模块的 OUT 脚(可选判定源) */
@@ -751,7 +745,7 @@ static void dbg_update_snap(void)
     g_radar_dbg.baud      = radar_get_baud();
     g_radar_dbg.probe_st  = (uint32_t)s_probe_st;
     g_radar_dbg.probe_idx = (uint32_t)s_probe_idx;
-#if (RADAR_PROVISION_BAUD != 0UL)
+#if (RADAR_BAUD_TARGET != 0UL)
     g_radar_dbg.prov_st   = (uint32_t)s_prov_st;
 #endif
     g_radar_dbg.rep       = radar_reports();
