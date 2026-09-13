@@ -156,6 +156,11 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
   - `RADAR_DBG_SET_BAUD_IDX` 一次性改模块波特率改为**完整时序**：0x00A1 设置 → 0x00A3 重启模块（协议规定配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动再切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧，每步都记事件。
   - 构建验证：4 种组合（FORCE=0 自适应8档 / FORCE=460800 / FORCE=0+SET_BAUD_IDX=8 / FORCE=256000）均 0 Error 0 Warning。
 - `[hc32f460]` **feat(把模块波特率改成 460800)**: `RADAR_DBG_SET_BAUD_IDX=8` 的一次性流程补齐**自检与回退**——使能配置 → `0x00A1(0x0008)` → `0x00A3` 重启模块（协议规定该配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧 → 自检 2.5s 看有无上报帧：成功记 `baud verify OK 460800`；失败自动回退旧波特率再看 2.5s，分别记 `old baud still OK` / `no data on either baud: check wiring`。注：厂家固件里的"出厂默认 256000"无法更改（`0x00A2` 恢复出厂即回到 256000），本流程是把 460800 写进**模块自己的 flash**，从此这块模块上电就是 460800（每块需各做一次）。
+- `[hc32f460]` **clean(调试快照瘦身)**: `g_radar_dbg` 删掉全部冗余成员（~200B → 72B），只留真正要看的：
+  - 保留: `ms`(主循环活着) / `probe_st`(探测阶段) / `lock`(是否找到波特率) / `baud` / `prov_st`(目标波特率配置结果) / `rep`(上报数) / `fer`(分帧错) / `rx`(收字节数) / `rx_head[8]` / 目标状态与距离: `st/mv_dist/mv_eng/st_dist/st_eng/dd` / `out/online/pre`；
+  - 删除: `repf/ackf/fok`（与 `rep/fer` 重复）、`drp`、`probe_idx`（`baud` 已表示正在试哪一档）、`ack_cmd/ack_status/ack_len/ack_data[8]`（ACK 布局排查用, 已完成使命）、4 条**事件环** `evt_cnt/evt_code[]/evt_val[]/evt_ms[]`；
+  - 随之删除 `radar_dbg_note_u32()` 与全部 13 处调用、`radar_dbg_ack_dump()` 及其调用 —— 驱动代码更干净（`radar.c` 从 798 → 710 行）；
+  - 构建验证: 目标460800+调试开 / 目标=0 / 调试关 / 两者都关 四种组合均 0 Error 0 Warning（Code 28108 / 27480 / 27732 / 27092）。
 - `[hc32f460]` **refactor(波特率配置收敛为一个开关)**: 按使用方口径收敛 —— **上电自适应(不管模块当前是多少) → 用当前波特率把模块改成 RADAR_BAUD_TARGET(默认 460800, 写模块 flash) → 0x00A3 重启 → 重跑自适应复检 → 之后每次上电模块自己就是 460800**：
   - 配置项只留一个 `RADAR_BAUD_TARGET (460800UL)`（0 = 不自动配置, 只跟随模块）；原 `RADAR_PROVISION_BAUD` 并入它, `RADAR_PROVISION_RESTART_MS` → `RADAR_PROV_RESTART_MS(500)`（内部）；
   - **删除 `RADAR_BAUD_FORCE`**（强制固定波特率）与 `radar_init()` 里的对应分支：与"自动配置"重复, 且设错会让链路直接不通 —— 一律走"自适应 + 自动配置"；
