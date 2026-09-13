@@ -41,6 +41,16 @@
 #define RADAR_UART_RX_PIN               (GPIO_PIN_03)
 #define RADAR_UART_RX_FUNC              (GPIO_FUNC_33)
 
+/* 波特率策略:
+ *   0      = 自适应探测(依次试下面 3 个候选, 谁能回 ACK 就用谁)
+ *   非 0   = 固定使用该值, 跳过探测(已知模块波特率时用, 最省事)
+ * 现场若怀疑模块不在候选波特率里, 直接在这里填 460800UL / 256000UL 逐个试。
+ */
+#define RADAR_BAUD_FORCE                (460800UL)
+
+/* 自适应时: 没等到 ACK 但已收到这么多"合法帧"也算波特率正确(如 TX 方向没通) */
+#define RADAR_BAUD_LOCK_FRAMES          (3U)
+
 /* 上电自适应波特率探测顺序(LD2410C 出厂默认 256000) */
 #define RADAR_BAUD_TABLE                { 256000UL, 460800UL, 115200UL }
 #define RADAR_BAUD_TABLE_CNT            (3U)
@@ -110,5 +120,10 @@
 #define RADAR_DBG_RX_STALL_MS           (3000U)     /* 收字节停滞多久报一次事件 */
 #define RADAR_DBG_SINK_ITM              (0U)
 #define RADAR_DBG_SINK_RS485            (0U)
+/* 让模块自己切波特率(一次性, 默认关): 0=不做; 8=把模块改成 460800(协议表 0x0008)
+ * 前提: 链路已确认能收到上报(rep 在涨)。执行成功后驱动会同步切到下面这个值。
+ * 注意: 命令是阻塞式(约几百 ms), 只为现场配置用; 配好后请把本项改回 0。 */
+#define RADAR_DBG_SET_BAUD_IDX          (0U)
+#define RADAR_DBG_SET_BAUD_VALUE        (460800UL)
 
 #endif /* __RADAR_CFG_H__ */

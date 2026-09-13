@@ -21,10 +21,18 @@ static uint8_t          s_probe_idx;
 static uint32_t         s_probe_t0;
 
 /* ------------------------------ 收字节 -> 分帧 -> 解析 ------------------------------ */
+#if (RADAR_DBG_EN != 0U)
+static void radar_dbg_capture(const uint8_t *data, uint16_t len);   /* 定义见文件末尾调试段 */
+#endif
+
 static void radar_on_bytes(const uint8_t *data, uint16_t len)
 {
     radar_frame_t f;
     uint16_t i;
+
+#if (RADAR_DBG_EN != 0U)
+    radar_dbg_capture(data, len);       /* 抓原始字节(判断波特率/接线) */
+#endif
 
     for (i = 0U; i < len; i++)
     {
@@ -61,7 +69,13 @@ int32_t radar_init(void)
     radar_port_init();
     radar_port_set_rx_handler(radar_on_bytes);
 
+#if (RADAR_BAUD_FORCE != 0UL)
+    radar_port_set_baud(RADAR_BAUD_FORCE);   /* 固定波特率: 跳过自适应探测 */
+    s_baud_locked = 1U;
+    s_probe_st    = 9U;
+#else
     s_probe_st = 0U;                 /* 波特率自适应由 radar_poll() 推进(非阻塞) */
+#endif
 
     for (i = 0U; i < RADAR_DEV_CNT; i++)
     {
@@ -114,12 +128,21 @@ static void radar_probe_tick(void)
             }
             break;
 
-        case 2U:                             /* 等 ACK */
-            if ((s_ack_ready != 0U) && (s_ack.cmd == RADAR_CMD_ENABLE_CFG) && (s_ack.status == 0U))
+        case 2U:                             /* 等 ACK, 或等到合法上报帧 */
+            if ((s_ack_ready != 0U) && (s_ack.cmd == RADAR_CMD_ENABLE_CFG))
             {
+                /* 模块在该波特率下能应答 -> 波特率就是对的
+                 * (状态非 0 只表示命令没被接受, 不影响"波特率正确"这个结论) */
                 s_baud_locked = 1U;
                 s_probe_t0 = m_u32Tickms;
                 s_probe_st = 3U;
+            }
+            else if (s_rx.ok_cnt >= (uint32_t)RADAR_BAUD_LOCK_FRAMES)
+            {
+                /* 没等到 ACK 但能收到合法帧: 波特率同样正确(常见于 TX 方向没通),
+                 * 不必再往下试别的波特率, 也不再发"结束配置" */
+                s_baud_locked = 1U;
+                s_probe_st = 9U;
             }
             else if ((m_u32Tickms - s_probe_t0) >= RADAR_BAUD_PROBE_TIMEOUT_MS)
             {
@@ -446,6 +469,13 @@ char                      g_radar_dbg_line[RADAR_DBG_LINE_MAX];
 char                      g_radar_dbg_evt[RADAR_DBG_EVT_MAX];
 uint32_t                  g_radar_dbg_cnt;
 uint32_t                  g_radar_dbg_evt_cnt;
+char                      g_radar_dbg_hex[RADAR_DBG_HEX_MAX];
+
+static uint16_t           s_dbg_hex_n;      /* 已抓字节数 */
+static uint32_t           s_dbg_baud_last;  /* 上一拍的波特率(变化则重抓) */
+#if (RADAR_DBG_SET_BAUD_IDX != 0U)
+static uint8_t            s_dbg_setbaud_done;   /* 一次性改模块波特率是否已执行 */
+#endif
 
 static uint32_t s_dbg_line_ms;          /* 上次刷状态行的时刻 */
 static uint32_t s_dbg_rx_last;          /* 上次的收字节数 */
@@ -507,6 +537,18 @@ static char *dbg_str_lim(char *p, const char *s, uint8_t max)
     return p;
 }
 
+static char *dbg_hex_nib(char *p, uint8_t n)
+{
+    *p++ = (char)((n < 10U) ? ((char)(48U + n)) : ((char)(55U + n)));
+    return p;
+}
+
+static char *dbg_hex_byte(char *p, uint8_t v)
+{
+    p = dbg_hex_nib(p, (uint8_t)((v >> 4) & 0x0FU));
+    return dbg_hex_nib(p, (uint8_t)(v & 0x0FU));
+}
+
 static char *dbg_kv(char *p, const char *k, uint32_t v)
 {
     p = dbg_str(p, k);
@@ -553,6 +595,33 @@ static void dbg_sink(const char *s)
 #if ((RADAR_DBG_SINK_ITM == 0U) && (RADAR_DBG_SINK_RS485 == 0U))
     (void)s;                            /* 只用 Keil Watch 看 g_radar_dbg / g_radar_dbg_line */
 #endif
+}
+
+/* 抓本波特率下收到的前 RADAR_DBG_HEX_BYTES 个字节(十六进制), 换波特率时清空。
+ * 判读: 开头是 "F4 F3 F2 F1" = 上报帧头 / "FD FC FB FA" = ACK, 说明波特率正确;
+ *       全是乱码或个别字节 => 波特率不对或接线有干扰; 一个字节都没有 => RX 没接对/模块没发。 */
+static void radar_dbg_capture(const uint8_t *data, uint16_t len)
+{
+    char    *p;
+    uint16_t i;
+
+    if ((data == 0) || (s_dbg_hex_n >= (uint16_t)RADAR_DBG_HEX_BYTES))
+    {
+        return;
+    }
+
+    p = &g_radar_dbg_hex[(uint32_t)s_dbg_hex_n * 3UL];
+    for (i = 0U; i < len; i++)
+    {
+        if (s_dbg_hex_n >= (uint16_t)RADAR_DBG_HEX_BYTES)
+        {
+            break;
+        }
+        p = dbg_hex_byte(p, data[i]);
+        *p++ = (char)32;
+        s_dbg_hex_n++;
+    }
+    *p = (char)0;
 }
 
 /* ------------------------------ 状态快照与状态行 ------------------------------ */
@@ -677,6 +746,14 @@ static void dbg_check_events(void)
         dbg_event("boot");
     }
 
+    if (radar_get_baud() != s_dbg_baud_last)
+    {
+        s_dbg_baud_last   = radar_get_baud();
+        s_dbg_hex_n       = 0U;
+        g_radar_dbg_hex[0] = (char)0;
+        dbg_event_u32("baud=", radar_get_baud());
+    }
+
     if ((s_dbg_rdy_last == 0U) && (radar_ready() != 0U))
     {
         if (radar_baud_locked() != 0U)
@@ -727,6 +804,29 @@ void radar_dbg_note(const char *tag)
 
 void radar_dbg_poll(void)
 {
+#if (RADAR_DBG_SET_BAUD_IDX != 0U)
+    /* 一次性: 让模块自己切波特率(协议 0x00A1), 成功后驱动跟着切 */
+    if ((s_dbg_setbaud_done == 0U) && (radar_baud_locked() != 0U))
+    {
+        int32_t ret;
+
+        s_dbg_setbaud_done = 1U;
+        ret = radar_set_uart_baud_index((uint8_t)RADAR_DBG_SET_BAUD_IDX);
+        if (ret == LL_OK)
+        {
+            dbg_event_u32("module baud idx OK ", (uint32_t)RADAR_DBG_SET_BAUD_IDX);
+            radar_port_set_baud(RADAR_DBG_SET_BAUD_VALUE);
+            radar_frame_init(&s_rx);
+            s_probe_st = 9U;
+            s_baud_locked = 1U;
+        }
+        else
+        {
+            dbg_event_u32("module baud FAIL ret=", (uint32_t)ret);
+        }
+    }
+#endif
+
     dbg_check_events();
 
     if ((m_u32Tickms - s_dbg_line_ms) >= RADAR_DBG_PERIOD_MS)

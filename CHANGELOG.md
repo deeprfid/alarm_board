@@ -145,6 +145,12 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
   - 新增常驻诊断接口 `radar_rx_bytes()` / `radar_rx_drop()`（串口累计收字节数 / 环形缓冲丢弃数）——区分“没收到字节(接线/波特率)”与“收到但分帧失败(格式)”，现场排查用；
   - `main.c` 主循环增加 `radar_dbg_poll()`（内部 500ms 节流）；验证步骤 / 字段速查 / 现象判读表见 `docs/hc32_radar_bringup.md`；
   - **刻意不新建 .c 文件**：Keil GUI 打开工程时会用内存中的工程覆盖 `.uvprojx` 的改动（实测把已加入工程的 `radar_dbg.c` 覆盖掉，链接报 `L6218E: Undefined symbol radar_dbg_poll`），故调试段并入 `radar.c`，只需重新编译、不动工程文件；该工程目标另改为便于调试的设置（DebugInformation=1、Optim/oTime 由 -O3 改 0）。
+- `[hc32f460]` **feat/fix(雷达波特率)**: 上板发现 `lock=0, baud=256000`（自适应三个候选都没收到 ACK，回落默认），针对性改动：
+  - 新增 **固定波特率** `RADAR_BAUD_FORCE`（`radar_cfg.h`，当前 **460800UL**）：非 0 时跳过自适应、直接用该波特率（`radar_init()` 里生效，`radar_baud_locked()` 置 1）；填 `0` 恢复自适应。现场怀疑模块不在候选波特率里时逐个试最省事；
+  - **放宽自适应命中判据**：原来要求 ACK 且 `status==0` 才算命中，现在 ① 只要收到 `0x00FF` 的 ACK（无论状态）即判定波特率正确（状态非 0 只表示命令没被接受）；② 没等到 ACK 但已收到 `RADAR_BAUD_LOCK_FRAMES(3)` 个**合法帧**也算命中（典型场景：模块 TX→MCU RX 通、MCU TX→模块 RX 断，此前会一路试到 115200 再回落）；
+  - 调试段新增 **原始字节抓包** `g_radar_dbg_hex`（换波特率即清空，抓前 24 字节十六进制）：开头 `F4 F3 F2 F1`/`FD FC FB FA` 说明波特率正确，乱码说明波特率不对，空说明 RX 方向不通——这是区分“接线问题”和“波特率问题”的关键证据；
+  - 调试段新增 **一次性改模块波特率** `RADAR_DBG_SET_BAUD_IDX`（默认 0=关；填 8 = 发 `0x00A1` 让模块切到 `RADAR_DBG_SET_BAUD_VALUE(460800)`，成功后驱动同步切波特率并重建分帧，结果记在 `g_radar_dbg_evt`）；
+  - 构建验证：4 种组合（FORCE=460800 / FORCE=0 / FORCE=0+SET_BAUD_IDX=8 / FORCE=0+SINK_RS485=1）均 0 Error 0 Warning（Code 28292~28696）。
 - `[hc32f460]` **fix**: `bsp_rs485.h` 补 **include guard** —— 该头文件原先没有 guard，同一编译单元被包含两次即报 `#256: invalid redeclaration of type name "alarm_pdu"`（本次由 `radar_dbg.c` 显式包含时暴露）。同目录 `bsp_alarm.h` / `bsp_exint.h` / `bsp_pwm.h` 同样缺 guard，当前无二次包含，未改动。
 - **构建验证**：Keil 命令行无头构建 4 种组合全部 **0 Error / 0 Warning** —— 默认（DBG_EN=1、两个 SINK=0）`Code=28180`；SINK_ITM=1 `Code=28260`；SINK_RS485=1 `Code=28296`；恢复默认后全量重建 `Code=28180`。
 

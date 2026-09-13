@@ -15,6 +15,7 @@
 | MCU RX ← 模块 TX | **PA3 / FUNC33** | `RADAR_UART_RX_PORT/PIN/FUNC` |
 | 模块 OUT(第 1 路) | **PC14** | `RADAR_PORT0/PIN0` |
 | 候选波特率 | 256000 → 460800 → 115200 | `RADAR_BAUD_TABLE` |
+| **当前驱动波特率** | **固定 460800**（`RADAR_BAUD_FORCE = 460800UL`）| `radar_cfg.h` |
 | 工程/目标 | `projects/MDK/alarm_board.uvprojx` / `usart_uart_dma_Debug` | — |
 
 - 与旧 `bsp_radar.c` 的宏逐项一致(旧文件注释里的 PB9/PE6 是错的)。
@@ -67,8 +68,17 @@
 | `drp>0` | 环形缓冲溢出(消费太慢) | 检查主循环里是否有阻塞操作 |
 | `out=1` 但 `st=0` | 模块 OUT 有输出、串口无目标 | 模块可能只输出 OUT, 或探测区参数不同 |
 | `evt="rx stalled(no byte)"` | 收字节突然停止 | 线松/模块重启; 结合 `rx` 是否停在某个值 |
+| `rx>0` 但 `fok=0` | 收到字节但分不出帧 | **看 `g_radar_dbg_hex`**: 开头 `F4 F3 F2 F1`(上报)/`FD FC FB FA`(ACK) = 波特率对; 乱码 = 波特率不对, 逐个试 `RADAR_BAUD_FORCE` |
+| `rx=0` 且 `lock=0` | 一个字节都没有 | RX(PA3) 没接对 / 模块 TX 没输出 / 模块波特率不在试过的值上 |
 
 ---
+
+## 3.1 波特率怎么改
+
+| 目的 | 改哪里 | 说明 |
+| --- | --- | --- |
+| 驱动固定用某个波特率 | `radar_cfg.h` → `RADAR_BAUD_FORCE` | 当前 = `460800UL`; 填 `0` 恢复自适应(256000→460800→115200) |
+| 让**模块**自己切到 460800 | `radar_cfg.h` → `RADAR_DBG_SET_BAUD_IDX` 填 `8` | 一次性: 上电后自动发 `0x00A1`(索引 0x0008) 把模块改成 460800, 成功则驱动同步切到 `RADAR_DBG_SET_BAUD_VALUE`; 结果看 `g_radar_dbg_evt`(module baud idx OK/FAIL)。**前提是链路已通(rep 在涨)**; 配好后把该项改回 0 |
 
 ## 4. 方式 B / C(可选, 便于长时间观察)
 
