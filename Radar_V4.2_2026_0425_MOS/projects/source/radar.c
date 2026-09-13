@@ -22,6 +22,12 @@ static uint32_t         s_probe_t0;
 static uint32_t         s_probe_base;      /* 验证窗口的"上报帧数"基线 */
 static uint32_t         s_rep_frames;      /* 本档收到的上报帧数(换档清零) */
 static uint32_t         s_ack_frames;      /* 本档收到的 ACK 帧数(换档清零) */
+#if (RADAR_PROVISION_BAUD != 0UL)
+static uint8_t          s_prov_st;          /* 产线配置状态: 0 待做 1 写入中 2 等重启 3 自检中 4 成功 5 失败 6 无法配置 */
+static uint32_t         s_prov_t0;
+static uint32_t         s_prov_rep;
+static uint32_t         s_prov_baud;        /* 配置前的波特率(失败时回退用) */
+#endif
 
 /* ------------------------------ 收字节 -> 分帧 -> 解析 ------------------------------ */
 #if (RADAR_DBG_EN != 0U)
@@ -254,11 +260,126 @@ static void radar_probe_tick(void)
     }
 }
 
+/* ------------------------------ 产线配置: 模块波特率 ------------------------------ */
+#if (RADAR_PROVISION_BAUD != 0UL)
+/* 波特率 -> 协议表 6 的索引(0x00A1 用); 不在表里返回 0 */
+static uint8_t radar_baud_to_index(uint32_t baud)
+{
+    static const uint32_t idx_tab[] = RADAR_BAUD_IDX_TABLE;
+    uint8_t i;
+
+    for (i = 0U; i < (uint8_t)RADAR_BAUD_IDX_TABLE_CNT; i++)
+    {
+        if (idx_tab[i] == baud) { return (uint8_t)(i + 1U); }
+    }
+
+    return 0U;
+}
+
+/* 把模块波特率配置成 RADAR_PROVISION_BAUD(掉电保存), 幂等:
+ *   0 等探测结束 -> 若已是目标值则直接结束(什么都不发)
+ *   1 写配置(0x00A1) -> 重启模块(0x00A3, 配置重启后生效) -> 等 RADAR_PROVISION_RESTART_MS
+ *   2 驱动切到目标波特率
+ *   3 自检 RADAR_PROVISION_VERIFY_MS: 收到上报帧 = 成功; 否则回退到原波特率继续工作
+ * 结果见 radar_provision_state() 与 g_radar_dbg.prov_st */
+static void radar_provision_tick(void)
+{
+    if (s_prov_st >= 4U) { return; }         /* 已结束 */
+
+    switch (s_prov_st)
+    {
+        case 0U:                             /* 等自适应探测结束 */
+            if ((radar_ready() == 0U) || (radar_baud_locked() == 0U)) { break; }
+            if (radar_get_baud() == RADAR_PROVISION_BAUD)
+            {
+                s_prov_st = 4U;              /* 已经是目标值: 幂等, 不发任何命令 */
+                break;
+            }
+            if (radar_baud_to_index(RADAR_PROVISION_BAUD) == 0U)
+            {
+                s_prov_st = 6U;              /* 目标值不在协议表 6 里 */
+                break;
+            }
+            s_prov_st = 1U;
+            break;
+
+        case 1U:                             /* 写配置 + 重启模块 */
+            s_prov_baud = radar_get_baud();
+            if (radar_set_uart_baud_index(radar_baud_to_index(RADAR_PROVISION_BAUD)) != LL_OK)
+            {
+                radar_dbg_note_u32(RADAR_DBG_EV_SETBAUD_FAIL, RADAR_PROVISION_BAUD);
+                s_prov_st = 5U;
+                break;
+            }
+            radar_dbg_note_u32(RADAR_DBG_EV_SETBAUD_OK, (uint32_t)radar_baud_to_index(RADAR_PROVISION_BAUD));
+            if (radar_restart() != LL_OK)
+            {
+                radar_dbg_note_u32(RADAR_DBG_EV_RESTART_FAIL, RADAR_PROVISION_BAUD);
+                s_prov_st = 5U;
+                break;
+            }
+            radar_dbg_note_u32(RADAR_DBG_EV_RESTART_SENT, RADAR_PROVISION_BAUD);
+            s_prov_t0 = m_u32Tickms;
+            s_prov_st = 2U;
+            break;
+
+        case 2U:                             /* 等模块按新波特率重启完成, 驱动再切过去 */
+            if ((m_u32Tickms - s_prov_t0) >= RADAR_PROVISION_RESTART_MS)
+            {
+                s_prov_rep = radar_reports();
+                radar_port_set_baud(RADAR_PROVISION_BAUD);
+                radar_frame_init(&s_rx);
+                radar_dbg_note_u32(RADAR_DBG_EV_DRIVER_BAUD, RADAR_PROVISION_BAUD);
+                s_prov_t0 = m_u32Tickms;
+                s_prov_st = 3U;
+            }
+            break;
+
+        case 3U:                             /* 自检: 新波特率下能否收到上报 */
+            if (radar_reports() != s_prov_rep)
+            {
+                radar_dbg_note_u32(RADAR_DBG_EV_VERIFY_OK, RADAR_PROVISION_BAUD);
+                s_prov_st = 4U;
+            }
+            else if ((m_u32Tickms - s_prov_t0) >= RADAR_PROVISION_VERIFY_MS)
+            {
+                /* 新波特率下没数据(模块可能没真正切换): 回退原波特率继续工作, 不影响业务 */
+                radar_port_set_baud(s_prov_baud);
+                radar_frame_init(&s_rx);
+                radar_dbg_note_u32(RADAR_DBG_EV_VERIFY_FALLBACK, s_prov_baud);
+                s_prov_st = 5U;
+            }
+            else
+            {
+                /* 继续等 */
+            }
+            break;
+
+        default:
+            s_prov_st = 6U;
+            break;
+    }
+}
+
+uint8_t radar_provision_state(void)
+{
+    return s_prov_st;
+}
+#else
+uint8_t radar_provision_state(void)
+{
+    return 0U;
+}
+#endif
+
 void radar_poll(void)
 {
     radar_frame_tick(&s_rx, m_u32Tickms);
     radar_port_poll();
     radar_probe_tick();
+#if (RADAR_PROVISION_BAUD != 0UL)
+    radar_provision_tick();              /* 产线配置: 把模块波特率配成 RADAR_PROVISION_BAUD */
+#endif
 
     /* 与串口同一模块的 OUT 脚(可选判定源) */
     s_dev[0].out_present = (GPIO_ReadInputPins(RADAR_UART_DEV_OUT_PORT, RADAR_UART_DEV_OUT_PIN) == PIN_SET) ? 1U : 0U;
@@ -551,12 +672,6 @@ static uint32_t s_dbg_st_last;          /* 上次的目标状态 */
 static uint8_t  s_dbg_head_n;           /* 已抓的头部字节数 */
 static uint8_t  s_dbg_booted;
 static uint8_t  s_dbg_stalled;
-#if (RADAR_DBG_SET_BAUD_IDX != 0U)
-static uint8_t  s_dbg_setbaud_st;       /* 0=待做 1=已发命令 2=等模块重启 3=等新档数据 4=已回退 5=完成 */
-static uint32_t s_dbg_setbaud_ms;
-static uint32_t s_dbg_vfy_rep;          /* 自检基线: 已解析的上报数 */
-static uint32_t s_dbg_vfy_baud;         /* 切换前的波特率(用于回退) */
-#endif
 
 /* ------------------------------ 事件(数值, 环形 4 条) ------------------------------ */
 static void dbg_note(uint8_t code, uint32_t val)
@@ -620,6 +735,9 @@ static void dbg_update_snap(void)
     g_radar_dbg.baud      = radar_get_baud();
     g_radar_dbg.probe_st  = (uint32_t)s_probe_st;
     g_radar_dbg.probe_idx = (uint32_t)s_probe_idx;
+#if (RADAR_PROVISION_BAUD != 0UL)
+    g_radar_dbg.prov_st   = (uint32_t)s_prov_st;
+#endif
     g_radar_dbg.rep       = radar_reports();
     g_radar_dbg.repf      = s_rep_frames;
     g_radar_dbg.ackf      = s_ack_frames;
@@ -694,84 +812,6 @@ static void dbg_check_events(void)
 /* ------------------------------ 对外接口 ------------------------------ */
 void radar_dbg_poll(void)
 {
-#if (RADAR_DBG_SET_BAUD_IDX != 0U)
-    /* 一次性: 改模块波特率(0x00A1) -> 重启模块(0x00A3) -> 800ms 后驱动跟着切 -> 自检。
-     * 协议规定该配置"重启模块后生效", 所以模块切换前驱动必须留在旧波特率上, 否则丢链路。 */
-    if ((s_dbg_setbaud_st == 0U) && (radar_baud_locked() != 0U))
-    {
-        int32_t ret;
-
-        s_dbg_setbaud_st = 1U;
-        ret = radar_set_uart_baud_index((uint8_t)RADAR_DBG_SET_BAUD_IDX);
-        if (ret == LL_OK)
-        {
-            dbg_note(RADAR_DBG_EV_SETBAUD_OK, (uint32_t)RADAR_DBG_SET_BAUD_IDX);
-            ret = radar_restart();
-            if (ret == LL_OK)
-            {
-                dbg_note(RADAR_DBG_EV_RESTART_SENT, 0U);
-                s_dbg_setbaud_ms = m_u32Tickms;
-                s_dbg_setbaud_st = 2U;
-            }
-            else
-            {
-                dbg_note(RADAR_DBG_EV_RESTART_FAIL, (uint32_t)ret);
-                s_dbg_setbaud_st = 5U;
-            }
-        }
-        else
-        {
-            dbg_note(RADAR_DBG_EV_SETBAUD_FAIL, (uint32_t)ret);
-            s_dbg_setbaud_st = 5U;
-        }
-    }
-    else if ((s_dbg_setbaud_st == 2U) && ((m_u32Tickms - s_dbg_setbaud_ms) >= 800U))
-    {
-        s_dbg_vfy_baud    = radar_get_baud();
-        s_dbg_vfy_rep     = radar_reports();
-        radar_port_set_baud(RADAR_DBG_SET_BAUD_VALUE);
-        radar_frame_init(&s_rx);
-        s_probe_st       = 9U;
-        s_baud_locked    = 1U;
-        s_dbg_setbaud_ms = m_u32Tickms;
-        s_dbg_setbaud_st = 3U;
-        dbg_note(RADAR_DBG_EV_DRIVER_BAUD, RADAR_DBG_SET_BAUD_VALUE);
-    }
-    else if ((s_dbg_setbaud_st == 3U) && ((m_u32Tickms - s_dbg_setbaud_ms) >= 2500U))
-    {
-        if (radar_reports() != s_dbg_vfy_rep)
-        {
-            dbg_note(RADAR_DBG_EV_VERIFY_OK, RADAR_DBG_SET_BAUD_VALUE);
-            s_dbg_setbaud_st = 5U;
-        }
-        else
-        {
-            radar_port_set_baud(s_dbg_vfy_baud);
-            radar_frame_init(&s_rx);
-            s_dbg_vfy_rep    = radar_reports();
-            s_dbg_setbaud_ms = m_u32Tickms;
-            s_dbg_setbaud_st = 4U;
-            dbg_note(RADAR_DBG_EV_VERIFY_FALLBACK, s_dbg_vfy_baud);
-        }
-    }
-    else if ((s_dbg_setbaud_st == 4U) && ((m_u32Tickms - s_dbg_setbaud_ms) >= 2500U))
-    {
-        s_dbg_setbaud_st = 5U;
-        if (radar_reports() != s_dbg_vfy_rep)
-        {
-            dbg_note(RADAR_DBG_EV_OLD_BAUD_OK, s_dbg_vfy_baud);
-        }
-        else
-        {
-            dbg_note(RADAR_DBG_EV_NO_DATA, 0U);
-        }
-    }
-    else
-    {
-        /* 其它状态: 无需处理 */
-    }
-#endif
-
     dbg_check_events();
 
     if ((m_u32Tickms - s_dbg_upd_ms) >= RADAR_DBG_PERIOD_MS)

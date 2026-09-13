@@ -58,6 +58,23 @@
                                           38400UL, 57600UL, 230400UL }
 #define RADAR_BAUD_TABLE_CNT            (8U)        /* 协议表6 全部 8 档(无 921600) */
 #define RADAR_BAUD_FALLBACK             (256000UL)
+/* 波特率 -> 协议表 6 索引(0x00A1 用), 索引 = 位置 + 1 */
+#define RADAR_BAUD_IDX_TABLE            { 9600UL, 19200UL, 38400UL, 57600UL, 115200UL, 230400UL, 256000UL, 460800UL }
+#define RADAR_BAUD_IDX_TABLE_CNT        (8U)
+
+/* ============================ 产线配置: 模块波特率 ============================
+ * 0      = 不做(模块保持它自己的波特率, 驱动自适应匹配);
+ * 非 0   = 把模块波特率配置成该值(协议 0x00A1, 掉电保存在模块里)。
+ * 流程(幂等): 自适应找到当前波特率 -> 已经是目标值就什么都不做;
+ *             否则 0x00A1 写入 -> 0x00A3 重启模块 -> 等 RADAR_PROVISION_RESTART_MS
+ *             -> 驱动切到目标波特率 -> 自检 RADAR_PROVISION_VERIFY_MS(看有无上报)
+ *             -> 成功则以后每次上电模块都是该值; 失败自动回退原波特率, 不影响工作。
+ * 结果: radar_provision_state() / g_radar_dbg.prov_st (4=成功或已是目标值, 5=失败已回退)。
+ * 每块模块只需配置一次(配置存在模块 flash 里); 0x00A2 恢复出厂会把它删回 256000。
+ */
+#define RADAR_PROVISION_BAUD            (460800UL)
+#define RADAR_PROVISION_RESTART_MS      (800U)      /* 模块重启后等多久再切驱动波特率 */
+#define RADAR_PROVISION_VERIFY_MS       (2500U)     /* 新波特率下的自检等待时间 */
 
 /* ============================ RX DMA: USART1_RI -> DMA2 CH1 ============================ */
 #define RADAR_RX_DMA_UNIT               (CM_DMA2)
@@ -121,15 +138,5 @@
 #define RADAR_DBG_EN                    (1U)
 #define RADAR_DBG_PERIOD_MS             (500U)      /* 状态行刷新周期 */
 #define RADAR_DBG_RX_STALL_MS           (3000U)     /* 收字节停滞多久报一次事件 */
-/* 把模块波特率改成 460800(一次性, 默认关) —— 效果等同于"改出厂波特率":
- *   协议 §2.2.9/§2.2.11: 0x00A1 写索引(0x0008=460800) -> 掉电不丢失, 重启后生效。
- *   填 0 = 不做; 填 8 = 上电后自动执行: 使能配置 -> 0x00A1(8) -> 0x00A3 重启模块
- *   -> 800ms 后驱动切到 RADAR_DBG_SET_BAUD_VALUE -> 自检 2.5s(看有无上报帧)
- *   -> 成功记 "baud verify OK 460800"; 失败自动回退旧波特率并记事件。
- *   全程结果看 g_radar_dbg_evt。每块模块只需做一次, 成功后本项改回 0。
- *   注意: 厂家固件里的"出厂默认 256000"改不了(0x00A2 恢复出厂会回到 256000);
- *         我们只是把 460800 写进模块 flash, 让这块模块每次上电都从 460800 开始。 */
-#define RADAR_DBG_SET_BAUD_IDX          (0U)
-#define RADAR_DBG_SET_BAUD_VALUE        (460800UL)
 
 #endif /* __RADAR_CFG_H__ */

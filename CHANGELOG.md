@@ -156,6 +156,13 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
   - `RADAR_DBG_SET_BAUD_IDX` 一次性改模块波特率改为**完整时序**：0x00A1 设置 → 0x00A3 重启模块（协议规定配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动再切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧，每步都记事件。
   - 构建验证：4 种组合（FORCE=0 自适应8档 / FORCE=460800 / FORCE=0+SET_BAUD_IDX=8 / FORCE=256000）均 0 Error 0 Warning。
 - `[hc32f460]` **feat(把模块波特率改成 460800)**: `RADAR_DBG_SET_BAUD_IDX=8` 的一次性流程补齐**自检与回退**——使能配置 → `0x00A1(0x0008)` → `0x00A3` 重启模块（协议规定该配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧 → 自检 2.5s 看有无上报帧：成功记 `baud verify OK 460800`；失败自动回退旧波特率再看 2.5s，分别记 `old baud still OK` / `no data on either baud: check wiring`。注：厂家固件里的"出厂默认 256000"无法更改（`0x00A2` 恢复出厂即回到 256000），本流程是把 460800 写进**模块自己的 flash**，从此这块模块上电就是 460800（每块需各做一次）。
+- `[hc32f460]` **feat(产线配置模块波特率)**: 把"让模块波特率固定为 460800"做成**常驻功能**（在此之前只有调试段里那个临时开关，默认关、且会随调试代码一起删除）：
+  - 新增 `RADAR_PROVISION_BAUD`（`radar_cfg.h`，**当前默认 460800UL**；0 = 关闭）、`RADAR_PROVISION_RESTART_MS(800)`/`VERIFY_MS(2500)`、`RADAR_BAUD_IDX_TABLE`（波特率 → 协议表 6 索引）；
+  - 新增 `radar_provision_tick()`（`radar.c`，由 `radar_poll()` 驱动, 非阻塞、**幂等**）：自适应找到模块当前波特率后 —— 已是目标值则**什么都不发**；否则 `0x00A1` 写入 → `0x00A3` 重启模块（协议规定该配置"重启后生效", 故模块重启前驱动留在原波特率）→ 800ms 后驱动切到目标波特率 → 自检 2.5s：收到上报即成功, 收不到则**自动回退原波特率**继续工作；
+  - 新增查询接口 `radar_provision_state()`（0 待做 / 1 写入中 / 2 等重启 / 3 自检中 / 4 成功或本就是目标值 / 5 失败已回退 / 6 无法配置），调试快照增加 `g_radar_dbg.prov_st`；
+  - **删除**调试段里的一次性开关 `RADAR_DBG_SET_BAUD_IDX`/`RADAR_DBG_SET_BAUD_VALUE`（已被上面这条正式流程取代）；事件码 12~18 归入"产线配置流程"（去掉原 19/20）；
+  - 产线用法（详见 `docs/hc32_radar_bringup.md`）：直接烧本固件, 每块板上电约 4.5s 完成配置（`prov_st=4` 即成功）, 模块 flash 里从此是 460800；出正式版本时可把 `RADAR_PROVISION_BAUD` 改回 0, 并**建议保留自适应**以防有人误做"恢复出厂"（模块会回到 256000）；
+  - 构建验证：产线配置=460800 / =0 / =256000 / 产线开+调试关 / `FORCE=460800` 五种组合均 0 Error 0 Warning。
 - `[hc32f460]` **refactor(调试输出)**: **删除雷达调试的全部串口/printf/文本输出** —— 本板没有连电脑的串口, 这些通道无用且占空间。具体:
   - 删除 ITM(SWO) 与 RS485 两个输出通道(`RADAR_DBG_SINK_ITM`/`RADAR_DBG_SINK_RS485`、`dbg_send_itm/dbg_send_rs485/dbg_sink`、`bsp_rs485.h` 依赖)；
   - 删除状态文本行与事件字符串(`g_radar_dbg_line`/`g_radar_dbg_evt`/`g_radar_dbg_hex`/`g_radar_dbg_ack` 及全部整数转 ASCII 助手)；

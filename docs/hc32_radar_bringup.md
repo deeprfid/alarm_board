@@ -39,6 +39,7 @@
 | `lock` | 是否找到波特率 | 1；0 = 8 档都没应答, 已回落 |
 | `baud` | 当前波特率 | 模块的真实波特率 |
 | `probe_st` / `probe_idx` | 探测状态机状态 / 正在试第几档(0..7) | 结束后 `probe_st=9` |
+| `prov_st` | 产线配置波特率状态(仅 `RADAR_PROVISION_BAUD` 非 0 时): 0 待做 / 1 写入中 / 2 等模块重启 / 3 自检中 / 4 成功或本就是目标值 / 5 失败已回退 / 6 无法配置 | 4 |
 | `rep` | 解析成功的目标上报数 | **持续增长 = 链路真的通了** |
 | `repf` / `ackf` | 收到的上报帧数 / ACK 帧数(按档清零) | `repf` 增长 |
 | `fok` / `fer` | 总分帧成功 / 失败数 | fok 增长, fer 不变 |
@@ -69,7 +70,7 @@
 | 9 | FRAME_ERR | 累计错误帧数 |
 | 10 | ST_CHANGE | 新的目标状态 |
 | 11 | RX_STALL（收字节停滞） | 停滞时累计字节 |
-| 12~20 | 一次性改波特率流程专用（SETBAUD_OK/FAIL、RESTART_SENT/FAIL、DRIVER_BAUD、VERIFY_OK、VERIFY_FALLBACK、OLD_BAUD_OK、NO_DATA） | 见码表 |
+| 12~18 | **产线配置流程专用**（SETBAUD_OK/FAIL、RESTART_SENT/FAIL、DRIVER_BAUD、VERIFY_OK、VERIFY_FALLBACK） | 见 `radar_dbg.h` 码表 |
 
 **开机事件序列示例**（`evt_code` 环里从旧到新）：
 `1(BOOT) → 3(TRY 256000) → 4(verify 256000) → 5(LOCK 256000)` = 模块在 256000 且已被上报帧验证。
@@ -109,15 +110,32 @@
 | 目的 | 改哪里 | 说明 |
 | --- | --- | --- |
 | 驱动固定用某个波特率 | `radar_cfg.h` → `RADAR_BAUD_FORCE` | 当前 = `0`(自适应 8 档)；要钉死就填 `460800UL`/`256000UL` 等 |
-| 让**模块**自己切到 460800（= 改这块模块的"出厂波特率"）| `radar_cfg.h` → `RADAR_DBG_SET_BAUD_IDX` 填 `8` | 一次性、掉电保存：上电后自动 使能配置 → `0x00A1(8)` → `0x00A3` 重启模块 → 800ms 后驱动切到 460800 → 自检 2.5s；成功记事件 `17(VERIFY_OK)`，失败自动回退旧波特率。**每块模块各做一次**，成功后把该项改回 0 |
+| 让**模块**的波特率变成 460800（= 改这块模块的"出厂波特率"）| `radar_cfg.h` → `RADAR_PROVISION_BAUD` = `460800UL`（**当前默认就是它**）| 常驻功能、掉电保存、**幂等**：自适应先找到模块当前波特率，已是 460800 就什么都不做；否则 `0x00A1` 写入 → `0x00A3` 重启模块 → 800ms 后驱动切档 → 自检 2.5s（事件码 12→14→16→17）；失败自动回退原波特率（事件码 18），不影响业务。**每块模块只需上电跑一次** |
 | 改完波特率的收尾 | 把 `RADAR_DBG_SET_BAUD_IDX` 改回 `0` | 想让开机更快可同时把 `RADAR_BAUD_FORCE` 填成确定的值（跳过扫描） |
 
 ---
+
+### 产线推荐用法
+
+```
+① 直接烧本固件（RADAR_PROVISION_BAUD = 460800UL，默认已开）
+   每块板上电约 4.5 秒走完: 自适应(约 1.2s) → 0x00A1 → 重启模块 → 切档 → 自检(约 2.5s)
+   怎么看结果: g_radar_dbg.prov_st = 4(成功/本来就是) 或 5(失败已回退); 事件码 17 = 自检通过
+② 之后模块自身 flash 里就是 460800（掉电不丢, 换到别的板子也一样）
+③ 出正式版本时可以: 把 RADAR_PROVISION_BAUD 改回 0（不再配置）,
+   并把 RADAR_BAUD_FORCE 填 460800UL（跳过约 1.2s 的自适应扫描）。
+   建议保留自适应（FORCE=0）以防有人误做"恢复出厂"(模块会回到 256000)。
+```
+
+> 注意：**厂家固件里的"出厂默认 256000"改不了**（`0x00A2` 恢复出厂就回到 256000）；
+> 这里做的是把 460800 写进**模块自己的 flash**，从此这块模块每次上电都从 460800 开始。
 
 ## 5. 验证通过后的清理(必做其一)
 
 1. **最小改动**: `radar_cfg.h` 里 `RADAR_DBG_EN (0U)` —— 只剩空实现, 不占 Flash, 不影响业务；或
 2. **彻底删除**: 删 `radar.c` 里 `#if (RADAR_DBG_EN != 0U)` 到文件末尾的整段 → 删 `main.c` 的 `radar_dbg_poll()` → 删 `main.h` 的 `#include "radar_dbg.h"` → 删 `radar_dbg.h`。
+
+`radar_provision_state()` / `RADAR_PROVISION_BAUD`（产线配置）、`radar_restart()` / `radar_set_uart_baud_index()` 是**正式功能**, 不在调试段里, 清调试代码时不要删；要停用产线配置只需把 `RADAR_PROVISION_BAUD` 改为 0。
 
 `radar_rx_bytes()` / `radar_rx_drop()` 是常驻诊断接口（很小, 可长期保留）, 不属于要删的调试代码。
 

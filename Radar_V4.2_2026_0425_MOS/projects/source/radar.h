@@ -44,6 +44,7 @@ uint8_t radar_uart_online(uint8_t dev);
 uint8_t radar_baud_locked(void);                        /* 自适应探测是否命中 */
 uint8_t radar_ready(void);                            /* 自适应探测是否已结束 */
 uint32_t radar_get_baud(void);
+uint8_t radar_provision_state(void);                    /* 产线配置波特率状态: 4=已是目标值/成功, 5=失败已回退 */
 void    radar_set_presence_src(uint8_t src);
 uint8_t radar_presence_src(void);
 
