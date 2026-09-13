@@ -26,6 +26,7 @@
 #define RADAR_DBG_EVT_MAX               (64U)       /* 事件行缓冲(含结尾 \r\n) */
 #define RADAR_DBG_HEX_BYTES             (24U)       /* 抓多少字节原始数据 */
 #define RADAR_DBG_HEX_MAX               (96U)       /* 十六进制缓冲 */
+#define RADAR_DBG_ACK_MAX               (128U)      /* 最近一帧 ACK 的十六进制缓冲 */
 
 /* 最近一次刷新的状态快照(Keil Watch 里加 g_radar_dbg 即可, 全部是十进制整数) */
 typedef struct {
@@ -54,6 +55,7 @@ extern volatile radar_dbg_snap_t g_radar_dbg;
 extern char                      g_radar_dbg_line[RADAR_DBG_LINE_MAX];  /* 最新状态行 */
 extern char                      g_radar_dbg_evt[RADAR_DBG_EVT_MAX];    /* 最近事件 */
 extern char                      g_radar_dbg_hex[RADAR_DBG_HEX_MAX];  /* 本波特率下收到的前几个字节(十六进制) */
+extern char                      g_radar_dbg_ack[RADAR_DBG_ACK_MAX];  /* 最近一帧 ACK(含解析出的命令字/状态字) */
 extern uint32_t                  g_radar_dbg_cnt;                       /* 已刷新的状态行数 */
 extern uint32_t                  g_radar_dbg_evt_cnt;                   /* 已记录的事件数 */
 #endif

@@ -150,7 +150,15 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
   - **放宽自适应命中判据**：原来要求 ACK 且 `status==0` 才算命中，现在 ① 只要收到 `0x00FF` 的 ACK（无论状态）即判定波特率正确（状态非 0 只表示命令没被接受）；② 没等到 ACK 但已收到 `RADAR_BAUD_LOCK_FRAMES(3)` 个**合法帧**也算命中（典型场景：模块 TX→MCU RX 通、MCU TX→模块 RX 断，此前会一路试到 115200 再回落）；
   - 调试段新增 **原始字节抓包** `g_radar_dbg_hex`（换波特率即清空，抓前 24 字节十六进制）：开头 `F4 F3 F2 F1`/`FD FC FB FA` 说明波特率正确，乱码说明波特率不对，空说明 RX 方向不通——这是区分“接线问题”和“波特率问题”的关键证据；
   - 调试段新增 **一次性改模块波特率** `RADAR_DBG_SET_BAUD_IDX`（默认 0=关；填 8 = 发 `0x00A1` 让模块切到 `RADAR_DBG_SET_BAUD_VALUE(460800)`，成功后驱动同步切波特率并重建分帧，结果记在 `g_radar_dbg_evt`）；
-  - 构建验证：4 种组合（FORCE=460800 / FORCE=0 / FORCE=0+SET_BAUD_IDX=8 / FORCE=0+SINK_RS485=1）均 0 Error 0 Warning（Code 28292~28696）。
+  - **候选波特率扩到协议表 6 全部 8 档**（256000/460800/115200/9600/19200/38400/57600/230400，无 921600）：
+    模块波特率是**掉电保存**的配置项（协议 §2.2.9，出厂默认 0x0007=256000，改过就一直是改过的值），不能假设 256000；
+    8 档全扫约 8×305ms≈2.5s（非阻塞），`RADAR_BAUD_FORCE` 复位为 `0`(自适应)，需要钉死时再填具体值。
+  - `RADAR_DBG_SET_BAUD_IDX` 一次性改模块波特率改为**完整时序**：0x00A1 设置 → 0x00A3 重启模块（协议规定配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动再切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧，每步都记事件。
+  - 构建验证：4 种组合（FORCE=0 自适应8档 / FORCE=460800 / FORCE=0+SET_BAUD_IDX=8 / FORCE=256000）均 0 Error 0 Warning。
+- `[hc32f460]` **fix(雷达 ACK 匹配)**: 上板 `lock=0` 的**另一个重要嫌疑**——原来要求 `ACK.cmd == 0x00FF && status == 0` 才算命中, 但协议 V1.09 的 ACK 示例里命令字**高字节写作 01**(如使能配置 ACK `FD FC FB FA 08 00 FF 01 00 00 01 00 40 00 ...`), 按 cmd(2)+status(2) 解析会得到 `cmd=0x01FF`, 即使接线完全正常也**永远匹配不上**。改动：
+  - 新增 `RADAR_ACK_CMD_MATCH(ack_cmd, cmd)`（`radar_proto.h`）——只比命令字**低字节**（LD2410 命令全是 `0x00xx`, 低字节唯一, 可同时兼容文档的两种写法）, `radar_cmd()` 改用该宏；探测阶段改为**收到任意合法 ACK 帧即锁定波特率**（探测期只发过 0x00FF, 任何 ACK 都是它回的）；
+  - 调试段新增 `g_radar_dbg_ack`：最近一帧 ACK 的 `c=xx / st=xx / d=N` + 原始字节十六进制, 用于现场核对 ACK 真实字段布局（文档示例自身不一致）；
+  - 构建验证：自适应8档 / `FORCE=460800` / `SET_BAUD_IDX=8` 三种组合均 0 Error 0 Warning。
 - `[hc32f460]` **fix**: `bsp_rs485.h` 补 **include guard** —— 该头文件原先没有 guard，同一编译单元被包含两次即报 `#256: invalid redeclaration of type name "alarm_pdu"`（本次由 `radar_dbg.c` 显式包含时暴露）。同目录 `bsp_alarm.h` / `bsp_exint.h` / `bsp_pwm.h` 同样缺 guard，当前无二次包含，未改动。
 - **构建验证**：Keil 命令行无头构建 4 种组合全部 **0 Error / 0 Warning** —— 默认（DBG_EN=1、两个 SINK=0）`Code=28180`；SINK_ITM=1 `Code=28260`；SINK_RS485=1 `Code=28296`；恢复默认后全量重建 `Code=28180`。
 

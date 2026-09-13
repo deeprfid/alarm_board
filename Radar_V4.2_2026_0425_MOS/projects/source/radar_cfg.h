@@ -46,14 +46,17 @@
  *   非 0   = 固定使用该值, 跳过探测(已知模块波特率时用, 最省事)
  * 现场若怀疑模块不在候选波特率里, 直接在这里填 460800UL / 256000UL 逐个试。
  */
-#define RADAR_BAUD_FORCE                (460800UL)
+#define RADAR_BAUD_FORCE                (0UL)
 
 /* 自适应时: 没等到 ACK 但已收到这么多"合法帧"也算波特率正确(如 TX 方向没通) */
 #define RADAR_BAUD_LOCK_FRAMES          (3U)
 
-/* 上电自适应波特率探测顺序(LD2410C 出厂默认 256000) */
-#define RADAR_BAUD_TABLE                { 256000UL, 460800UL, 115200UL }
-#define RADAR_BAUD_TABLE_CNT            (3U)
+/* 上电自适应波特率探测顺序: 覆盖协议表 6 的全部 8 档。
+ * 注意: 模块波特率是"掉电保存"的配置项(出厂默认 256000, 索引 0x0007), 一旦被
+ * 上位机/APP/0x00A1 改过, 上电就是改过的值 —— 所以不能假设它是 256000。 */
+#define RADAR_BAUD_TABLE                { 256000UL, 460800UL, 115200UL, 9600UL, 19200UL, \
+                                          38400UL, 57600UL, 230400UL }
+#define RADAR_BAUD_TABLE_CNT            (8U)        /* 协议表6 全部 8 档(无 921600) */
 #define RADAR_BAUD_FALLBACK             (256000UL)
 
 /* ============================ RX DMA: USART1_RI -> DMA2 CH1 ============================ */

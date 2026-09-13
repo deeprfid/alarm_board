@@ -24,6 +24,9 @@ static uint32_t         s_probe_t0;
 #if (RADAR_DBG_EN != 0U)
 static void radar_dbg_capture(const uint8_t *data, uint16_t len);   /* 定义见文件末尾调试段 */
 #endif
+#if (RADAR_DBG_EN != 0U)
+static void radar_dbg_ack_dump(const uint8_t *data, uint16_t len);  /* 定义见文件末尾调试段 */
+#endif
 
 static void radar_on_bytes(const uint8_t *data, uint16_t len)
 {
@@ -40,7 +43,13 @@ static void radar_on_bytes(const uint8_t *data, uint16_t len)
         {
             if (f.kind == RADAR_FRAME_KIND_ACK)
             {
-                if (radar_proto_parse_ack(&f, &s_ack) != 0) { s_ack_ready = 1U; }
+                if (radar_proto_parse_ack(&f, &s_ack) != 0)
+                {
+                    s_ack_ready = 1U;
+#if (RADAR_DBG_EN != 0U)
+                    radar_dbg_ack_dump(f.data, f.data_len);
+#endif
+                }
             }
             else if (f.kind == RADAR_FRAME_KIND_REPORT)
             {
@@ -129,10 +138,11 @@ static void radar_probe_tick(void)
             break;
 
         case 2U:                             /* 等 ACK, 或等到合法上报帧 */
-            if ((s_ack_ready != 0U) && (s_ack.cmd == RADAR_CMD_ENABLE_CFG))
+            if (s_ack_ready != 0U)
             {
-                /* 模块在该波特率下能应答 -> 波特率就是对的
-                 * (状态非 0 只表示命令没被接受, 不影响"波特率正确"这个结论) */
+                /* 模块在该波特率下能应答 -> 波特率就是对的。
+                 * 探测阶段只发过"使能配置"这一条命令, 所以任何 ACK 都是它回的;
+                 * 不再校验 ACK 里的命令字/状态字(文档示例本身不一致, 见 RADAR_ACK_CMD_MATCH)。 */
                 s_baud_locked = 1U;
                 s_probe_t0 = m_u32Tickms;
                 s_probe_st = 3U;
@@ -309,7 +319,7 @@ int32_t radar_cmd(uint16_t cmd, const uint8_t *val, uint8_t val_len,
 
         if (s_ack_ready != 0U)
         {
-            if (s_ack.cmd == cmd)                       /* 只认本条命令的 ACK */
+            if (RADAR_ACK_CMD_MATCH(s_ack.cmd, cmd))    /* 只认本条命令的 ACK(比低字节) */
             {
                 if (ack != 0) { *ack = s_ack; }
                 return (s_ack.status == 0U) ? LL_OK : LL_ERR;
@@ -470,11 +480,13 @@ char                      g_radar_dbg_evt[RADAR_DBG_EVT_MAX];
 uint32_t                  g_radar_dbg_cnt;
 uint32_t                  g_radar_dbg_evt_cnt;
 char                      g_radar_dbg_hex[RADAR_DBG_HEX_MAX];
+char                      g_radar_dbg_ack[RADAR_DBG_ACK_MAX];
 
 static uint16_t           s_dbg_hex_n;      /* 已抓字节数 */
 static uint32_t           s_dbg_baud_last;  /* 上一拍的波特率(变化则重抓) */
 #if (RADAR_DBG_SET_BAUD_IDX != 0U)
-static uint8_t            s_dbg_setbaud_done;   /* 一次性改模块波特率是否已执行 */
+static uint8_t            s_dbg_setbaud_st;     /* 0=待做 1=已发命令 2=等模块重启 3=完成 */
+static uint32_t           s_dbg_setbaud_ms;
 #endif
 
 static uint32_t s_dbg_line_ms;          /* 上次刷状态行的时刻 */
@@ -620,6 +632,33 @@ static void radar_dbg_capture(const uint8_t *data, uint16_t len)
         p = dbg_hex_byte(p, data[i]);
         *p++ = (char)32;
         s_dbg_hex_n++;
+    }
+    *p = (char)0;
+}
+
+/* 记录最近一帧 ACK: 解析出的命令字/状态字 + 原始数据字节(十六进制)。
+ * 用途: 现场核对 ACK 的真实字段布局(文档示例里命令字高字节与状态字存在歧义), 也用于
+ *       排查"发命令没反应"时到底是没收到 ACK 还是 ACK 没被认出来。 */
+static void radar_dbg_ack_dump(const uint8_t *data, uint16_t len)
+{
+    char    *p = g_radar_dbg_ack;
+    uint16_t i;
+
+    p = dbg_str(p, "c=");
+    p = dbg_hex_byte(p, (uint8_t)(s_ack.cmd & 0x00FFU));
+    p = dbg_hex_byte(p, (uint8_t)((s_ack.cmd >> 8) & 0x00FFU));
+    p = dbg_str(p, " st=");
+    p = dbg_hex_byte(p, (uint8_t)(s_ack.status & 0x00FFU));
+    p = dbg_hex_byte(p, (uint8_t)((s_ack.status >> 8) & 0x00FFU));
+    p = dbg_str(p, " d=");
+    p = dbg_u32(p, (uint32_t)len);
+    p = dbg_str(p, " : ");
+
+    for (i = 0U; i < len; i++)
+    {
+        if (((uint32_t)(p - g_radar_dbg_ack) + 4UL) >= (uint32_t)RADAR_DBG_ACK_MAX) { break; }
+        p = dbg_hex_byte(p, data[i]);
+        *p++ = (char)32;
     }
     *p = (char)0;
 }
@@ -805,25 +844,45 @@ void radar_dbg_note(const char *tag)
 void radar_dbg_poll(void)
 {
 #if (RADAR_DBG_SET_BAUD_IDX != 0U)
-    /* 一次性: 让模块自己切波特率(协议 0x00A1), 成功后驱动跟着切 */
-    if ((s_dbg_setbaud_done == 0U) && (radar_baud_locked() != 0U))
+    /* 一次性: 改模块波特率(0x00A1) -> 重启模块(0x00A3) -> 800ms 后驱动跟着切。
+     * 协议规定: 该配置"重启模块后生效", 所以模块切换前驱动必须留在旧波特率上, 否则丢链路。 */
+    if ((s_dbg_setbaud_st == 0U) && (radar_baud_locked() != 0U))
     {
-        int32_t ret;
+        int32_t     ret;
+        radar_ack_t ack;
 
-        s_dbg_setbaud_done = 1U;
+        s_dbg_setbaud_st = 1U;
         ret = radar_set_uart_baud_index((uint8_t)RADAR_DBG_SET_BAUD_IDX);
         if (ret == LL_OK)
         {
             dbg_event_u32("module baud idx OK ", (uint32_t)RADAR_DBG_SET_BAUD_IDX);
-            radar_port_set_baud(RADAR_DBG_SET_BAUD_VALUE);
-            radar_frame_init(&s_rx);
-            s_probe_st = 9U;
-            s_baud_locked = 1U;
+            ret = radar_cmd(RADAR_CMD_RESTART, 0, 0U, &ack, RADAR_CMD_TIMEOUT_MS);
+            if (ret == LL_OK)
+            {
+                dbg_event("module restart sent");
+                s_dbg_setbaud_ms = m_u32Tickms;
+                s_dbg_setbaud_st = 2U;
+            }
+            else
+            {
+                dbg_event_u32("module restart FAIL ret=", (uint32_t)ret);
+                s_dbg_setbaud_st = 3U;
+            }
         }
         else
         {
             dbg_event_u32("module baud FAIL ret=", (uint32_t)ret);
+            s_dbg_setbaud_st = 3U;
         }
+    }
+    else if ((s_dbg_setbaud_st == 2U) && ((m_u32Tickms - s_dbg_setbaud_ms) >= 800U))
+    {
+        s_dbg_setbaud_st = 3U;
+        radar_port_set_baud(RADAR_DBG_SET_BAUD_VALUE);
+        radar_frame_init(&s_rx);
+        s_probe_st    = 9U;
+        s_baud_locked = 1U;
+        dbg_event_u32("driver baud set ", RADAR_DBG_SET_BAUD_VALUE);
     }
 #endif
 

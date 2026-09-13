@@ -44,6 +44,12 @@
 #define RADAR_STATE_NOISE_FAIL      (0x06U)     /* 底噪检测失败 */
 
 #define RADAR_GATE_MAX              (8U)        /* 距离门 0..8 */
+
+/* ACK 里的命令字匹配: 只比较低字节。
+ * 原因: LD2410 所有命令字都是 0x00xx, 而协议文档 V1.09 里 ACK 示例的命令字高字节写作
+ *       01(例: 使能配置 ACK = FD FC FB FA 08 00 FF 01 00 00 01 00 40 00 ...), 与"状态字"
+ *       的位置在文档里本身就不一致; 用低字节匹配可同时兼容两种写法。 */
+#define RADAR_ACK_CMD_MATCH(ack_cmd, cmd)   ((((uint16_t)(ack_cmd)) & 0x00FFU) == (((uint16_t)(cmd)) & 0x00FFU))
 #define RADAR_ACK_RET_MAX           (32U)
 
 /* ------------------------------ 数据结构 ------------------------------ */
