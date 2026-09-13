@@ -116,6 +116,8 @@
 #define RADAR_FRAME_MAX                 (64U)       /* 单帧最大长度(工程模式 45B) */
 #define RADAR_CMD_TIMEOUT_MS            (200U)      /* 命令等待 ACK 超时 */
 #define RADAR_TX_TIMEOUT_MS             (50U)       /* 发送完成兜底: 超过该时间没等到完成中断就复位 TX 通路 */
+#define RADAR_READ_TRY                  (2U)        /* radar_read_all() 每项最多试几次 */
+#define RADAR_READ_GAP_MS               (50U)       /* 每项之间的间隔(模块连续命令间需要喘口气) */
 #define RADAR_BAUD_PROBE_TIMEOUT_MS     (300U)      /* 每个波特率探测超时 */
 #define RADAR_PROBE_BOOT_MS             (1000U)     /* 上电后等模块启动完成再开始探测 */
 #define RADAR_PROBE_VERIFY_MS           (1000U)     /* 收到 ACK 后, 用"上报帧"验证该波特率的等待时间 */

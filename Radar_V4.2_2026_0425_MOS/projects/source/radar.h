@@ -62,7 +62,12 @@ int32_t radar_read_all(void);                                /* 依次读回全部只读
 /* 只读信息汇总: Keil Watch 里加 s_dump, 或看 radar_dump() */
 typedef struct {
     uint32_t       ok;          /* 本次读回成功的项数(5 = 全部成功) */
-    int32_t        last_ret;    /* 最后一条命令的返回码(LL_OK = 0) */
+    int32_t        last_ret;    /* 最后一项的返回码(LL_OK = 0 / -1 模块没回 / -6 忙 / -8 超时) */
+    int32_t        ret_params;  /* 0x0061 读参数的返回码 */
+    int32_t        ret_res;     /* 0x00AB 读距离分辨率 */
+    int32_t        ret_aux;     /* 0x00AE 读辅助控制 */
+    int32_t        ret_fw;      /* 0x00A0 读固件版本 */
+    int32_t        ret_mac;     /* 0x00A5 读 MAC */
     radar_params_t params;      /* 0x0061: 最大门/各门灵敏度/无人持续时间 */
     uint8_t        resolution;  /* 0x00AB */
     radar_aux_t    aux;         /* 0x00AE */

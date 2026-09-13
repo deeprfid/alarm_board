@@ -251,6 +251,8 @@ static uint8_t radar_link_ready(void)
 #endif
 
 /* ------------------------------ A/C: 参数配置 · 只读维护 ------------------------------ */
+/* 前向声明: 底层泵与命令事务(定义在本文件后部) */
+static void radar_pump(void);
 /* 前向声明: radar_cfg_cmd 定义在文件后部(命令事务: 使能配置->命令->结束配置) */
 static int32_t radar_cfg_cmd(uint16_t cmd, const uint8_t *val, uint8_t val_len,
                              radar_ack_t *ack, uint32_t timeout_ms);
@@ -491,36 +493,59 @@ int32_t radar_factory_reset(void)
     return radar_cfg_cmd(RADAR_CMD_FACTORY_RESET, 0, 0U, 0, RADAR_CMD_TIMEOUT_MS);
 }
 
-/* 依次读回所有只读信息到 s_dump(阻塞约几百 ms, 结果看 Keil Watch 的 s_dump) */
+/* 延时(期间继续泵字节, 不干等) */
+static void radar_delay_ms(uint32_t ms)
+{
+    uint32_t t0 = m_u32Tickms;
+
+    while ((m_u32Tickms - t0) < ms) { radar_pump(); }
+}
+
+/* 单项读取(带重试): item 0 参数 / 1 分辨率 / 2 辅助控制 / 3 固件版本 / 4 MAC */
+static int32_t radar_read_one(uint8_t item)
+{
+    int32_t ret = LL_ERR;
+    uint8_t n;
+
+    for (n = 0U; n < (uint8_t)RADAR_READ_TRY; n++)
+    {
+        switch (item)
+        {
+            case 0U: ret = radar_read_params(&s_dump.params);           break;
+            case 1U: ret = radar_read_resolution(&s_dump.resolution);   break;
+            case 2U: ret = radar_read_aux_control(&s_dump.aux);         break;
+            case 3U: ret = radar_read_fw_version(&s_dump.fw);           break;
+            default: ret = radar_read_mac(s_dump.mac, &s_dump.mac_len); break;
+        }
+
+        if (ret == LL_OK) { return ret; }
+
+        radar_delay_ms((uint32_t)RADAR_READ_GAP_MS);
+    }
+
+    return ret;
+}
+
+/* 依次读回所有只读信息到 s_dump(每项带重试并逐项记录返回码, 结果看 Keil Watch 的 s_dump) */
 int32_t radar_read_all(void)
 {
-    int32_t ret;
     uint8_t n = 0U;
 
-    s_dump.ok = 0U;
-    s_dump.last_ret = LL_OK;
+    s_dump.ret_params = radar_read_one(0U);  radar_delay_ms((uint32_t)RADAR_READ_GAP_MS);
+    s_dump.ret_res    = radar_read_one(1U);  radar_delay_ms((uint32_t)RADAR_READ_GAP_MS);
+    s_dump.ret_aux    = radar_read_one(2U);  radar_delay_ms((uint32_t)RADAR_READ_GAP_MS);
+    s_dump.ret_fw     = radar_read_one(3U);  radar_delay_ms((uint32_t)RADAR_READ_GAP_MS);
+    s_dump.ret_mac    = radar_read_one(4U);
 
-    ret = radar_read_params(&s_dump.params);
-    s_dump.last_ret = ret;
-    if (ret == LL_OK) { n++; }
+    if (s_dump.ret_params == LL_OK) { n++; }
+    if (s_dump.ret_res    == LL_OK) { n++; }
+    if (s_dump.ret_aux    == LL_OK) { n++; }
+    if (s_dump.ret_fw     == LL_OK) { n++; }
+    if (s_dump.ret_mac    == LL_OK) { n++; }
 
-    ret = radar_read_resolution(&s_dump.resolution);
-    s_dump.last_ret = ret;
-    if (ret == LL_OK) { n++; }
+    s_dump.ok       = (uint32_t)n;                  /* 5 = 全部成功 */
+    s_dump.last_ret = s_dump.ret_mac;               /* 最后一项(兼容旧用法) */
 
-    ret = radar_read_aux_control(&s_dump.aux);
-    s_dump.last_ret = ret;
-    if (ret == LL_OK) { n++; }
-
-    ret = radar_read_fw_version(&s_dump.fw);
-    s_dump.last_ret = ret;
-    if (ret == LL_OK) { n++; }
-
-    ret = radar_read_mac(s_dump.mac, &s_dump.mac_len);
-    s_dump.last_ret = ret;
-    if (ret == LL_OK) { n++; }
-
-    s_dump.ok = (uint32_t)n;                    /* 5 = 全部读回成功 */
     return s_dump.last_ret;
 }
 

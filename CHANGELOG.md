@@ -156,6 +156,10 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
   - `RADAR_DBG_SET_BAUD_IDX` 一次性改模块波特率改为**完整时序**：0x00A1 设置 → 0x00A3 重启模块（协议规定配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动再切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧，每步都记事件。
   - 构建验证：4 种组合（FORCE=0 自适应8档 / FORCE=460800 / FORCE=0+SET_BAUD_IDX=8 / FORCE=256000）均 0 Error 0 Warning。
 - `[hc32f460]` **feat(把模块波特率改成 460800)**: `RADAR_DBG_SET_BAUD_IDX=8` 的一次性流程补齐**自检与回退**——使能配置 → `0x00A1(0x0008)` → `0x00A3` 重启模块（协议规定该配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧 → 自检 2.5s 看有无上报帧：成功记 `baud verify OK 460800`；失败自动回退旧波特率再看 2.5s，分别记 `old baud still OK` / `no data on either baud: check wiring`。注：厂家固件里的"出厂默认 256000"无法更改（`0x00A2` 恢复出厂即回到 256000），本流程是把 460800 写进**模块自己的 flash**，从此这块模块上电就是 460800（每块需各做一次）。
+- `[hc32f460]` **fix/feat(只读读回可诊断 + 重试)**: 加上 TX 兜底后 `s_dump.ok=3`（前 3 项读回成功, 命令通道已通）, `last_ret=-8(LL_ERR_TIMEOUT)` —— 最后两项（0x00A0 固件版本、0x00A5 MAC）模块没回 ACK。为定位并提高成功率：
+  - `radar_dump_t` 增加**逐项返回码** `ret_params/ret_res/ret_aux/ret_fw/ret_mac`（一眼看出哪条命令失败、失败码是什么；`last_ret` 保留为最后一项的值）；
+  - `radar_read_all()` 每项最多重试 `RADAR_READ_TRY(2)` 次, 项间插入 `RADAR_READ_GAP_MS(50ms)` 间隔（模块连续命令之间需要喘口气）, 延时期间仍由 `radar_pump()` 继续搬字节；
+  - 构建验证: 0 Error 0 Warning（Code 28724）。
 - `[hc32f460]` **fix(雷达 TX 卡死 -> 命令全部 LL_ERR_BUSY)**: 上板 `s_dump.ok=0`、`last_ret=0xFFFFFFFA`（= -6 `LL_ERR_BUSY`）—— 说明 `radar_port_tx_busy()` 一直为 1：发送完成链（DMA2_CH0 TC -> 使能 USART1 TCI -> 清 busy）任何一环没来，`s_tx_busy` 就永远不清，之后所有命令都发不出去（探测阶段的 `radar_send_raw` 也会静默跳过 -> 只能靠"上报帧"锁定波特率、产线配置必然失败）。改动：
   - **兜底自愈**：新增 `radar_port_tx_watchdog()`（由 `radar_pump()` 每拍调用），超过 `RADAR_TX_TIMEOUT_MS(50ms)` 仍未收到完成中断 -> 关 TX DMA/关 USART TX/清标志/重新使能，然后**放行后续发送**（否则一条卡死会永久废掉命令通道）；
   - **定位用计数**（Keil Watch 直接看名字）：`g_radar_tx_dma_tc_cnt`（TX DMA 完成次数）、`g_radar_tx_tci_cnt`（USART1 发送完成中断次数）、`g_radar_tx_timeout_cnt`（兜底复位次数）。判读：DMA TC=0 → DMA 没跑/没触发；TC>0 而 TCI=0 → 中断映射/使能问题；timeout>0 且命令能通 → 只是完成通知没来，已被兜底放行；
