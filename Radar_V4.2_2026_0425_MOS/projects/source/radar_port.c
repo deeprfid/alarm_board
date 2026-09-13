@@ -9,12 +9,20 @@
 #include "ring_buf.h"          /* BUF_* 环形缓冲 */
 #include <string.h>           /* memset */
 
+/* 1ms 计数(定义在 bsp_exint.c) */
+extern uint32_t m_u32Tickms;
+
 /* ------------------------------ 静态数据 ------------------------------ */
 static __align(64) uint8_t s_rx_win[RADAR_RX_WIN];
 static __align(64) uint8_t s_rx_ring_buf[RADAR_RX_RING_SIZE];
 static stc_ring_buf_t      s_rx_ring;
 
 static volatile uint8_t    s_tx_busy;
+static volatile uint32_t   s_tx_ms;          /* 本次发送开始时刻 */
+
+volatile uint32_t          g_radar_tx_dma_tc_cnt;
+volatile uint32_t          g_radar_tx_tci_cnt;
+volatile uint32_t          g_radar_tx_timeout_cnt;
 static volatile uint32_t   s_rx_bytes;
 static volatile uint32_t   s_rx_drop;
 static uint32_t            s_baud;
@@ -50,6 +58,7 @@ static void radar_rx_timeout_cb(void)
 static void radar_tx_complete_cb(void)
 {
     USART_FuncCmd(RADAR_UART_UNIT, (USART_TX | USART_INT_TX_CPLT), DISABLE);
+    g_radar_tx_tci_cnt++;
 
     TMR0_Stop(RADAR_TMR0_UNIT, RADAR_TMR0_CH);
     USART_ClearStatus(RADAR_UART_UNIT, USART_FLAG_RX_TIMEOUT);
@@ -69,6 +78,7 @@ static void radar_rx_error_cb(void)
 static void radar_tx_dma_tc_cb(void)
 {
     USART_FuncCmd(RADAR_UART_UNIT, USART_INT_TX_CPLT, ENABLE);
+    g_radar_tx_dma_tc_cnt++;
     DMA_ClearTransCompleteStatus(RADAR_TX_DMA_UNIT, RADAR_TX_DMA_TC_FLAG);
 }
 
@@ -256,6 +266,7 @@ int32_t radar_port_write(const uint8_t *buf, uint16_t len)
     if (s_tx_busy != 0U) { return LL_ERR_BUSY; }
 
     s_tx_busy = 1U;
+    s_tx_ms   = m_u32Tickms;
 
     (void)DMA_SetSrcAddr(RADAR_TX_DMA_UNIT, RADAR_TX_DMA_CH, (uint32_t)buf);
     (void)DMA_SetTransCount(RADAR_TX_DMA_UNIT, RADAR_TX_DMA_CH, len);
@@ -268,6 +279,24 @@ int32_t radar_port_write(const uint8_t *buf, uint16_t len)
 uint8_t radar_port_tx_busy(void)
 {
     return s_tx_busy;
+}
+
+/* 兜底: 发送完成后 DMA TC -> 使能 USART TCI -> 清 s_tx_busy。
+ * 若这条链任何一环没来, s_tx_busy 会一直为 1, 之后所有命令都发不出去(返回 LL_ERR_BUSY)。
+ * 这里按时间兜底: 超过 RADAR_TX_TIMEOUT_MS 仍未完成 -> 复位 TX 通路并放行(同时计数, 便于定位)。 */
+void radar_port_tx_watchdog(uint32_t now_ms)
+{
+    if (s_tx_busy == 0U) { return; }
+    if ((now_ms - s_tx_ms) < RADAR_TX_TIMEOUT_MS) { return; }
+
+    (void)DMA_ChCmd(RADAR_TX_DMA_UNIT, RADAR_TX_DMA_CH, DISABLE);
+    USART_FuncCmd(RADAR_UART_UNIT, (USART_TX | USART_INT_TX_CPLT), DISABLE);
+    DMA_ClearTransCompleteStatus(RADAR_TX_DMA_UNIT, RADAR_TX_DMA_TC_FLAG);
+    USART_ClearStatus(RADAR_UART_UNIT, USART_FLAG_TX_CPLT);
+    USART_FuncCmd(RADAR_UART_UNIT, USART_RX_TIMEOUT, ENABLE);
+
+    s_tx_busy = 0U;
+    g_radar_tx_timeout_cnt++;
 }
 
 /* 丢弃接收缓冲里"上一个波特率"的残留字节。

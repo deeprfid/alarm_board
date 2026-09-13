@@ -658,6 +658,7 @@ static void radar_pump(void)
 {
     radar_frame_tick(&s_rx, m_u32Tickms);
     radar_port_poll();
+    radar_port_tx_watchdog(m_u32Tickms);     /* 发送完成中断没来时的兜底 */
 }
 
 void radar_poll(void)

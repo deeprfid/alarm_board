@@ -156,6 +156,10 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
   - `RADAR_DBG_SET_BAUD_IDX` 一次性改模块波特率改为**完整时序**：0x00A1 设置 → 0x00A3 重启模块（协议规定配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动再切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧，每步都记事件。
   - 构建验证：4 种组合（FORCE=0 自适应8档 / FORCE=460800 / FORCE=0+SET_BAUD_IDX=8 / FORCE=256000）均 0 Error 0 Warning。
 - `[hc32f460]` **feat(把模块波特率改成 460800)**: `RADAR_DBG_SET_BAUD_IDX=8` 的一次性流程补齐**自检与回退**——使能配置 → `0x00A1(0x0008)` → `0x00A3` 重启模块（协议规定该配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧 → 自检 2.5s 看有无上报帧：成功记 `baud verify OK 460800`；失败自动回退旧波特率再看 2.5s，分别记 `old baud still OK` / `no data on either baud: check wiring`。注：厂家固件里的"出厂默认 256000"无法更改（`0x00A2` 恢复出厂即回到 256000），本流程是把 460800 写进**模块自己的 flash**，从此这块模块上电就是 460800（每块需各做一次）。
+- `[hc32f460]` **fix(雷达 TX 卡死 -> 命令全部 LL_ERR_BUSY)**: 上板 `s_dump.ok=0`、`last_ret=0xFFFFFFFA`（= -6 `LL_ERR_BUSY`）—— 说明 `radar_port_tx_busy()` 一直为 1：发送完成链（DMA2_CH0 TC -> 使能 USART1 TCI -> 清 busy）任何一环没来，`s_tx_busy` 就永远不清，之后所有命令都发不出去（探测阶段的 `radar_send_raw` 也会静默跳过 -> 只能靠"上报帧"锁定波特率、产线配置必然失败）。改动：
+  - **兜底自愈**：新增 `radar_port_tx_watchdog()`（由 `radar_pump()` 每拍调用），超过 `RADAR_TX_TIMEOUT_MS(50ms)` 仍未收到完成中断 -> 关 TX DMA/关 USART TX/清标志/重新使能，然后**放行后续发送**（否则一条卡死会永久废掉命令通道）；
+  - **定位用计数**（Keil Watch 直接看名字）：`g_radar_tx_dma_tc_cnt`（TX DMA 完成次数）、`g_radar_tx_tci_cnt`（USART1 发送完成中断次数）、`g_radar_tx_timeout_cnt`（兜底复位次数）。判读：DMA TC=0 → DMA 没跑/没触发；TC>0 而 TCI=0 → 中断映射/使能问题；timeout>0 且命令能通 → 只是完成通知没来，已被兜底放行；
+  - 构建验证: 0 Error 0 Warning（Code 28560）。
 - `[hc32f460]` **feat(雷达参数: A 探测行为参数 + C 只读/维护)**:
   - **A 组新增写接口**: `radar_set_aux_control(mode, threshold, out_level)`（0x00AD 光感辅助/OUT 默认电平）—— 补齐 A 组最后一条；其余（`radar_set_max_gate` 0x0060 / `radar_set_sensitivity` 0x0064 / `radar_set_resolution` 0x00AA / `radar_eng_mode` 0x0062·0x0063 / `radar_noise_start·status` 0x000B·0x001B）此前已有；
   - **A 组自动配置（幂等，默认关闭）**: `radar_cfg.h` 的 `RADAR_PARAM_EN` + 一组目标值宏（最大运动/静止距离门、无人持续时间、9+9 门灵敏度、光感辅助、OUT 默认电平）。上电在自适应锁定波特率后：先 `0x0061`/`0x00AE` 读回当前配置与目标逐项比对 → **只写不一致的项**（每拍只发一条命令，不长时间占住主循环）→ 写后读回复检；全一致则一条命令都不发。状态 `radar_param_state()`（4 成功/本来就一致, 5 失败）。门 0/1 的静止灵敏度按协议不可设置，比对与写入均跳过；距离分辨率（需重启生效）不纳入自动配置；
