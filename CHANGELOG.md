@@ -156,6 +156,12 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
   - `RADAR_DBG_SET_BAUD_IDX` 一次性改模块波特率改为**完整时序**：0x00A1 设置 → 0x00A3 重启模块（协议规定配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动再切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧，每步都记事件。
   - 构建验证：4 种组合（FORCE=0 自适应8档 / FORCE=460800 / FORCE=0+SET_BAUD_IDX=8 / FORCE=256000）均 0 Error 0 Warning。
 - `[hc32f460]` **feat(把模块波特率改成 460800)**: `RADAR_DBG_SET_BAUD_IDX=8` 的一次性流程补齐**自检与回退**——使能配置 → `0x00A1(0x0008)` → `0x00A3` 重启模块（协议规定该配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧 → 自检 2.5s 看有无上报帧：成功记 `baud verify OK 460800`；失败自动回退旧波特率再看 2.5s，分别记 `old baud still OK` / `no data on either baud: check wiring`。注：厂家固件里的"出厂默认 256000"无法更改（`0x00A2` 恢复出厂即回到 256000），本流程是把 460800 写进**模块自己的 flash**，从此这块模块上电就是 460800（每块需各做一次）。
+- `[hc32f460]` **fix(复位循环)**: 上板出现"一直在重启", 根因是上一版引入的**无限递归** —— `radar_provision_tick()`（由 `radar_poll()` 调用）里调用了阻塞式的 `radar_set_uart_baud_index()`/`radar_restart()`, 而它们内部走 `radar_cmd()` 等 ACK 时会调 `radar_poll()` → 又回到产线配置状态机 → 无限递归 → 栈溢出/主循环饿死 → 看门狗复位（周期约 10.7s = 65536×8192/PCLK3(50MHz)）。修法（结构性，不靠喂狗）：
+  - 拆出**底层泵** `radar_pump()`（只做 分帧超时 + 搬运字节, 不跑探测/产线配置状态机）, `radar_poll()` = `radar_pump()` + 探测 + 产线配置 + OUT 脚采样；
+  - `radar_cmd()` 等 ACK / 等 TX 的循环改用 `radar_pump()` —— 阻塞命令从此**不可能**再进状态机, 递归在结构上被消除；
+  - 另加 `s_prov_busy` 忙标志作为兜底（阻塞命令执行期间 `radar_provision_tick()` 直接返回）；
+  - 构建验证: 产线配置=460800 / =0 两种组合均 0 Error 0 Warning。
+  - 注: 看门狗本身没问题 —— `WDT_FeedDog()` 由主循环里的 `Check_UidKey()` 每圈投喂, 超时按 `WDT_CNT_PERIOD65536`+`WDT_CLK_DIV8192`(PCLK3=50MHz) 约 10.7s, 平时远够。
 - `[hc32f460]` **feat(产线配置模块波特率)**: 把"让模块波特率固定为 460800"做成**常驻功能**（在此之前只有调试段里那个临时开关，默认关、且会随调试代码一起删除）：
   - 新增 `RADAR_PROVISION_BAUD`（`radar_cfg.h`，**当前默认 460800UL**；0 = 关闭）、`RADAR_PROVISION_RESTART_MS(800)`/`VERIFY_MS(2500)`、`RADAR_BAUD_IDX_TABLE`（波特率 → 协议表 6 索引）；
   - 新增 `radar_provision_tick()`（`radar.c`，由 `radar_poll()` 驱动, 非阻塞、**幂等**）：自适应找到模块当前波特率后 —— 已是目标值则**什么都不发**；否则 `0x00A1` 写入 → `0x00A3` 重启模块（协议规定该配置"重启后生效", 故模块重启前驱动留在原波特率）→ 800ms 后驱动切到目标波特率 → 自检 2.5s：收到上报即成功, 收不到则**自动回退原波特率**继续工作；

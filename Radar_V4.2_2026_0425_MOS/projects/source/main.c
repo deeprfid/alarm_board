@@ -27,10 +27,8 @@ int32_t main(void)
     (void)SysTick_Init(1000U);
     LL_PERIPH_WP(LL_PERIPH_SEL);
     system_power_on();
-    (void)WDT_Config();
-
     (void)radar_init();          /* 雷达串口: USART1+DMA(波特率自适应由 radar_poll 推进) */
-
+    (void)WDT_Config();
     for (;;)
     {
         Check_Uart_Pdu();

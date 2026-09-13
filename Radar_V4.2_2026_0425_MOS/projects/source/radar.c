@@ -27,6 +27,7 @@ static uint8_t          s_prov_st;          /* ²úÏßÅäÖÃ×´Ì¬: 0 ´ý×ö 1 Ð´ÈëÖÐ 2 µ
 static uint32_t         s_prov_t0;
 static uint32_t         s_prov_rep;
 static uint32_t         s_prov_baud;        /* ÅäÖÃÇ°µÄ²¨ÌØÂÊ(Ê§°ÜÊ±»ØÍËÓÃ) */
+static uint8_t          s_prov_busy;        /* 1 = ÕýÔÚÖ´ÐÐ×èÈûÊ½ÃüÁî(·ÀÖØÈë¶µµ×) */
 #endif
 
 /* ------------------------------ ÊÕ×Ö½Ú -> ·ÖÖ¡ -> ½âÎö ------------------------------ */
@@ -284,6 +285,7 @@ static uint8_t radar_baud_to_index(uint32_t baud)
  * ½á¹û¼û radar_provision_state() Óë g_radar_dbg.prov_st */
 static void radar_provision_tick(void)
 {
+    if (s_prov_busy != 0U) { return; }       /* ×èÈûÃüÁîÖ´ÐÐÖÐ(¶µµ×, Õý³£Â·¾¶²»»á½ø) */
     if (s_prov_st >= 4U) { return; }         /* ÒÑ½áÊø */
 
     switch (s_prov_st)
@@ -303,24 +305,35 @@ static void radar_provision_tick(void)
             s_prov_st = 1U;
             break;
 
-        case 1U:                             /* Ð´ÅäÖÃ + ÖØÆôÄ£¿é */
+        case 1U:                             /* Ð´ÅäÖÃ + ÖØÆôÄ£¿é(ÏÂÃæÁ½²½ÊÇ×èÈûµÄ, ¼û radar_cmd) */
+            s_prov_busy = 1U;
             s_prov_baud = radar_get_baud();
+
             if (radar_set_uart_baud_index(radar_baud_to_index(RADAR_PROVISION_BAUD)) != LL_OK)
             {
-                radar_dbg_note_u32(RADAR_DBG_EV_SETBAUD_FAIL, RADAR_PROVISION_BAUD);
                 s_prov_st = 5U;
-                break;
             }
-            radar_dbg_note_u32(RADAR_DBG_EV_SETBAUD_OK, (uint32_t)radar_baud_to_index(RADAR_PROVISION_BAUD));
-            if (radar_restart() != LL_OK)
+            else if (radar_restart() != LL_OK)
             {
-                radar_dbg_note_u32(RADAR_DBG_EV_RESTART_FAIL, RADAR_PROVISION_BAUD);
                 s_prov_st = 5U;
-                break;
             }
-            radar_dbg_note_u32(RADAR_DBG_EV_RESTART_SENT, RADAR_PROVISION_BAUD);
-            s_prov_t0 = m_u32Tickms;
-            s_prov_st = 2U;
+            else
+            {
+                s_prov_t0 = m_u32Tickms;
+                s_prov_st = 2U;
+            }
+
+            s_prov_busy = 0U;
+
+            if (s_prov_st == 2U)
+            {
+                radar_dbg_note_u32(RADAR_DBG_EV_SETBAUD_OK, (uint32_t)radar_baud_to_index(RADAR_PROVISION_BAUD));
+                radar_dbg_note_u32(RADAR_DBG_EV_RESTART_SENT, RADAR_PROVISION_BAUD);
+            }
+            else
+            {
+                radar_dbg_note_u32(RADAR_DBG_EV_SETBAUD_FAIL, RADAR_PROVISION_BAUD);
+            }
             break;
 
         case 2U:                             /* µÈÄ£¿é°´ÐÂ²¨ÌØÂÊÖØÆôÍê³É, Çý¶¯ÔÙÇÐ¹ýÈ¥ */
@@ -372,10 +385,18 @@ uint8_t radar_provision_state(void)
 }
 #endif
 
-void radar_poll(void)
+/* µ×²ã±Ã: Ö»×ö"·ÖÖ¡³¬Ê± + °áÔËÊÕµ½µÄ×Ö½Ú", **²»ÅÜÌ½²â/²úÏßÅäÖÃ×´Ì¬»ú**¡£
+ * ×èÈûÊ½ÃüÁî(radar_cmd)ÔÚµÈ ACK ÆÚ¼ä±ØÐëµ÷Ëü¶ø²»ÊÇ radar_poll():
+ * ·ñÔò radar_cmd -> radar_poll -> radar_provision_tick -> radar_cmd »áÎÞÏÞµÝ¹é¡£ */
+static void radar_pump(void)
 {
     radar_frame_tick(&s_rx, m_u32Tickms);
     radar_port_poll();
+}
+
+void radar_poll(void)
+{
+    radar_pump();
     radar_probe_tick();
 #if (RADAR_PROVISION_BAUD != 0UL)
     radar_provision_tick();              /* ²úÏßÅäÖÃ: °ÑÄ£¿é²¨ÌØÂÊÅä³É RADAR_PROVISION_BAUD */
@@ -493,7 +514,7 @@ int32_t radar_cmd(uint16_t cmd, const uint8_t *val, uint8_t val_len,
     t0 = m_u32Tickms;
     while (radar_port_tx_busy() != 0U)
     {
-        radar_poll();
+        radar_pump();
         if ((m_u32Tickms - t0) > 50U) { return LL_ERR_BUSY; }
     }
 
@@ -503,7 +524,7 @@ int32_t radar_cmd(uint16_t cmd, const uint8_t *val, uint8_t val_len,
     t0 = m_u32Tickms;
     while ((m_u32Tickms - t0) < timeout_ms)
     {
-        radar_poll();
+        radar_pump();
 
         if (s_ack_ready != 0U)
         {
