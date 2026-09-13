@@ -139,7 +139,7 @@ static void radar_probe_next(void)
         s_rep_frames = 0U;
         s_ack_frames = 0U;
         s_probe_st   = 9U;
-        radar_dbg_note_u32("probe FAIL, fallback ", RADAR_BAUD_FALLBACK);
+        radar_dbg_note_u32(RADAR_DBG_EV_PROBE_FAIL, RADAR_BAUD_FALLBACK);
         return;
     }
 
@@ -149,7 +149,7 @@ static void radar_probe_next(void)
     s_ack_frames = 0U;
     s_probe_t0   = m_u32Tickms;
     s_probe_st   = 1U;
-    radar_dbg_note_u32("try baud ", radar_probe_baud(s_probe_idx));
+    radar_dbg_note_u32(RADAR_DBG_EV_TRY_BAUD, radar_probe_baud(s_probe_idx));
 }
 
 /* 认定本档为模块真实波特率 */
@@ -157,7 +157,7 @@ static void radar_probe_accept(void)
 {
     s_baud_locked = 1U;
     s_probe_st    = 9U;
-    radar_dbg_note_u32("lock baud ", radar_port_get_baud());
+    radar_dbg_note_u32(RADAR_DBG_EV_LOCK_ACK, radar_port_get_baud());
 }
 
 /* 非阻塞波特率自适应:
@@ -192,7 +192,7 @@ static void radar_probe_tick(void)
                 radar_frame_init(&s_rx);
                 s_probe_t0 = m_u32Tickms;
                 s_probe_st = 1U;
-                radar_dbg_note_u32("try baud ", radar_probe_baud(0U));
+                radar_dbg_note_u32(RADAR_DBG_EV_TRY_BAUD, radar_probe_baud(0U));
             }
             break;
 
@@ -209,7 +209,7 @@ static void radar_probe_tick(void)
             if (s_rep_frames >= (uint32_t)RADAR_BAUD_LOCK_FRAMES)
             {
                 /* 已收到足够多的上报帧 -> 就是这一档(模块没进配置态, 不必发结束配置) */
-                radar_dbg_note("lock: frames (no ack)");
+                radar_dbg_note_u32(RADAR_DBG_EV_LOCK_FRAMES, radar_port_get_baud());
                 radar_probe_accept();
             }
             else if (s_ack_frames != 0U)
@@ -219,7 +219,7 @@ static void radar_probe_tick(void)
                 s_probe_base = s_rep_frames;
                 s_probe_t0   = m_u32Tickms;
                 s_probe_st   = 4U;
-                radar_dbg_note_u32("ack, verify baud ", radar_port_get_baud());
+                radar_dbg_note_u32(RADAR_DBG_EV_ACK_VERIFY, radar_port_get_baud());
             }
             else if ((m_u32Tickms - s_probe_t0) >= RADAR_BAUD_PROBE_TIMEOUT_MS)
             {
@@ -234,12 +234,12 @@ static void radar_probe_tick(void)
         case 4U:                             /* 用上报帧验证本档(已发过结束配置) */
             if (s_rep_frames > s_probe_base)
             {
-                radar_dbg_note("lock: ack + frames");
+                radar_dbg_note_u32(RADAR_DBG_EV_LOCK_ACK, radar_port_get_baud());
                 radar_probe_accept();
             }
             else if ((m_u32Tickms - s_probe_t0) >= RADAR_PROBE_VERIFY_MS)
             {
-                radar_dbg_note_u32("no report at ", radar_port_get_baud());
+                radar_dbg_note_u32(RADAR_DBG_EV_NO_REPORT, radar_port_get_baud());
                 radar_probe_next();
             }
             else
@@ -530,318 +530,112 @@ int32_t radar_noise_status(uint16_t *status)
 }
 
 /* ==========================================================================================
- * 雷达调试输出(上板验证用, 临时) —— 总开关: radar_cfg.h 的 RADAR_DBG_EN
+ * 雷达调试快照(上板验证用, 临时) —— 总开关: radar_cfg.h 的 RADAR_DBG_EN
  *
- * 为什么不单独放 radar_dbg.c: 新建 .c 必须在 Keil 工程里手工添加(且 Keil GUI 打开时会
- * 覆盖 .uvprojx 的改动), 放在本文件里只需重新编译, 不动工程。
+ * 本板没有连电脑的串口, 因此这里**不做任何串口/printf/文本输出**:
+ * 所有信息都写进结构体 g_radar_dbg(纯数值), Keil 调试时 Watch 窗口加 g_radar_dbg 即可。
  *
- * 验证通过后清理(三选一, 建议 1):
- *   1) radar_cfg.h 里 RADAR_DBG_EN 置 0 —— 只剩空实现, 不占 Flash;
- *   2) 删除本文件中 "#if (RADAR_DBG_EN != 0U)" 到文件末尾的整段 + main.c 的 radar_dbg_poll()
- *      + main.h 的 #include "radar_dbg.h" + 删除 radar_dbg.h;
- *   3) 全部保留, 长期用作现场诊断。
- *
- * 对外接口与结构体定义在 radar_dbg.h; 使用说明见 docs/hc32_radar_bringup.md。
+ * 实现放在本文件末尾是为了不动 Keil 工程(新建 .c 需要手工加入, 且 Keil GUI 打开时会
+ * 用内存里的工程覆盖 .uvprojx)。验证通过后: RADAR_DBG_EN 置 0 或删掉本段。
  * ========================================================================================== */
 #if (RADAR_DBG_EN != 0U)
 
-#if (RADAR_DBG_SINK_RS485 != 0U)
-#include "bsp_rs485.h"                  /* Uart4_DMA_Trans (RS485 主机口发送) */
-#endif
-
 volatile radar_dbg_snap_t g_radar_dbg;
-char                      g_radar_dbg_line[RADAR_DBG_LINE_MAX];
-char                      g_radar_dbg_evt[RADAR_DBG_EVT_MAX];
-uint32_t                  g_radar_dbg_cnt;
-uint32_t                  g_radar_dbg_evt_cnt;
-char                      g_radar_dbg_hex[RADAR_DBG_HEX_MAX];
-char                      g_radar_dbg_ack[RADAR_DBG_ACK_MAX];
 
-static uint16_t           s_dbg_hex_n;      /* 已抓字节数 */
-static uint32_t           s_dbg_baud_last;  /* 上一拍的波特率(变化则重抓) */
-#if (RADAR_DBG_SET_BAUD_IDX != 0U)
-static uint8_t            s_dbg_setbaud_st;     /* 0=待做 1=已发命令 2=等模块重启 3=完成 */
-static uint32_t           s_dbg_setbaud_ms;
-static uint32_t           s_dbg_vfy_rep;     /* 校验基线: 切换前已解析的上报帧数 */
-static uint32_t           s_dbg_vfy_baud;    /* 切换前的波特率(用于回退) */
-#endif
-
-static uint32_t s_dbg_line_ms;          /* 上次刷状态行的时刻 */
+static uint32_t s_dbg_upd_ms;           /* 上次刷新快照的时刻 */
 static uint32_t s_dbg_rx_last;          /* 上次的收字节数 */
 static uint32_t s_dbg_rx_ms;            /* 收字节数最近一次变化的时刻 */
 static uint32_t s_dbg_fer_last;         /* 上次的分帧错误数 */
-static uint8_t  s_dbg_rdy_last;
-static uint8_t  s_dbg_st_last;
+static uint32_t s_dbg_baud_last;        /* 上次的波特率(变化则重抓头部字节) */
+static uint32_t s_dbg_st_last;          /* 上次的目标状态 */
+static uint8_t  s_dbg_head_n;           /* 已抓的头部字节数 */
 static uint8_t  s_dbg_booted;
 static uint8_t  s_dbg_stalled;
-
-/* ------------------------------ 极简文本拼装(不引入 printf) ------------------------------ */
-static char *dbg_u32(char *p, uint32_t v)
-{
-    char    tmp[12];
-    uint8_t n = 0U;
-
-    if (v == 0U)
-    {
-        *p++ = '0';
-        return p;
-    }
-    while ((v != 0U) && (n < (uint8_t)sizeof(tmp)))
-    {
-        tmp[n] = (char)('0' + (char)(v % 10U));
-        n++;
-        v /= 10U;
-    }
-    while (n != 0U)
-    {
-        n--;
-        *p++ = tmp[n];
-    }
-
-    return p;
-}
-
-static char *dbg_str(char *p, const char *s)
-{
-    while (*s != '\0')
-    {
-        *p++ = *s;
-        s++;
-    }
-
-    return p;
-}
-
-static char *dbg_str_lim(char *p, const char *s, uint8_t max)
-{
-    uint8_t n = 0U;
-
-    while ((*s != '\0') && (n < max))
-    {
-        *p++ = *s;
-        s++;
-        n++;
-    }
-
-    return p;
-}
-
-static char *dbg_hex_nib(char *p, uint8_t n)
-{
-    *p++ = (char)((n < 10U) ? ((char)(48U + n)) : ((char)(55U + n)));
-    return p;
-}
-
-static char *dbg_hex_byte(char *p, uint8_t v)
-{
-    p = dbg_hex_nib(p, (uint8_t)((v >> 4) & 0x0FU));
-    return dbg_hex_nib(p, (uint8_t)(v & 0x0FU));
-}
-
-static char *dbg_kv(char *p, const char *k, uint32_t v)
-{
-    p = dbg_str(p, k);
-    return dbg_u32(p, v);
-}
-
-static char *dbg_kv2(char *p, const char *k, uint32_t a, uint32_t b)
-{
-    p = dbg_str(p, k);
-    p = dbg_u32(p, a);
-    *p++ = ':';
-    return dbg_u32(p, b);
-}
-
-/* ------------------------------ 输出通道 ------------------------------ */
-#if (RADAR_DBG_SINK_ITM != 0U)
-static void dbg_send_itm(const char *s)
-{
-    while (*s != '\0')
-    {
-        (void)ITM_SendChar((uint32_t)(uint8_t)(*s));
-        s++;
-    }
-}
+#if (RADAR_DBG_SET_BAUD_IDX != 0U)
+static uint8_t  s_dbg_setbaud_st;       /* 0=待做 1=已发命令 2=等模块重启 3=等新档数据 4=已回退 5=完成 */
+static uint32_t s_dbg_setbaud_ms;
+static uint32_t s_dbg_vfy_rep;          /* 自检基线: 已解析的上报数 */
+static uint32_t s_dbg_vfy_baud;         /* 切换前的波特率(用于回退) */
 #endif
 
-#if (RADAR_DBG_SINK_RS485 != 0U)
-static void dbg_send_rs485(const char *s)
+/* ------------------------------ 事件(数值, 环形 4 条) ------------------------------ */
+static void dbg_note(uint8_t code, uint32_t val)
 {
-    /* 与 STM32 挂同一总线时属"抢总线"(STM32 每 20ms 查询一次), 只在单独给本板上电、
-     * 用 USB-RS485/串口助手 @460800 直连时使用 */
-    Uart4_DMA_Trans((const void *)s, (uint32_t)strlen(s));
-}
-#endif
+    uint32_t i = g_radar_dbg.evt_cnt % (uint32_t)RADAR_DBG_EVT_DEPTH;
 
-static void dbg_sink(const char *s)
-{
-#if (RADAR_DBG_SINK_ITM != 0U)
-    dbg_send_itm(s);
-#endif
-#if (RADAR_DBG_SINK_RS485 != 0U)
-    dbg_send_rs485(s);
-#endif
-#if ((RADAR_DBG_SINK_ITM == 0U) && (RADAR_DBG_SINK_RS485 == 0U))
-    (void)s;                            /* 只用 Keil Watch 看 g_radar_dbg / g_radar_dbg_line */
-#endif
+    g_radar_dbg.evt_code[i] = (uint32_t)code;
+    g_radar_dbg.evt_val[i]  = val;
+    g_radar_dbg.evt_ms[i]   = m_u32Tickms;
+    g_radar_dbg.evt_cnt++;
 }
 
-/* 抓本波特率下收到的前 RADAR_DBG_HEX_BYTES 个字节(十六进制), 换波特率时清空。
- * 判读: 开头是 "F4 F3 F2 F1" = 上报帧头 / "FD FC FB FA" = ACK, 说明波特率正确;
- *       全是乱码或个别字节 => 波特率不对或接线有干扰; 一个字节都没有 => RX 没接对/模块没发。 */
+void radar_dbg_note_u32(uint8_t code, uint32_t val)
+{
+    dbg_note(code, val);
+}
+
+/* 记录"本波特率下收到的最前面几个字节": 判断模块真实波特率/接线是否通。
+ * 判读: 开头 F4 F3 F2 F1 = 上报帧头 / FD FC FB FA = ACK, 说明波特率正确。 */
 static void radar_dbg_capture(const uint8_t *data, uint16_t len)
 {
-    char    *p;
     uint16_t i;
 
-    if ((data == 0) || (s_dbg_hex_n >= (uint16_t)RADAR_DBG_HEX_BYTES))
-    {
-        return;
-    }
+    if (data == 0) { return; }
 
-    p = &g_radar_dbg_hex[(uint32_t)s_dbg_hex_n * 3UL];
-    for (i = 0U; i < len; i++)
+    for (i = 0U; (i < len) && (s_dbg_head_n < (uint8_t)RADAR_DBG_RX_HEAD); i++)
     {
-        if (s_dbg_hex_n >= (uint16_t)RADAR_DBG_HEX_BYTES)
-        {
-            break;
-        }
-        p = dbg_hex_byte(p, data[i]);
-        *p++ = (char)32;
-        s_dbg_hex_n++;
+        g_radar_dbg.rx_head[s_dbg_head_n] = data[i];
+        s_dbg_head_n++;
     }
-    *p = (char)0;
 }
 
-/* 记录最近一帧 ACK: 解析出的命令字/状态字 + 原始数据字节(十六进制)。
- * 用途: 现场核对 ACK 的真实字段布局(文档示例里命令字高字节与状态字存在歧义), 也用于
- *       排查"发命令没反应"时到底是没收到 ACK 还是 ACK 没被认出来。 */
+/* 记录最近一帧 ACK 的解析值与原始数据字节(核对 ACK 真实字段布局用) */
 static void radar_dbg_ack_dump(const uint8_t *data, uint16_t len)
 {
-    char    *p = g_radar_dbg_ack;
     uint16_t i;
+    uint16_t n = len;
 
-    p = dbg_str(p, "c=");
-    p = dbg_hex_byte(p, (uint8_t)(s_ack.cmd & 0x00FFU));
-    p = dbg_hex_byte(p, (uint8_t)((s_ack.cmd >> 8) & 0x00FFU));
-    p = dbg_str(p, " st=");
-    p = dbg_hex_byte(p, (uint8_t)(s_ack.status & 0x00FFU));
-    p = dbg_hex_byte(p, (uint8_t)((s_ack.status >> 8) & 0x00FFU));
-    p = dbg_str(p, " d=");
-    p = dbg_u32(p, (uint32_t)len);
-    p = dbg_str(p, " : ");
+    g_radar_dbg.ack_cmd    = (uint32_t)s_ack.cmd;
+    g_radar_dbg.ack_status = (uint32_t)s_ack.status;
+    g_radar_dbg.ack_len    = (uint32_t)len;
 
-    for (i = 0U; i < len; i++)
+    if (data == 0) { return; }
+    if (n > (uint16_t)RADAR_DBG_ACK_DATA) { n = (uint16_t)RADAR_DBG_ACK_DATA; }
+
+    for (i = 0U; i < n; i++)
     {
-        if (((uint32_t)(p - g_radar_dbg_ack) + 4UL) >= (uint32_t)RADAR_DBG_ACK_MAX) { break; }
-        p = dbg_hex_byte(p, data[i]);
-        *p++ = (char)32;
+        g_radar_dbg.ack_data[i] = data[i];
     }
-    *p = (char)0;
 }
 
-/* ------------------------------ 状态快照与状态行 ------------------------------ */
+/* ------------------------------ 快照刷新 ------------------------------ */
 static void dbg_update_snap(void)
 {
     const radar_dev_t    *d = radar_dev(0);
     const radar_report_t *r = radar_report(0);
 
-    g_radar_dbg.ms      = m_u32Tickms;
-    g_radar_dbg.rdy     = (uint32_t)radar_ready();
-    g_radar_dbg.lock    = (uint32_t)radar_baud_locked();
-    g_radar_dbg.baud    = radar_get_baud();
-    g_radar_dbg.rep     = radar_reports();
-    g_radar_dbg.repf    = s_rep_frames;
-    g_radar_dbg.ackf    = s_ack_frames;
-    g_radar_dbg.fok     = radar_frames_ok();
-    g_radar_dbg.fer     = radar_frames_err();
-    g_radar_dbg.rx      = radar_rx_bytes();
-    g_radar_dbg.drp     = radar_rx_drop();
-    g_radar_dbg.out     = (d != 0) ? (uint32_t)d->out_present : 0U;
-    g_radar_dbg.online  = (d != 0) ? (uint32_t)d->uart_online : 0U;
-    g_radar_dbg.pre     = (uint32_t)radar_presence(0);
-    g_radar_dbg.st      = (r != 0) ? (uint32_t)r->target_state : 0U;
-    g_radar_dbg.mv_dist = (r != 0) ? (uint32_t)r->moving_distance_cm : 0U;
-    g_radar_dbg.mv_eng  = (r != 0) ? (uint32_t)r->moving_energy : 0U;
-    g_radar_dbg.st_dist = (r != 0) ? (uint32_t)r->still_distance_cm : 0U;
-    g_radar_dbg.st_eng  = (r != 0) ? (uint32_t)r->still_energy : 0U;
-    g_radar_dbg.dd      = (r != 0) ? (uint32_t)r->detect_distance_cm : 0U;
-}
-
-static void dbg_build_line(void)
-{
-    char *p = g_radar_dbg_line;
-
-    p = dbg_kv (p, "ms=",    g_radar_dbg.ms);
-    p = dbg_kv (p, " rdy=",  g_radar_dbg.rdy);
-    p = dbg_kv (p, " lock=", g_radar_dbg.lock);
-    p = dbg_kv (p, " baud=", g_radar_dbg.baud);
-    p = dbg_kv (p, " rep=",  g_radar_dbg.rep);
-    p = dbg_kv (p, " repf=", g_radar_dbg.repf);
-    p = dbg_kv (p, " ackf=", g_radar_dbg.ackf);
-    p = dbg_kv (p, " fok=",  g_radar_dbg.fok);
-    p = dbg_kv (p, " fer=",  g_radar_dbg.fer);
-    p = dbg_kv (p, " rx=",   g_radar_dbg.rx);
-    p = dbg_kv (p, " drp=",  g_radar_dbg.drp);
-    p = dbg_kv (p, " st=",   g_radar_dbg.st);
-    p = dbg_kv2(p, " mv=",   g_radar_dbg.mv_dist, g_radar_dbg.mv_eng);
-    p = dbg_kv2(p, " stl=",  g_radar_dbg.st_dist, g_radar_dbg.st_eng);
-    p = dbg_kv (p, " dd=",   g_radar_dbg.dd);
-    p = dbg_kv (p, " out=",  g_radar_dbg.out);
-    p = dbg_kv (p, " on=",   g_radar_dbg.online);
-    p = dbg_kv (p, " pre=",  g_radar_dbg.pre);
-    *p++ = '\r';
-    *p++ = '\n';
-    *p   = '\0';
-}
-
-/* ------------------------------ 事件 ------------------------------ */
-static char *dbg_evt_begin(void)
-{
-    char *p = g_radar_dbg_evt;
-
-    p = dbg_str(p, "t=");
-    p = dbg_u32(p, m_u32Tickms);
-    *p++ = ' ';
-
-    return p;
-}
-
-static void dbg_evt_end(char *p)
-{
-    *p++ = '\r';
-    *p++ = '\n';
-    *p   = '\0';
-    g_radar_dbg_evt_cnt++;
-    dbg_sink(g_radar_dbg_evt);
-}
-
-static void dbg_event(const char *tag)
-{
-    char *p = dbg_evt_begin();
-
-    p = dbg_str_lim(p, tag, (uint8_t)(RADAR_DBG_EVT_MAX - 20U));
-    dbg_evt_end(p);
-}
-
-static void dbg_event_u32(const char *tag, uint32_t v)
-{
-    char *p = dbg_evt_begin();
-
-    p = dbg_str_lim(p, tag, (uint8_t)(RADAR_DBG_EVT_MAX - 30U));
-    p = dbg_u32(p, v);
-    dbg_evt_end(p);
-}
-
-static void dbg_event_st(uint32_t from, uint32_t to)
-{
-    char *p = dbg_evt_begin();
-
-    p = dbg_str(p, "st ");
-    p = dbg_u32(p, from);
-    p = dbg_str(p, " -> ");
-    p = dbg_u32(p, to);
-    dbg_evt_end(p);
+    g_radar_dbg.ms        = m_u32Tickms;
+    g_radar_dbg.rdy       = (uint32_t)radar_ready();
+    g_radar_dbg.lock      = (uint32_t)radar_baud_locked();
+    g_radar_dbg.baud      = radar_get_baud();
+    g_radar_dbg.probe_st  = (uint32_t)s_probe_st;
+    g_radar_dbg.probe_idx = (uint32_t)s_probe_idx;
+    g_radar_dbg.rep       = radar_reports();
+    g_radar_dbg.repf      = s_rep_frames;
+    g_radar_dbg.ackf      = s_ack_frames;
+    g_radar_dbg.fok       = radar_frames_ok();
+    g_radar_dbg.fer       = radar_frames_err();
+    g_radar_dbg.rx        = radar_rx_bytes();
+    g_radar_dbg.drp       = radar_rx_drop();
+    g_radar_dbg.out       = (d != 0) ? (uint32_t)d->out_present : 0U;
+    g_radar_dbg.online    = (d != 0) ? (uint32_t)d->uart_online : 0U;
+    g_radar_dbg.pre       = (uint32_t)radar_presence(0);
+    g_radar_dbg.st        = (r != 0) ? (uint32_t)r->target_state : 0U;
+    g_radar_dbg.mv_dist   = (r != 0) ? (uint32_t)r->moving_distance_cm : 0U;
+    g_radar_dbg.mv_eng    = (r != 0) ? (uint32_t)r->moving_energy : 0U;
+    g_radar_dbg.st_dist   = (r != 0) ? (uint32_t)r->still_distance_cm : 0U;
+    g_radar_dbg.st_eng    = (r != 0) ? (uint32_t)r->still_energy : 0U;
+    g_radar_dbg.dd        = (r != 0) ? (uint32_t)r->detect_distance_cm : 0U;
 }
 
 /* ------------------------------ 事件检测 ------------------------------ */
@@ -851,10 +645,7 @@ static void dbg_check_events(void)
     uint32_t           rx;
     uint32_t           fer;
 
-    if (d == 0)
-    {
-        return;
-    }
+    if (d == 0) { return; }
 
     rx  = radar_rx_bytes();
     fer = radar_frames_err();
@@ -863,40 +654,27 @@ static void dbg_check_events(void)
     {
         s_dbg_booted = 1U;
         s_dbg_rx_ms  = m_u32Tickms;
-        dbg_event("boot");
+        dbg_note(RADAR_DBG_EV_BOOT, 0U);
     }
 
     if (radar_get_baud() != s_dbg_baud_last)
     {
-        s_dbg_baud_last   = radar_get_baud();
-        s_dbg_hex_n       = 0U;
-        g_radar_dbg_hex[0] = (char)0;
-        dbg_event_u32("baud=", radar_get_baud());
+        s_dbg_baud_last    = radar_get_baud();
+        s_dbg_head_n       = 0U;
+        g_radar_dbg.rx_head[0] = 0U;
+        dbg_note(RADAR_DBG_EV_BAUD_CHANGE, s_dbg_baud_last);
     }
-
-    if ((s_dbg_rdy_last == 0U) && (radar_ready() != 0U))
-    {
-        if (radar_baud_locked() != 0U)
-        {
-            dbg_event_u32("probe ok baud=", radar_get_baud());
-        }
-        else
-        {
-            dbg_event("probe FAIL -> fallback 256000");
-        }
-    }
-    s_dbg_rdy_last = radar_ready();
 
     if (d->rep.target_state != s_dbg_st_last)
     {
-        dbg_event_st((uint32_t)s_dbg_st_last, (uint32_t)d->rep.target_state);
         s_dbg_st_last = d->rep.target_state;
+        dbg_note(RADAR_DBG_EV_ST_CHANGE, (uint32_t)s_dbg_st_last);
     }
 
     if (fer != s_dbg_fer_last)
     {
         s_dbg_fer_last = fer;
-        dbg_event_u32("frame err cnt=", fer);
+        dbg_note(RADAR_DBG_EV_FRAME_ERR, fer);
     }
 
     if (rx != s_dbg_rx_last)
@@ -909,32 +687,16 @@ static void dbg_check_events(void)
              ((m_u32Tickms - s_dbg_rx_ms) >= RADAR_DBG_RX_STALL_MS))
     {
         s_dbg_stalled = 1U;
-        dbg_event("rx stalled(no byte)");
+        dbg_note(RADAR_DBG_EV_RX_STALL, rx);
     }
 }
 
 /* ------------------------------ 对外接口 ------------------------------ */
-void radar_dbg_note(const char *tag)
-{
-    if (tag != 0)
-    {
-        dbg_event(tag);
-    }
-}
-
-void radar_dbg_note_u32(const char *tag, uint32_t v)
-{
-    if (tag != 0)
-    {
-        dbg_event_u32(tag, v);
-    }
-}
-
 void radar_dbg_poll(void)
 {
 #if (RADAR_DBG_SET_BAUD_IDX != 0U)
-    /* 一次性: 改模块波特率(0x00A1) -> 重启模块(0x00A3) -> 800ms 后驱动跟着切。
-     * 协议规定: 该配置"重启模块后生效", 所以模块切换前驱动必须留在旧波特率上, 否则丢链路。 */
+    /* 一次性: 改模块波特率(0x00A1) -> 重启模块(0x00A3) -> 800ms 后驱动跟着切 -> 自检。
+     * 协议规定该配置"重启模块后生效", 所以模块切换前驱动必须留在旧波特率上, 否则丢链路。 */
     if ((s_dbg_setbaud_st == 0U) && (radar_baud_locked() != 0U))
     {
         int32_t ret;
@@ -943,94 +705,88 @@ void radar_dbg_poll(void)
         ret = radar_set_uart_baud_index((uint8_t)RADAR_DBG_SET_BAUD_IDX);
         if (ret == LL_OK)
         {
-            dbg_event_u32("module baud idx OK ", (uint32_t)RADAR_DBG_SET_BAUD_IDX);
+            dbg_note(RADAR_DBG_EV_SETBAUD_OK, (uint32_t)RADAR_DBG_SET_BAUD_IDX);
             ret = radar_restart();
             if (ret == LL_OK)
             {
-                dbg_event("module restart sent");
+                dbg_note(RADAR_DBG_EV_RESTART_SENT, 0U);
                 s_dbg_setbaud_ms = m_u32Tickms;
                 s_dbg_setbaud_st = 2U;
             }
             else
             {
-                dbg_event_u32("module restart FAIL ret=", (uint32_t)ret);
-                s_dbg_setbaud_st = 3U;
+                dbg_note(RADAR_DBG_EV_RESTART_FAIL, (uint32_t)ret);
+                s_dbg_setbaud_st = 5U;
             }
         }
         else
         {
-            dbg_event_u32("module baud FAIL ret=", (uint32_t)ret);
-            s_dbg_setbaud_st = 3U;
+            dbg_note(RADAR_DBG_EV_SETBAUD_FAIL, (uint32_t)ret);
+            s_dbg_setbaud_st = 5U;
         }
     }
     else if ((s_dbg_setbaud_st == 2U) && ((m_u32Tickms - s_dbg_setbaud_ms) >= 800U))
     {
-        /* 模块已按新波特率重启: 驱动跟着切, 并开始自检(等新波特率下的上报帧) */
-        s_dbg_vfy_baud = radar_get_baud();
-        s_dbg_vfy_rep  = radar_frames_ok();
+        s_dbg_vfy_baud    = radar_get_baud();
+        s_dbg_vfy_rep     = radar_reports();
         radar_port_set_baud(RADAR_DBG_SET_BAUD_VALUE);
         radar_frame_init(&s_rx);
-        s_probe_st    = 9U;
-        s_baud_locked = 1U;
+        s_probe_st       = 9U;
+        s_baud_locked    = 1U;
         s_dbg_setbaud_ms = m_u32Tickms;
         s_dbg_setbaud_st = 3U;
-        dbg_event_u32("driver baud set ", RADAR_DBG_SET_BAUD_VALUE);
+        dbg_note(RADAR_DBG_EV_DRIVER_BAUD, RADAR_DBG_SET_BAUD_VALUE);
     }
     else if ((s_dbg_setbaud_st == 3U) && ((m_u32Tickms - s_dbg_setbaud_ms) >= 2500U))
     {
-        if (radar_frames_ok() != s_dbg_vfy_rep)
+        if (radar_reports() != s_dbg_vfy_rep)
         {
-            dbg_event_u32("baud verify OK ", RADAR_DBG_SET_BAUD_VALUE);
+            dbg_note(RADAR_DBG_EV_VERIFY_OK, RADAR_DBG_SET_BAUD_VALUE);
             s_dbg_setbaud_st = 5U;
         }
         else
         {
-            /* 新波特率下收不到帧: 回退到切换前的波特率再看(模块可能没真正切换) */
             radar_port_set_baud(s_dbg_vfy_baud);
             radar_frame_init(&s_rx);
-            s_dbg_vfy_rep    = radar_frames_ok();
+            s_dbg_vfy_rep    = radar_reports();
             s_dbg_setbaud_ms = m_u32Tickms;
             s_dbg_setbaud_st = 4U;
-            dbg_event_u32("no data at new baud, back to ", s_dbg_vfy_baud);
+            dbg_note(RADAR_DBG_EV_VERIFY_FALLBACK, s_dbg_vfy_baud);
         }
     }
     else if ((s_dbg_setbaud_st == 4U) && ((m_u32Tickms - s_dbg_setbaud_ms) >= 2500U))
     {
         s_dbg_setbaud_st = 5U;
-        if (radar_frames_ok() != s_dbg_vfy_rep)
+        if (radar_reports() != s_dbg_vfy_rep)
         {
-            dbg_event_u32("old baud still OK ", s_dbg_vfy_baud);
+            dbg_note(RADAR_DBG_EV_OLD_BAUD_OK, s_dbg_vfy_baud);
         }
         else
         {
-            dbg_event("no data on either baud: check wiring");
+            dbg_note(RADAR_DBG_EV_NO_DATA, 0U);
         }
+    }
+    else
+    {
+        /* 其它状态: 无需处理 */
     }
 #endif
 
     dbg_check_events();
 
-    if ((m_u32Tickms - s_dbg_line_ms) >= RADAR_DBG_PERIOD_MS)
+    if ((m_u32Tickms - s_dbg_upd_ms) >= RADAR_DBG_PERIOD_MS)
     {
-        s_dbg_line_ms = m_u32Tickms;
+        s_dbg_upd_ms = m_u32Tickms;
         dbg_update_snap();
-        dbg_build_line();
-        g_radar_dbg_cnt++;
-        dbg_sink(g_radar_dbg_line);
     }
 }
 
 #else   /* RADAR_DBG_EN == 0: 关闭调试, 保留空实现, 调用方不必加 #if */
 
-void radar_dbg_note(const char *tag)
+void radar_dbg_note_u32(uint8_t code, uint32_t val)
 {
-    (void)tag;
-}
-
-void radar_dbg_note_u32(const char *tag, uint32_t v)
-{
-    (void)tag;
-    (void)v;
+    (void)code;
+    (void)val;
 }
 
 void radar_dbg_poll(void)
@@ -1038,4 +794,4 @@ void radar_dbg_poll(void)
 }
 
 #endif  /* RADAR_DBG_EN */
-/* ============================== 调试输出段结束 ============================== */
+/* ============================== 调试段结束 ============================== */

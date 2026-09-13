@@ -156,6 +156,13 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
   - `RADAR_DBG_SET_BAUD_IDX` 一次性改模块波特率改为**完整时序**：0x00A1 设置 → 0x00A3 重启模块（协议规定配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动再切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧，每步都记事件。
   - 构建验证：4 种组合（FORCE=0 自适应8档 / FORCE=460800 / FORCE=0+SET_BAUD_IDX=8 / FORCE=256000）均 0 Error 0 Warning。
 - `[hc32f460]` **feat(把模块波特率改成 460800)**: `RADAR_DBG_SET_BAUD_IDX=8` 的一次性流程补齐**自检与回退**——使能配置 → `0x00A1(0x0008)` → `0x00A3` 重启模块（协议规定该配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧 → 自检 2.5s 看有无上报帧：成功记 `baud verify OK 460800`；失败自动回退旧波特率再看 2.5s，分别记 `old baud still OK` / `no data on either baud: check wiring`。注：厂家固件里的"出厂默认 256000"无法更改（`0x00A2` 恢复出厂即回到 256000），本流程是把 460800 写进**模块自己的 flash**，从此这块模块上电就是 460800（每块需各做一次）。
+- `[hc32f460]` **refactor(调试输出)**: **删除雷达调试的全部串口/printf/文本输出** —— 本板没有连电脑的串口, 这些通道无用且占空间。具体:
+  - 删除 ITM(SWO) 与 RS485 两个输出通道(`RADAR_DBG_SINK_ITM`/`RADAR_DBG_SINK_RS485`、`dbg_send_itm/dbg_send_rs485/dbg_sink`、`bsp_rs485.h` 依赖)；
+  - 删除状态文本行与事件字符串(`g_radar_dbg_line`/`g_radar_dbg_evt`/`g_radar_dbg_hex`/`g_radar_dbg_ack` 及全部整数转 ASCII 助手)；
+  - 调试信息改为**纯数值快照** `g_radar_dbg`（Keil Watch 展开看）: 在原有字段上补充 `probe_st`/`probe_idx`（探测状态机）、`repf`/`ackf`（上报帧/ACK 帧计数）、`rx_head[8]`（本档收到的最前面 8 字节, 判波特率用）、`ack_cmd/ack_status/ack_len/ack_data[8]`（最近一帧 ACK），以及 4 条**数值事件环** `evt_cnt/evt_code[]/evt_val[]/evt_ms[]`（码表见 `radar_dbg.h`）；
+  - `radar_dbg_note_u32(code,val)` 取代原字符串版本, 探测每一步都记码；
+  - 代码量下降（Code 28520 → 27916）, `RADAR_DBG_EN=0` 时 27120；
+  - 构建验证: 自适应 / `SET_BAUD_IDX=8` / `RADAR_DBG_EN=0` 三种组合均 0 Error 0 Warning。
 - `[hc32f460]` **fix(波特率自适应判据)**: 上板出现"第一次 `lock=1 baud=9600`、第二次又回到 `256000`"的抖动 —— 说明判据不可靠。改动：
   - **判据从"任意 ACK"改为"上报帧"为准**：某档收到 ≥`RADAR_BAUD_LOCK_FRAMES(3)` 个上报帧直接认定；只收到 ACK 时先发 `0x00FE` 退出配置态, 再等 `RADAR_PROBE_VERIFY_MS(1000ms)` 用上报帧验证, 收不到就继续试下一档（ACK 帧仅 10 字节, 错波特率下的乱码/残留字节可能凑出魔术字+帧尾被误判；上报帧 13 字节且内容自校验）；
   - **上电先等 `RADAR_PROBE_BOOT_MS(1000ms)` 再探测**：模块没启动完成时命令不会被应答, 会让第一档(256000)误判失败, 一路试到尾后回落 256000；

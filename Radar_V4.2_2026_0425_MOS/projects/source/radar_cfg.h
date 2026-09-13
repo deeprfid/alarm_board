@@ -115,16 +115,12 @@
 /* ============================ 调试输出(上板验证用, 事后删除) ============================
  * RADAR_DBG_EN : 1 = 打开(临时, 见 docs/hc32_radar_bringup.md), 0 = 关闭(空实现/不占空间)
  *               验证通过后置 0, 或整体删除 radar_dbg.c/.h 并去掉 main.c 里的调用
- * SINK_KEIL    : 结构体 g_radar_dbg + 字符串 g_radar_dbg_line, Keil Watch 直接看(默认开, 零成本)
- * SINK_ITM     : SWO/ITM 输出, 需 Keil 里打开 Trace 并接 SWO 线(默认关)
- * SINK_RS485   : 每 RADAR_DBG_PERIOD_MS 从 RS485 主机口(USART4, 460800)打一行 ASCII(默认关)
- *               —— 与 STM32 挂同一总线时属抢总线, 只在单独给本板上电+USB-RS485 直连时开
+ * 输出方式: 只有结构体 g_radar_dbg(Keil Watch 展开看, 纯数值)。
+ *           本板没有连电脑的串口, 因此不做串口/printf/文本输出。
  */
 #define RADAR_DBG_EN                    (1U)
 #define RADAR_DBG_PERIOD_MS             (500U)      /* 状态行刷新周期 */
 #define RADAR_DBG_RX_STALL_MS           (3000U)     /* 收字节停滞多久报一次事件 */
-#define RADAR_DBG_SINK_ITM              (0U)
-#define RADAR_DBG_SINK_RS485            (0U)
 /* 把模块波特率改成 460800(一次性, 默认关) —— 效果等同于"改出厂波特率":
  *   协议 §2.2.9/§2.2.11: 0x00A1 写索引(0x0008=460800) -> 掉电不丢失, 重启后生效。
  *   填 0 = 不做; 填 8 = 上电后自动执行: 使能配置 -> 0x00A1(8) -> 0x00A3 重启模块
