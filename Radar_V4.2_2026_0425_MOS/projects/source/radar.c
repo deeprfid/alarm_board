@@ -487,6 +487,8 @@ static uint32_t           s_dbg_baud_last;  /* 上一拍的波特率(变化则重抓) */
 #if (RADAR_DBG_SET_BAUD_IDX != 0U)
 static uint8_t            s_dbg_setbaud_st;     /* 0=待做 1=已发命令 2=等模块重启 3=完成 */
 static uint32_t           s_dbg_setbaud_ms;
+static uint32_t           s_dbg_vfy_rep;     /* 校验基线: 切换前已解析的上报帧数 */
+static uint32_t           s_dbg_vfy_baud;    /* 切换前的波特率(用于回退) */
 #endif
 
 static uint32_t s_dbg_line_ms;          /* 上次刷状态行的时刻 */
@@ -877,12 +879,46 @@ void radar_dbg_poll(void)
     }
     else if ((s_dbg_setbaud_st == 2U) && ((m_u32Tickms - s_dbg_setbaud_ms) >= 800U))
     {
-        s_dbg_setbaud_st = 3U;
+        /* 模块已按新波特率重启: 驱动跟着切, 并开始自检(等新波特率下的上报帧) */
+        s_dbg_vfy_baud = radar_get_baud();
+        s_dbg_vfy_rep  = radar_frames_ok();
         radar_port_set_baud(RADAR_DBG_SET_BAUD_VALUE);
         radar_frame_init(&s_rx);
         s_probe_st    = 9U;
         s_baud_locked = 1U;
+        s_dbg_setbaud_ms = m_u32Tickms;
+        s_dbg_setbaud_st = 3U;
         dbg_event_u32("driver baud set ", RADAR_DBG_SET_BAUD_VALUE);
+    }
+    else if ((s_dbg_setbaud_st == 3U) && ((m_u32Tickms - s_dbg_setbaud_ms) >= 2500U))
+    {
+        if (radar_frames_ok() != s_dbg_vfy_rep)
+        {
+            dbg_event_u32("baud verify OK ", RADAR_DBG_SET_BAUD_VALUE);
+            s_dbg_setbaud_st = 5U;
+        }
+        else
+        {
+            /* 新波特率下收不到帧: 回退到切换前的波特率再看(模块可能没真正切换) */
+            radar_port_set_baud(s_dbg_vfy_baud);
+            radar_frame_init(&s_rx);
+            s_dbg_vfy_rep    = radar_frames_ok();
+            s_dbg_setbaud_ms = m_u32Tickms;
+            s_dbg_setbaud_st = 4U;
+            dbg_event_u32("no data at new baud, back to ", s_dbg_vfy_baud);
+        }
+    }
+    else if ((s_dbg_setbaud_st == 4U) && ((m_u32Tickms - s_dbg_setbaud_ms) >= 2500U))
+    {
+        s_dbg_setbaud_st = 5U;
+        if (radar_frames_ok() != s_dbg_vfy_rep)
+        {
+            dbg_event_u32("old baud still OK ", s_dbg_vfy_baud);
+        }
+        else
+        {
+            dbg_event("no data on either baud: check wiring");
+        }
     }
 #endif
 

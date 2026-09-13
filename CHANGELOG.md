@@ -155,6 +155,7 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
     8 档全扫约 8×305ms≈2.5s（非阻塞），`RADAR_BAUD_FORCE` 复位为 `0`(自适应)，需要钉死时再填具体值。
   - `RADAR_DBG_SET_BAUD_IDX` 一次性改模块波特率改为**完整时序**：0x00A1 设置 → 0x00A3 重启模块（协议规定配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动再切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧，每步都记事件。
   - 构建验证：4 种组合（FORCE=0 自适应8档 / FORCE=460800 / FORCE=0+SET_BAUD_IDX=8 / FORCE=256000）均 0 Error 0 Warning。
+- `[hc32f460]` **feat(把模块波特率改成 460800)**: `RADAR_DBG_SET_BAUD_IDX=8` 的一次性流程补齐**自检与回退**——使能配置 → `0x00A1(0x0008)` → `0x00A3` 重启模块（协议规定该配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧 → 自检 2.5s 看有无上报帧：成功记 `baud verify OK 460800`；失败自动回退旧波特率再看 2.5s，分别记 `old baud still OK` / `no data on either baud: check wiring`。注：厂家固件里的"出厂默认 256000"无法更改（`0x00A2` 恢复出厂即回到 256000），本流程是把 460800 写进**模块自己的 flash**，从此这块模块上电就是 460800（每块需各做一次）。
 - `[hc32f460]` **fix(雷达 ACK 匹配)**: 上板 `lock=0` 的**另一个重要嫌疑**——原来要求 `ACK.cmd == 0x00FF && status == 0` 才算命中, 但协议 V1.09 的 ACK 示例里命令字**高字节写作 01**(如使能配置 ACK `FD FC FB FA 08 00 FF 01 00 00 01 00 40 00 ...`), 按 cmd(2)+status(2) 解析会得到 `cmd=0x01FF`, 即使接线完全正常也**永远匹配不上**。改动：
   - 新增 `RADAR_ACK_CMD_MATCH(ack_cmd, cmd)`（`radar_proto.h`）——只比命令字**低字节**（LD2410 命令全是 `0x00xx`, 低字节唯一, 可同时兼容文档的两种写法）, `radar_cmd()` 改用该宏；探测阶段改为**收到任意合法 ACK 帧即锁定波特率**（探测期只发过 0x00FF, 任何 ACK 都是它回的）；
   - 调试段新增 `g_radar_dbg_ack`：最近一帧 ACK 的 `c=xx / st=xx / d=N` + 原始字节十六进制, 用于现场核对 ACK 真实字段布局（文档示例自身不一致）；
