@@ -73,7 +73,6 @@ typedef struct {
     uint8_t  move_gate_energy[RADAR_GATE_MAX + 1U];
     uint8_t  still_gate_energy[RADAR_GATE_MAX + 1U];
     uint8_t  light_sensor;                      /* 光感值 0..255 */
-    uint8_t  out_pin;                           /* 模块 OUT 脚状态 */
 } radar_report_t;
 
 typedef struct {

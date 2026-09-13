@@ -156,6 +156,9 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
   - `RADAR_DBG_SET_BAUD_IDX` 一次性改模块波特率改为**完整时序**：0x00A1 设置 → 0x00A3 重启模块（协议规定配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动再切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧，每步都记事件。
   - 构建验证：4 种组合（FORCE=0 自适应8档 / FORCE=460800 / FORCE=0+SET_BAUD_IDX=8 / FORCE=256000）均 0 Error 0 Warning。
 - `[hc32f460]` **feat(把模块波特率改成 460800)**: `RADAR_DBG_SET_BAUD_IDX=8` 的一次性流程补齐**自检与回退**——使能配置 → `0x00A1(0x0008)` → `0x00A3` 重启模块（协议规定该配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧 → 自检 2.5s 看有无上报帧：成功记 `baud verify OK 460800`；失败自动回退旧波特率再看 2.5s，分别记 `old baud still OK` / `no data on either baud: check wiring`。注：厂家固件里的"出厂默认 256000"无法更改（`0x00A2` 恢复出厂即回到 256000），本流程是把 460800 写进**模块自己的 flash**，从此这块模块上电就是 460800（每块需各做一次）。
+- `[hc32f460]` **clean(删除 `out_pin`)**: 删掉 `radar_report_t.out_pin` —— 它是"**工程模式**上报帧里的 OUT 脚状态"字节，正常工作模式帧里根本没有该字段，我们工程模式默认关闭 → 该字段恒 0，纯死数据；OUT 的真实电平用 `radar_dev_t.out_present`（直接读 PC14，与模块配置无关）即可，两者信息重复。改动：
+  - `radar_proto.h` 删除字段；`radar_proto.c` 删除普通帧的清 0 与工程模式帧的解析；`common.c` 删除 `HC32_RS485_corfirm_PDU.radar.pinout = rr->out_pin;`（该确认帧目前**只填不发**，其 32B 布局里的 `pinout` 占位保留、恒 0，已加注释说明）；
+  - 构建验证: 0 Error 0 Warning（Code 27712，比改动前少 20 字节）。
 - `[hc32f460]` **clean(调试快照瘦身)**: `g_radar_dbg` 删掉全部冗余成员（~200B → 72B），只留真正要看的：
   - 保留: `ms`(主循环活着) / `probe_st`(探测阶段) / `lock`(是否找到波特率) / `baud` / `prov_st`(目标波特率配置结果) / `rep`(上报数) / `fer`(分帧错) / `rx`(收字节数) / `rx_head[8]` / 目标状态与距离: `st/mv_dist/mv_eng/st_dist/st_eng/dd` / `out/online/pre`；
   - 删除: `repf/ackf/fok`（与 `rep/fer` 重复）、`drp`、`probe_idx`（`baud` 已表示正在试哪一档）、`ack_cmd/ack_status/ack_len/ack_data[8]`（ACK 布局排查用, 已完成使命）、4 条**事件环** `evt_cnt/evt_code[]/evt_val[]/evt_ms[]`；

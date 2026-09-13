@@ -82,7 +82,7 @@ typedef struct {
     uint16_t stationary_target_distance;
     uint16_t stationary_target_energy;
     uint16_t detection_distance;
-    uint16_t pinout;
+    uint16_t pinout;                        /* 预留: 确认帧(32B)布局占位, 目前恒 0 */
     uint16_t targeted;
 } stc_radar_scan_data_t;
 

@@ -228,7 +228,6 @@ int8_t Get_pdu_data(uint8_t *pdubuff)
                 HC32_RS485_corfirm_PDU.radar.stationary_target_distance = rr->still_distance_cm;
                 HC32_RS485_corfirm_PDU.radar.stationary_target_energy  = rr->still_energy;
                 HC32_RS485_corfirm_PDU.radar.detection_distance        = rr->detect_distance_cm;
-                HC32_RS485_corfirm_PDU.radar.pinout                    = rr->out_pin;
             }
         }
         HC32_RS485_corfirm_PDU.crc = CalcCRC((uint8_t *)&HC32_RS485_corfirm_PDU, sizeof(HC32_RS485_corfirm_PDU) -2);

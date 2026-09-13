@@ -135,7 +135,6 @@ int radar_proto_parse_report(const radar_frame_t *f, radar_report_t *out)
     out->max_move_gate = 0U;
     out->max_still_gate = 0U;
     out->light_sensor = 0U;
-    out->out_pin = 0U;
     for (i = 0U; i <= (uint8_t)RADAR_GATE_MAX; i++)
     {
         out->move_gate_energy[i] = 0U;
@@ -163,7 +162,6 @@ int radar_proto_parse_report(const radar_frame_t *f, radar_report_t *out)
     for (i = 0U; i <= (uint8_t)RADAR_GATE_MAX; i++) { out->still_gate_energy[i] = d[idx]; idx++; }
 
     out->light_sensor = d[idx]; idx++;
-    out->out_pin = d[idx]; idx++;
     out->eng_mode = 1U;
 
     return 1;
