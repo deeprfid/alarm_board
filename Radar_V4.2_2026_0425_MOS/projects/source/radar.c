@@ -19,7 +19,6 @@ static uint8_t          s_presence_src = RADAR_SRC_OUT;
 static uint8_t          s_probe_st = 0U;      /* 0=待启动 1=已切波特率待发 2=等 ACK 3=收尾 9=结束 */
 static uint8_t          s_probe_idx;
 static uint32_t         s_probe_t0;
-static uint32_t         s_probe_base;      /* 验证窗口的"上报帧数"基线 */
 static uint32_t         s_rep_frames;      /* 本档收到的上报帧数(换档清零) */
 static uint32_t         s_ack_frames;      /* 本档收到的 ACK 帧数(换档清零) */
 #if (RADAR_BAUD_TARGET != 0UL)
@@ -82,10 +81,21 @@ int32_t radar_init(void)
     radar_port_init();
     radar_port_set_rx_handler(radar_on_bytes);
 
+#if (RADAR_BAUD_INIT_FIXED != 0UL)
+    /* 调试: 上电即固定波特率 -> 跳过自适应, 也不写模块波特率 */
+    s_probe_st    = 9U;
+    s_baud_locked = 1U;
+#if (RADAR_BAUD_TARGET != 0UL)
+    s_prov_st     = 4U;              /* 视为产线配置已完成: 不写模块 */
+#endif
+    s_rep_frames  = 0U;
+    s_ack_frames  = 0U;
+#else
     s_probe_st   = 0U;               /* 波特率自适应由 radar_poll() 推进(非阻塞) */
     s_probe_t0   = m_u32Tickms;      /* 启动延时基准: 等模块上电启动完成再探测 */
     s_rep_frames = 0U;
     s_ack_frames = 0U;
+#endif
 
     for (i = 0U; i < RADAR_DEV_CNT; i++)
     {
@@ -94,19 +104,6 @@ int32_t radar_init(void)
     }
 
     return LL_OK;
-}
-
-/* 非阻塞波特率自适应: 依次试候选波特率, 谁能回"使能配置"的 ACK 就锁定谁 */
-static void radar_send_raw(uint16_t cmd, const uint8_t *val, uint8_t val_len)
-{
-    uint8_t  frame[RADAR_TX_MAX];
-    uint16_t flen;
-
-    flen = radar_proto_build_cmd(cmd, val, val_len, frame, sizeof(frame));
-    if (flen == 0U) { return; }
-    if (radar_port_tx_busy() != 0U) { return; }
-    s_ack_ready = 0U;
-    (void)radar_port_write(frame, flen);
 }
 
 /* ---------- 候选波特率表 ---------- */
@@ -161,14 +158,18 @@ static void radar_probe_accept(void)
  *        - 两者都没有 -> 换下一档。
  *   ④ 全部失败 -> 回落 RADAR_BAUD_FALLBACK 且 baud_locked=0。
  */
+/* 波特率自适应 —— **纯监听, 一个字节都不发**:
+ *   每切一档波特率, 只听模块周期性主动上报的帧(F4F3F2F1..F8F7F6F5), 收到 RADAR_BAUD_LOCK_FRAMES
+ *   个合法帧就认定该档; RADAR_PROBE_LISTEN_MS 内听不到就换下一档。
+ *
+ * 为什么不再发"使能配置 0x00FF / 结束配置 0x00FE":
+ *   0x00FF 会让模块**进入配置态并停止上报**, 只要 0x00FE 晚发/丢失/被拒, 模块就"哑"了 ——
+ *   现场已经踩过这个坑, 明确要求探测阶段**绝不发这两个包**。
+ * 参数读写等命令仍按协议包"使能配置->命令->结束配置", 但那是**显式调用**时才发生,
+ * 上电自动流程一条命令都不发。 */
 static void radar_probe_tick(void)
 {
-    uint8_t v[2];
-
     if (s_probe_st >= 9U) { return; }        /* 已结束 */
-
-    v[0] = 0x01U;
-    v[1] = 0x00U;
 
     switch (s_probe_st)
     {
@@ -185,51 +186,18 @@ static void radar_probe_tick(void)
             }
             break;
 
-        case 1U:                             /* 发"使能配置" */
-            if ((m_u32Tickms - s_probe_t0) >= 5U)
-            {
-                radar_send_raw(RADAR_CMD_ENABLE_CFG, v, 2U);
-                s_probe_t0 = m_u32Tickms;
-                s_probe_st = 2U;
-            }
-            break;
-
-        case 2U:                             /* 本档判定 */
+        case 1U:                             /* 只听本档 */
             if (s_rep_frames >= (uint32_t)RADAR_BAUD_LOCK_FRAMES)
             {
-                /* 已收到足够多的上报帧 -> 就是这一档(模块没进配置态, 不必发结束配置) */
                 radar_probe_accept();
             }
-            else if (s_ack_frames != 0U)
-            {
-                /* 有应答只说明"这档有反应", 还要验证: 退出配置态后必须能收到上报帧 */
-                radar_send_raw(RADAR_CMD_DISABLE_CFG, 0, 0U);
-                s_probe_base = s_rep_frames;
-                s_probe_t0   = m_u32Tickms;
-                s_probe_st   = 4U;
-            }
-            else if ((m_u32Tickms - s_probe_t0) >= RADAR_BAUD_PROBE_TIMEOUT_MS)
+            else if ((m_u32Tickms - s_probe_t0) >= RADAR_PROBE_LISTEN_MS)
             {
                 radar_probe_next();
             }
             else
             {
-                /* 继续等 */
-            }
-            break;
-
-        case 4U:                             /* 用上报帧验证本档(已发过结束配置) */
-            if (s_rep_frames > s_probe_base)
-            {
-                radar_probe_accept();
-            }
-            else if ((m_u32Tickms - s_probe_t0) >= RADAR_PROBE_VERIFY_MS)
-            {
-                radar_probe_next();
-            }
-            else
-            {
-                /* 继续等 */
+                /* 继续听 */
             }
             break;
 

@@ -208,7 +208,11 @@ void radar_port_init(void)
     s_tx_busy = 0U;
     s_rx_bytes = 0U;
     s_rx_drop = 0U;
+#if (RADAR_BAUD_INIT_FIXED != 0UL)
+    s_baud = RADAR_BAUD_INIT_FIXED;          /* 调试: 上电即该波特率(走初始化路径, 不运行时切换) */
+#else
     s_baud = RADAR_BAUD_FALLBACK;
+#endif
 
     (void)BUF_Init(&s_rx_ring, s_rx_ring_buf, sizeof(s_rx_ring_buf));
     memset(s_rx_win, 0, sizeof(s_rx_win));
