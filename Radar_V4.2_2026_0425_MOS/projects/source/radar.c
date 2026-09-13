@@ -245,6 +245,16 @@ uint32_t radar_reports(void)
     return s_reports;
 }
 
+uint32_t radar_rx_bytes(void)
+{
+    return radar_port_rx_bytes();
+}
+
+uint32_t radar_rx_drop(void)
+{
+    return radar_port_rx_drop();
+}
+
 /* ------------------------------ ÃüÁî ------------------------------ */
 int32_t radar_cmd(uint16_t cmd, const uint8_t *val, uint8_t val_len,
                   radar_ack_t *ack, uint32_t timeout_ms)

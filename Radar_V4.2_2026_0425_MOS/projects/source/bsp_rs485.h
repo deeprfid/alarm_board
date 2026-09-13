@@ -17,6 +17,9 @@
  *
  *******************************************************************************
  */
+#ifndef __BSP_RS485_H__
+#define __BSP_RS485_H__
+
 #include "stdint.h"
 #include "bsp_msg.h"
 /* LED_R Port/Pin definition */
@@ -151,3 +154,5 @@ void data_denoising(uint8_t *inbuf, uint8_t *outbuf, uint32_t noise, uint8_t len
 /*******************************************************************************
  * EOF (not truncated)
  ******************************************************************************/
+
+#endif /* __BSP_RS485_H__ */

@@ -51,6 +51,8 @@ uint8_t radar_presence_src(void);
 uint32_t radar_frames_ok(void);
 uint32_t radar_frames_err(void);
 uint32_t radar_reports(void);
+uint32_t radar_rx_bytes(void);                         /* 串口累计收到字节数(诊断) */
+uint32_t radar_rx_drop(void);                          /* 接收缓冲丢弃字节数(诊断) */
 
 /* ---------------- 命令 ---------------- */
 /* 通用命令(自动等待 ACK); 返回 LL_OK / LL_ERR / LL_ERR_TIMEOUT / LL_ERR_INVD_PARAM */

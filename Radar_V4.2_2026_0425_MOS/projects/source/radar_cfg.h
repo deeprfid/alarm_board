@@ -97,4 +97,18 @@
 /* ============================ 设备数量 ============================ */
 #define RADAR_DEV_CNT                   (1U)        /* 第一版只调通 1 路串口雷达 */
 
+/* ============================ 调试输出(上板验证用, 事后删除) ============================
+ * RADAR_DBG_EN : 1 = 打开(临时, 见 docs/hc32_radar_bringup.md), 0 = 关闭(空实现/不占空间)
+ *               验证通过后置 0, 或整体删除 radar_dbg.c/.h 并去掉 main.c 里的调用
+ * SINK_KEIL    : 结构体 g_radar_dbg + 字符串 g_radar_dbg_line, Keil Watch 直接看(默认开, 零成本)
+ * SINK_ITM     : SWO/ITM 输出, 需 Keil 里打开 Trace 并接 SWO 线(默认关)
+ * SINK_RS485   : 每 RADAR_DBG_PERIOD_MS 从 RS485 主机口(USART4, 460800)打一行 ASCII(默认关)
+ *               —— 与 STM32 挂同一总线时属抢总线, 只在单独给本板上电+USB-RS485 直连时开
+ */
+#define RADAR_DBG_EN                    (1U)
+#define RADAR_DBG_PERIOD_MS             (500U)      /* 状态行刷新周期 */
+#define RADAR_DBG_RX_STALL_MS           (3000U)     /* 收字节停滞多久报一次事件 */
+#define RADAR_DBG_SINK_ITM              (0U)
+#define RADAR_DBG_SINK_RS485            (0U)
+
 #endif /* __RADAR_CFG_H__ */

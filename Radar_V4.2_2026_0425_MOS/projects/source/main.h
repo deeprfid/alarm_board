@@ -28,6 +28,7 @@
 #include "time.h"
 #include "bsp_rs485.h"
 #include "radar.h"
+#include "radar_dbg.h"
 #include "hc32_ll_utility.h"
 #include "ring_buf.h"
 #include "bsp_beep.h"
