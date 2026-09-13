@@ -19,6 +19,9 @@ static uint8_t          s_presence_src = RADAR_SRC_OUT;
 static uint8_t          s_probe_st = 0U;      /* 0=待启动 1=已切波特率待发 2=等 ACK 3=收尾 9=结束 */
 static uint8_t          s_probe_idx;
 static uint32_t         s_probe_t0;
+static uint32_t         s_probe_base;      /* 验证窗口的"上报帧数"基线 */
+static uint32_t         s_rep_frames;      /* 本档收到的上报帧数(换档清零) */
+static uint32_t         s_ack_frames;      /* 本档收到的 ACK 帧数(换档清零) */
 
 /* ------------------------------ 收字节 -> 分帧 -> 解析 ------------------------------ */
 #if (RADAR_DBG_EN != 0U)
@@ -45,6 +48,7 @@ static void radar_on_bytes(const uint8_t *data, uint16_t len)
             {
                 if (radar_proto_parse_ack(&f, &s_ack) != 0)
                 {
+                    s_ack_frames++;
                     s_ack_ready = 1U;
 #if (RADAR_DBG_EN != 0U)
                     radar_dbg_ack_dump(f.data, f.data_len);
@@ -55,6 +59,7 @@ static void radar_on_bytes(const uint8_t *data, uint16_t len)
             {
                 if (radar_proto_parse_report(&f, &s_dev[0].rep) != 0)
                 {
+                    s_rep_frames++;
                     s_dev[0].last_rx_ms = m_u32Tickms;
                     s_reports++;
                 }
@@ -83,7 +88,10 @@ int32_t radar_init(void)
     s_baud_locked = 1U;
     s_probe_st    = 9U;
 #else
-    s_probe_st = 0U;                 /* 波特率自适应由 radar_poll() 推进(非阻塞) */
+    s_probe_st   = 0U;               /* 波特率自适应由 radar_poll() 推进(非阻塞) */
+    s_probe_t0   = m_u32Tickms;      /* 启动延时基准: 等模块上电启动完成再探测 */
+    s_rep_frames = 0U;
+    s_ack_frames = 0U;
 #endif
 
     for (i = 0U; i < RADAR_DEV_CNT; i++)
@@ -108,9 +116,63 @@ static void radar_send_raw(uint16_t cmd, const uint8_t *val, uint8_t val_len)
     (void)radar_port_write(frame, flen);
 }
 
-static void radar_probe_tick(void)
+/* ---------- 候选波特率表 ---------- */
+static uint32_t radar_probe_baud(uint8_t idx)
 {
     static const uint32_t baud_tab[] = RADAR_BAUD_TABLE;
+
+    if (idx >= (uint8_t)RADAR_BAUD_TABLE_CNT) { return RADAR_BAUD_FALLBACK; }
+
+    return baud_tab[idx];
+}
+
+/* 本档不收: 换下一档; 全试完 -> 回落默认波特率(locked=0) */
+static void radar_probe_next(void)
+{
+    s_ack_ready  = 0U;
+    s_probe_idx++;
+
+    if (s_probe_idx >= (uint8_t)RADAR_BAUD_TABLE_CNT)
+    {
+        radar_port_set_baud(RADAR_BAUD_FALLBACK);
+        radar_frame_init(&s_rx);
+        s_rep_frames = 0U;
+        s_ack_frames = 0U;
+        s_probe_st   = 9U;
+        radar_dbg_note_u32("probe FAIL, fallback ", RADAR_BAUD_FALLBACK);
+        return;
+    }
+
+    radar_port_set_baud(radar_probe_baud(s_probe_idx));
+    radar_frame_init(&s_rx);
+    s_rep_frames = 0U;
+    s_ack_frames = 0U;
+    s_probe_t0   = m_u32Tickms;
+    s_probe_st   = 1U;
+    radar_dbg_note_u32("try baud ", radar_probe_baud(s_probe_idx));
+}
+
+/* 认定本档为模块真实波特率 */
+static void radar_probe_accept(void)
+{
+    s_baud_locked = 1U;
+    s_probe_st    = 9U;
+    radar_dbg_note_u32("lock baud ", radar_port_get_baud());
+}
+
+/* 非阻塞波特率自适应:
+ *   ① 先等模块上电启动完成(RADAR_PROBE_BOOT_MS) —— 模块没起来时发命令不会被应答,
+ *      会导致第一档(通常是 256000)误判失败;
+ *   ② 逐档: 发"使能配置(0x00FF)" -> 等响应;
+ *   ③ 判定:
+ *        - 收到 >= RADAR_BAUD_LOCK_FRAMES 个"上报帧"  -> 直接认定(无需 ACK, 兼容 TX 不通);
+ *        - 收到 ACK -> 发"结束配置(0x00FE)"让模块恢复上报, 再用"上报帧"验证
+ *          (RADAR_PROBE_VERIFY_MS 内), 验证通过才认定 —— 避免被乱码/残留字节误判;
+ *        - 两者都没有 -> 换下一档。
+ *   ④ 全部失败 -> 回落 RADAR_BAUD_FALLBACK 且 baud_locked=0。
+ */
+static void radar_probe_tick(void)
+{
     uint8_t v[2];
 
     if (s_probe_st >= 9U) { return; }        /* 已结束 */
@@ -120,12 +182,18 @@ static void radar_probe_tick(void)
 
     switch (s_probe_st)
     {
-        case 0U:                             /* 启动: 试第 1 个波特率 */
-            s_probe_idx = 0U;
-            radar_port_set_baud(baud_tab[0]);
-            radar_frame_init(&s_rx);
-            s_probe_t0 = m_u32Tickms;
-            s_probe_st = 1U;
+        case 0U:                             /* 等模块启动完成, 再试第 1 档 */
+            if ((m_u32Tickms - s_probe_t0) >= RADAR_PROBE_BOOT_MS)
+            {
+                s_probe_idx  = 0U;
+                s_rep_frames = 0U;
+                s_ack_frames = 0U;
+                radar_port_set_baud(radar_probe_baud(0U));
+                radar_frame_init(&s_rx);
+                s_probe_t0 = m_u32Tickms;
+                s_probe_st = 1U;
+                radar_dbg_note_u32("try baud ", radar_probe_baud(0U));
+            }
             break;
 
         case 1U:                             /* 发"使能配置" */
@@ -137,47 +205,46 @@ static void radar_probe_tick(void)
             }
             break;
 
-        case 2U:                             /* 等 ACK, 或等到合法上报帧 */
-            if (s_ack_ready != 0U)
+        case 2U:                             /* 本档判定 */
+            if (s_rep_frames >= (uint32_t)RADAR_BAUD_LOCK_FRAMES)
             {
-                /* 模块在该波特率下能应答 -> 波特率就是对的。
-                 * 探测阶段只发过"使能配置"这一条命令, 所以任何 ACK 都是它回的;
-                 * 不再校验 ACK 里的命令字/状态字(文档示例本身不一致, 见 RADAR_ACK_CMD_MATCH)。 */
-                s_baud_locked = 1U;
-                s_probe_t0 = m_u32Tickms;
-                s_probe_st = 3U;
+                /* 已收到足够多的上报帧 -> 就是这一档(模块没进配置态, 不必发结束配置) */
+                radar_dbg_note("lock: frames (no ack)");
+                radar_probe_accept();
             }
-            else if (s_rx.ok_cnt >= (uint32_t)RADAR_BAUD_LOCK_FRAMES)
+            else if (s_ack_frames != 0U)
             {
-                /* 没等到 ACK 但能收到合法帧: 波特率同样正确(常见于 TX 方向没通),
-                 * 不必再往下试别的波特率, 也不再发"结束配置" */
-                s_baud_locked = 1U;
-                s_probe_st = 9U;
+                /* 有应答只说明"这档有反应", 还要验证: 退出配置态后必须能收到上报帧 */
+                radar_send_raw(RADAR_CMD_DISABLE_CFG, 0, 0U);
+                s_probe_base = s_rep_frames;
+                s_probe_t0   = m_u32Tickms;
+                s_probe_st   = 4U;
+                radar_dbg_note_u32("ack, verify baud ", radar_port_get_baud());
             }
             else if ((m_u32Tickms - s_probe_t0) >= RADAR_BAUD_PROBE_TIMEOUT_MS)
             {
-                s_probe_idx++;
-                if (s_probe_idx >= RADAR_BAUD_TABLE_CNT)
-                {
-                    radar_port_set_baud(RADAR_BAUD_FALLBACK);   /* 全部失败: 回落默认 */
-                    radar_frame_init(&s_rx);
-                    s_probe_st = 9U;
-                }
-                else
-                {
-                    radar_port_set_baud(baud_tab[s_probe_idx]);
-                    radar_frame_init(&s_rx);
-                    s_probe_t0 = m_u32Tickms;
-                    s_probe_st = 1U;
-                }
+                radar_probe_next();
+            }
+            else
+            {
+                /* 继续等 */
             }
             break;
 
-        case 3U:                             /* 探测成功收尾: 退出配置态 */
-            if ((m_u32Tickms - s_probe_t0) >= 5U)
+        case 4U:                             /* 用上报帧验证本档(已发过结束配置) */
+            if (s_rep_frames > s_probe_base)
             {
-                radar_send_raw(RADAR_CMD_DISABLE_CFG, 0, 0U);
-                s_probe_st = 9U;
+                radar_dbg_note("lock: ack + frames");
+                radar_probe_accept();
+            }
+            else if ((m_u32Tickms - s_probe_t0) >= RADAR_PROBE_VERIFY_MS)
+            {
+                radar_dbg_note_u32("no report at ", radar_port_get_baud());
+                radar_probe_next();
+            }
+            else
+            {
+                /* 继续等 */
             }
             break;
 
@@ -414,6 +481,14 @@ int32_t radar_set_resolution(uint8_t idx)
     v[0] = idx; v[1] = 0x00U;                           /* 0 = 0.75m, 1 = 0.2m */
 
     return radar_cfg_cmd(RADAR_CMD_RESOLUTION, v, sizeof(v), 0, RADAR_CMD_TIMEOUT_MS);
+}
+
+/* 0x00A3: 模块在"应答发送完成后"自动重启。
+ * 需要重启才生效的配置: 串口波特率(0x00A1)、距离分辨率(0x00AA)、蓝牙(0x00A4)、
+ * 蓝牙密码(0x00A9)、恢复出厂(0x00A2); 灵敏度(0x0064)与最大距离门(0x0060)立即生效。 */
+int32_t radar_restart(void)
+{
+    return radar_cmd(RADAR_CMD_RESTART, 0, 0U, 0, RADAR_CMD_TIMEOUT_MS);
 }
 
 int32_t radar_set_uart_baud_index(uint8_t idx)
@@ -676,6 +751,8 @@ static void dbg_update_snap(void)
     g_radar_dbg.lock    = (uint32_t)radar_baud_locked();
     g_radar_dbg.baud    = radar_get_baud();
     g_radar_dbg.rep     = radar_reports();
+    g_radar_dbg.repf    = s_rep_frames;
+    g_radar_dbg.ackf    = s_ack_frames;
     g_radar_dbg.fok     = radar_frames_ok();
     g_radar_dbg.fer     = radar_frames_err();
     g_radar_dbg.rx      = radar_rx_bytes();
@@ -700,6 +777,8 @@ static void dbg_build_line(void)
     p = dbg_kv (p, " lock=", g_radar_dbg.lock);
     p = dbg_kv (p, " baud=", g_radar_dbg.baud);
     p = dbg_kv (p, " rep=",  g_radar_dbg.rep);
+    p = dbg_kv (p, " repf=", g_radar_dbg.repf);
+    p = dbg_kv (p, " ackf=", g_radar_dbg.ackf);
     p = dbg_kv (p, " fok=",  g_radar_dbg.fok);
     p = dbg_kv (p, " fer=",  g_radar_dbg.fer);
     p = dbg_kv (p, " rx=",   g_radar_dbg.rx);
@@ -843,6 +922,14 @@ void radar_dbg_note(const char *tag)
     }
 }
 
+void radar_dbg_note_u32(const char *tag, uint32_t v)
+{
+    if (tag != 0)
+    {
+        dbg_event_u32(tag, v);
+    }
+}
+
 void radar_dbg_poll(void)
 {
 #if (RADAR_DBG_SET_BAUD_IDX != 0U)
@@ -850,15 +937,14 @@ void radar_dbg_poll(void)
      * 协议规定: 该配置"重启模块后生效", 所以模块切换前驱动必须留在旧波特率上, 否则丢链路。 */
     if ((s_dbg_setbaud_st == 0U) && (radar_baud_locked() != 0U))
     {
-        int32_t     ret;
-        radar_ack_t ack;
+        int32_t ret;
 
         s_dbg_setbaud_st = 1U;
         ret = radar_set_uart_baud_index((uint8_t)RADAR_DBG_SET_BAUD_IDX);
         if (ret == LL_OK)
         {
             dbg_event_u32("module baud idx OK ", (uint32_t)RADAR_DBG_SET_BAUD_IDX);
-            ret = radar_cmd(RADAR_CMD_RESTART, 0, 0U, &ack, RADAR_CMD_TIMEOUT_MS);
+            ret = radar_restart();
             if (ret == LL_OK)
             {
                 dbg_event("module restart sent");
@@ -939,6 +1025,12 @@ void radar_dbg_poll(void)
 void radar_dbg_note(const char *tag)
 {
     (void)tag;
+}
+
+void radar_dbg_note_u32(const char *tag, uint32_t v)
+{
+    (void)tag;
+    (void)v;
 }
 
 void radar_dbg_poll(void)

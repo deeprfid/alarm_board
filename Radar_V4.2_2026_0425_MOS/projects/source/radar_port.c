@@ -270,12 +270,34 @@ uint8_t radar_port_tx_busy(void)
     return s_tx_busy;
 }
 
+/* 丢弃接收缓冲里"上一个波特率"的残留字节。
+ * 必要性: 换波特率时 DMA 窗口/环形缓冲里可能还压着旧波特率下收到的字节, 若不丢弃,
+ *         它们会在换档后被当成本档的数据解析, 可能用"上一档的合法帧"误判波特率。 */
+void radar_port_rx_flush(void)
+{
+    uint32_t primask;
+
+    /* 环形缓冲由 DMA/超时中断写入, 这里用极短临界区清空(仅在换波特率时调用) */
+    primask = __get_PRIMASK();
+    __disable_irq();
+    (void)BUF_Init(&s_rx_ring, s_rx_ring_buf, sizeof(s_rx_ring_buf));
+    memset(s_rx_win, 0, sizeof(s_rx_win));
+    __set_PRIMASK(primask);
+
+    /* 重新装载 RX DMA, 让窗口基准回到 s_rx_win[0] */
+    USART_ClearStatus(RADAR_UART_UNIT, USART_FLAG_RX_TIMEOUT);
+    TMR0_Stop(RADAR_TMR0_UNIT, RADAR_TMR0_CH);
+    AOS_SW_Trigger();
+    DMA_ClearTransCompleteStatus(RADAR_RX_DMA_UNIT, RADAR_RX_DMA_TC_FLAG);
+}
+
 void radar_port_set_baud(uint32_t baud)
 {
     float32_t f32Err = 0.0F;
 
     s_baud = baud;
     (void)USART_SetBaudrate(RADAR_UART_UNIT, baud, &f32Err);
+    radar_port_rx_flush();          /* 换波特率后, 旧波特率的残留字节全部作废 */
 }
 
 uint32_t radar_port_get_baud(void)

@@ -104,6 +104,8 @@
 #define RADAR_FRAME_MAX                 (64U)       /* 单帧最大长度(工程模式 45B) */
 #define RADAR_CMD_TIMEOUT_MS            (200U)      /* 命令等待 ACK 超时 */
 #define RADAR_BAUD_PROBE_TIMEOUT_MS     (300U)      /* 每个波特率探测超时 */
+#define RADAR_PROBE_BOOT_MS             (1000U)     /* 上电后等模块启动完成再开始探测 */
+#define RADAR_PROBE_VERIFY_MS           (1000U)     /* 收到 ACK 后, 用"上报帧"验证该波特率的等待时间 */
 #define RADAR_FRAME_GAP_MS              (20U)       /* 半包超时(帧内空闲复位) */
 #define RADAR_REPORT_STALE_MS           (1000U)     /* 上报数据过期(串口在线判定) */
 

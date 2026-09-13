@@ -65,6 +65,7 @@ int32_t radar_set_sensitivity(uint16_t gate, uint16_t move_sens, uint16_t still_
 int32_t radar_set_max_gate(uint16_t move_gate, uint16_t still_gate, uint16_t no_body_sec); /* 0x0060 */
 int32_t radar_set_resolution(uint8_t idx);                          /* 0x00AA */
 int32_t radar_set_uart_baud_index(uint8_t idx);                     /* 0x00A1 */
+int32_t radar_restart(void);                                      /* 0x00A3: 应答后模块自动重启 */
 int32_t radar_eng_mode(uint8_t on);                                 /* 0x0062 / 0x0063 */
 int32_t radar_noise_start(uint16_t sec);                            /* 0x000B */
 int32_t radar_noise_status(uint16_t *status);                       /* 0x001B: 0 未执行 1 执行中 2 完成 */

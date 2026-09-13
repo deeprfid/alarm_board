@@ -14,8 +14,11 @@ void radar_port_init(void);
 int32_t radar_port_write(const uint8_t *buf, uint16_t len);
 uint8_t radar_port_tx_busy(void);
 
-/* 修改波特率(用于自适应探测) */
+/* 修改波特率(用于自适应探测); 内部会先丢弃接收缓冲里旧波特率的残留字节 */
 void radar_port_set_baud(uint32_t baud);
+
+/* 丢弃接收缓冲与 DMA 窗口里的残留字节 */
+void radar_port_rx_flush(void);
 uint32_t radar_port_get_baud(void);
 
 /* 收到字节时的回调(data 可能是 1 字节) */

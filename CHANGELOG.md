@@ -156,6 +156,13 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
   - `RADAR_DBG_SET_BAUD_IDX` 一次性改模块波特率改为**完整时序**：0x00A1 设置 → 0x00A3 重启模块（协议规定配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动再切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧，每步都记事件。
   - 构建验证：4 种组合（FORCE=0 自适应8档 / FORCE=460800 / FORCE=0+SET_BAUD_IDX=8 / FORCE=256000）均 0 Error 0 Warning。
 - `[hc32f460]` **feat(把模块波特率改成 460800)**: `RADAR_DBG_SET_BAUD_IDX=8` 的一次性流程补齐**自检与回退**——使能配置 → `0x00A1(0x0008)` → `0x00A3` 重启模块（协议规定该配置"重启后生效"，模块未切前驱动必须留在旧波特率）→ 800ms 后驱动切到 `RADAR_DBG_SET_BAUD_VALUE` 并重建分帧 → 自检 2.5s 看有无上报帧：成功记 `baud verify OK 460800`；失败自动回退旧波特率再看 2.5s，分别记 `old baud still OK` / `no data on either baud: check wiring`。注：厂家固件里的"出厂默认 256000"无法更改（`0x00A2` 恢复出厂即回到 256000），本流程是把 460800 写进**模块自己的 flash**，从此这块模块上电就是 460800（每块需各做一次）。
+- `[hc32f460]` **fix(波特率自适应判据)**: 上板出现"第一次 `lock=1 baud=9600`、第二次又回到 `256000`"的抖动 —— 说明判据不可靠。改动：
+  - **判据从"任意 ACK"改为"上报帧"为准**：某档收到 ≥`RADAR_BAUD_LOCK_FRAMES(3)` 个上报帧直接认定；只收到 ACK 时先发 `0x00FE` 退出配置态, 再等 `RADAR_PROBE_VERIFY_MS(1000ms)` 用上报帧验证, 收不到就继续试下一档（ACK 帧仅 10 字节, 错波特率下的乱码/残留字节可能凑出魔术字+帧尾被误判；上报帧 13 字节且内容自校验）；
+  - **上电先等 `RADAR_PROBE_BOOT_MS(1000ms)` 再探测**：模块没启动完成时命令不会被应答, 会让第一档(256000)误判失败, 一路试到尾后回落 256000；
+  - **换波特率时丢弃接收缓冲残留字节**：新增 `radar_port_rx_flush()`（`radar_port.c`）并在 `radar_port_set_baud()` 内部调用 —— DMA 窗口/环形缓冲里上一档的字节不再参与本档判定；
+  - **补 `radar_restart()`（0x00A3）语义化接口**：改波特率(0x00A1)/分辨率(0x00AA)/蓝牙(0x00A4)/密码(0x00A9)/恢复出厂(0x00A2) 需重启才生效, 灵敏度(0x0064)/最大距离门(0x0060) 立即生效 —— 已写进注释；上板调试的一次性改波特率流程改用它；
+  - 调试信息加强：`g_radar_dbg.repf`/`g_radar_dbg.ackf`（上报帧/ACK 帧计数）与 `radar_dbg_note_u32()`；每个探测步骤都记事件, `g_radar_dbg_evt` 可直接读出扫描过程(try baud × / ack, verify baud × / lock × / no report at × / probe FAIL, fallback 256000)；
+  - 构建验证：自适应 / `SET_BAUD_IDX=8` / `FORCE=9600` 三种组合均 0 Error 0 Warning。
 - `[hc32f460]` **fix(雷达 ACK 匹配)**: 上板 `lock=0` 的**另一个重要嫌疑**——原来要求 `ACK.cmd == 0x00FF && status == 0` 才算命中, 但协议 V1.09 的 ACK 示例里命令字**高字节写作 01**(如使能配置 ACK `FD FC FB FA 08 00 FF 01 00 00 01 00 40 00 ...`), 按 cmd(2)+status(2) 解析会得到 `cmd=0x01FF`, 即使接线完全正常也**永远匹配不上**。改动：
   - 新增 `RADAR_ACK_CMD_MATCH(ack_cmd, cmd)`（`radar_proto.h`）——只比命令字**低字节**（LD2410 命令全是 `0x00xx`, 低字节唯一, 可同时兼容文档的两种写法）, `radar_cmd()` 改用该宏；探测阶段改为**收到任意合法 ACK 帧即锁定波特率**（探测期只发过 0x00FF, 任何 ACK 都是它回的）；
   - 调试段新增 `g_radar_dbg_ack`：最近一帧 ACK 的 `c=xx / st=xx / d=N` + 原始字节十六进制, 用于现场核对 ACK 真实字段布局（文档示例自身不一致）；

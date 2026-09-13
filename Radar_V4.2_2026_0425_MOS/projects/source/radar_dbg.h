@@ -35,6 +35,8 @@ typedef struct {
     uint32_t lock;          /* ×ÔÊÊÓ¦ÊÇ·ñÃüÖĞ(1=ÃüÖĞ, 0=È«Ê§°Ü»ØÂä 256000) */
     uint32_t baud;          /* µ±Ç°²¨ÌØÂÊ */
     uint32_t rep;           /* ½âÎö³öµÄÉÏ±¨Ö¡Êı */
+    uint32_t repf;          /* ÉÏ±¨Ö¡(F4F3F2F1)ÀÛ¼ÆÊı */
+    uint32_t ackf;          /* ACK Ö¡(FDFCFBFA)ÀÛ¼ÆÊı */
     uint32_t fok;           /* ·ÖÖ¡³É¹¦Ö¡Êı */
     uint32_t fer;           /* ·ÖÖ¡´íÎóÖ¡Êı */
     uint32_t rx;            /* ´®¿ÚÀÛ¼ÆÊÕµ½×Ö½ÚÊı */
@@ -64,5 +66,7 @@ extern uint32_t                  g_radar_dbg_evt_cnt;                   /* ÒÑ¼ÇÂ
 void radar_dbg_poll(void);
 /* ÊÖ¹¤¼ÇÒ»ÌõÊÂ¼ş(Èç²ÎÊı¶ÁĞ´½á¹û), RADAR_DBG_EN=0 Ê±Îª¿ÕÊµÏÖ */
 void radar_dbg_note(const char *tag);
+/* ´øÒ»¸öÊ®½øÖÆÊıµÄÊÂ¼ş(Èç "try baud 9600") */
+void radar_dbg_note_u32(const char *tag, uint32_t v);
 
 #endif /* __RADAR_DBG_H__ */
