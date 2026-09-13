@@ -1,7 +1,7 @@
 # HC32 报警板 雷达(LD2410C) 上板验证步骤
 
 > 目的: 确认新雷达驱动(**USART1 + DMA + 空闲超时**)能收到模块的 `0x02` 上报, 且目标状态/距离合理。
-> 调试输出是**临时模块** `radar_dbg.c/.h`, 总开关在 `radar_cfg.h` 的 `RADAR_DBG_EN`, 验证完按第 5 节清理。
+> 调试输出是**临时调试段**(总开关 `radar_cfg.h` 的 `RADAR_DBG_EN`, 实现在 `radar.c` 末尾), 验证完按第 5 节清理。
 > 本步骤只动 HC32 报警板固件, 与 STM32 中继板无关。
 
 ---
@@ -90,7 +90,7 @@ ms=12345 rdy=1 lock=1 baud=256000 rep=120 fok=120 fer=0 rx=3120 drp=0 st=1 mv=12
 ## 5. 验证通过后的清理(必做其一)
 
 1. **最小改动**: `radar_cfg.h` 里 `RADAR_DBG_EN (0U)` —— 只剩空实现, 不占 Flash, 不影响业务; 或
-2. **彻底删除**: 删 `radar_dbg.c` / `radar_dbg.h` → 从 Keil 工程两个目标移除 `radar_dbg.c` → 删 `main.c` 的 `radar_dbg_poll()` → 删 `main.h` 的 `#include "radar_dbg.h"`。
+2. **彻底删除**: 删 `radar.c` 里 `#if (RADAR_DBG_EN != 0U)` 到文件末尾的整段 → 删 `main.c` 的 `radar_dbg_poll()` → 删 `main.h` 的 `#include "radar_dbg.h"` → 删 `radar_dbg.h`。
 
 `radar_rx_bytes()` / `radar_rx_drop()` 是常驻诊断接口(值很小, 可长期保留), 不属于要删的调试代码。
 

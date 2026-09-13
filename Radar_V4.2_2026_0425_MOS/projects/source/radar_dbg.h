@@ -2,9 +2,15 @@
  * radar_dbg.h -- 雷达驱动"上板验证"用的调试输出(临时模块)
  *
  * 目的: 上板确认 LD2410C 串口链路是否通、收到的是不是 0x02 上报、目标状态与
- *       距离是否合理。业务代码不依赖本模块, 验证完成后:
- *         ① radar_cfg.h 里 RADAR_DBG_EN 置 0(空实现, 不占空间) 或
- *         ② 直接删除 radar_dbg.c/.h 并从 Keil 工程移除 + 删 main.c 里的 radar_dbg_poll()
+ *       距离是否合理。业务代码不依赖本模块。
+ *
+ * 实现放在 radar.c 末尾的 "#if (RADAR_DBG_EN != 0U)" 段里 —— 不新建 .c 文件,
+ * 因此不用改 Keil 工程(Keil GUI 打开时会把 .uvprojx 的改动覆盖掉)。
+ *
+ * 验证完成后:
+ *   ① radar_cfg.h 里 RADAR_DBG_EN 置 0(空实现, 不占 Flash); 或
+ *   ② 删本文件 + radar.c 里 "#if (RADAR_DBG_EN != 0U)" 到文件末尾的整段
+ *      + main.c 的 radar_dbg_poll() + main.h 的 #include "radar_dbg.h"
  *
  * 输出通道(见 radar_cfg.h 的 RADAR_DBG_SINK_xxx):
  *   SINK_KEIL  : 结构体 g_radar_dbg(Keil Watch 里一眼看全) + 字符串 g_radar_dbg_line

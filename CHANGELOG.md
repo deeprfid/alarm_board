@@ -139,12 +139,12 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
   - **构建验证**：以 Keil 命令行无头构建复核（`UV4.exe -b alarm_board.uvprojx -j0 -o <log>`）—— `Code=29636 RO-data=760 RW-data=80 ZI-data=8232`，**0 Error / 0 Warning**（Debug 目标；Release 目标共用同一份源文件清单）；
   - **硬件配置复核**（与 git 历史中的旧 `bsp_radar.c/.h` 逐项比对，非推测）：串口 `CM_USART1`、TX=**PA2/FUNC32**、RX=**PA3/FUNC33**、OUT0/1/2=**PC14/PC13/PH02** —— 新 `radar_cfg.h` 与旧工程完全一致（旧文件里的 `PB9`/`PE6` 是写错的残留注释）。
 
-- `[hc32f460]` **feat(调试)**: 新增雷达**上板验证**模块 `radar_dbg.c/.h`（总开关 `radar_cfg.h` 的 `RADAR_DBG_EN`，验证通过后可整体删除）：
+- `[hc32f460]` **feat(调试)**: 新增雷达**上板验证**调试段（声明在 `radar_dbg.h`，实现在 `radar.c` 末尾的 `#if (RADAR_DBG_EN != 0U)` 段；总开关 `radar_cfg.h` 的 `RADAR_DBG_EN`，验证通过后可整体删除）：
   - 输出：结构体 `g_radar_dbg`（Keil Watch 一眼看全：rdy/lock/baud/rep/fok/fer/rx/drp/st/运动与静止距离能量/dd/out/online/pre）＋文本行 `g_radar_dbg_line`＋事件行 `g_radar_dbg_evt`（boot / 自适应探测结果 / 目标状态跳变 / 帧错误 / rx 停滞）；另可选 ITM(SWO) 与 RS485 主机口 ASCII 输出（`RADAR_DBG_SINK_ITM` / `RADAR_DBG_SINK_RS485`，默认关，后者会与 STM32 的 20ms 查询抢总线故默认关闭）；
   - 只调用驱动公开接口读状态，不碰驱动内部；不引入 printf（自带极简整数转 ASCII），`RADAR_DBG_EN=0` 时为空实现、不占 Flash；
   - 新增常驻诊断接口 `radar_rx_bytes()` / `radar_rx_drop()`（串口累计收字节数 / 环形缓冲丢弃数）——区分“没收到字节(接线/波特率)”与“收到但分帧失败(格式)”，现场排查用；
   - `main.c` 主循环增加 `radar_dbg_poll()`（内部 500ms 节流）；验证步骤 / 字段速查 / 现象判读表见 `docs/hc32_radar_bringup.md`；
-  - `alarm_board.uvprojx` 两个目标均加入 `radar_dbg.c`（同时该工程目标改为便于调试的设置：DebugInformation=1、Optim/oTime 由 -O3 改 0）。
+  - **刻意不新建 .c 文件**：Keil GUI 打开工程时会用内存中的工程覆盖 `.uvprojx` 的改动（实测把已加入工程的 `radar_dbg.c` 覆盖掉，链接报 `L6218E: Undefined symbol radar_dbg_poll`），故调试段并入 `radar.c`，只需重新编译、不动工程文件；该工程目标另改为便于调试的设置（DebugInformation=1、Optim/oTime 由 -O3 改 0）。
 - `[hc32f460]` **fix**: `bsp_rs485.h` 补 **include guard** —— 该头文件原先没有 guard，同一编译单元被包含两次即报 `#256: invalid redeclaration of type name "alarm_pdu"`（本次由 `radar_dbg.c` 显式包含时暴露）。同目录 `bsp_alarm.h` / `bsp_exint.h` / `bsp_pwm.h` 同样缺 guard，当前无二次包含，未改动。
 - **构建验证**：Keil 命令行无头构建 4 种组合全部 **0 Error / 0 Warning** —— 默认（DBG_EN=1、两个 SINK=0）`Code=28180`；SINK_ITM=1 `Code=28260`；SINK_RS485=1 `Code=28296`；恢复默认后全量重建 `Code=28180`。
 
