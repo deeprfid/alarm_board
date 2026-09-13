@@ -67,14 +67,17 @@
  * 非 0   = 把模块波特率配置成该值(协议 0x00A1, 掉电保存在模块里)。
  * 流程(幂等): 自适应找到当前波特率 -> 已经是目标值就什么都不做;
  *             否则 0x00A1 写入 -> 0x00A3 重启模块 -> 等 RADAR_PROVISION_RESTART_MS
- *             -> 驱动切到目标波特率 -> 自检 RADAR_PROVISION_VERIFY_MS(看有无上报)
- *             -> 成功则以后每次上电模块都是该值; 失败自动回退原波特率, 不影响工作。
+ *             -> **重新跑一遍自适应探测**做复检:
+ *                锁定在目标波特率 = 成功(以后每次上电模块都是该值);
+ *                锁定在别的值     = 模块没切成, 保持该波特率继续工作(不影响业务)。
+ *             用"重新探测"而不是"固定时间听一个波特率": 模块重启耗时不定,
+ *             且写失败/切换失败时也能立刻确定它实际在哪个波特率上。
  * 结果: radar_provision_state() / g_radar_dbg.prov_st (4=成功或已是目标值, 5=失败已回退)。
  * 每块模块只需配置一次(配置存在模块 flash 里); 0x00A2 恢复出厂会把它删回 256000。
  */
 #define RADAR_PROVISION_BAUD            (460800UL)
-#define RADAR_PROVISION_RESTART_MS      (800U)      /* 模块重启后等多久再切驱动波特率 */
-#define RADAR_PROVISION_VERIFY_MS       (2500U)     /* 新波特率下的自检等待时间 */
+#define RADAR_PROVISION_RESTART_MS      (500U)      /* 模块重启后等多久再开始复检
+                                                      * (复检=重新跑一遍自适应, 它自带 RADAR_PROBE_BOOT_MS 启动延时) */
 
 /* ============================ RX DMA: USART1_RI -> DMA2 CH1 ============================ */
 #define RADAR_RX_DMA_UNIT               (CM_DMA2)

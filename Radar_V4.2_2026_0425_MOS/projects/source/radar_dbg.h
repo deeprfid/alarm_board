@@ -39,7 +39,7 @@
 #define RADAR_DBG_EV_SETBAUD_FAIL       (13U)   /* val = 返回码 */
 #define RADAR_DBG_EV_RESTART_SENT       (14U)   /* 产线配置: 0x00A3 已发, val = 目标波特率 */
 #define RADAR_DBG_EV_RESTART_FAIL       (15U)   /* val = 返回码 */
-#define RADAR_DBG_EV_DRIVER_BAUD        (16U)   /* 产线配置: 驱动已切到目标波特率 */
+#define RADAR_DBG_EV_DRIVER_BAUD        (16U)   /* 产线配置: 模块已重启, 开始重新探测复检 */
 #define RADAR_DBG_EV_VERIFY_OK          (17U)   /* val = 波特率(自检通过) */
 #define RADAR_DBG_EV_VERIFY_FALLBACK    (18U)   /* val = 回退到的波特率 */
 

@@ -25,8 +25,6 @@ static uint32_t         s_ack_frames;      /* 本档收到的 ACK 帧数(换档清零) */
 #if (RADAR_PROVISION_BAUD != 0UL)
 static uint8_t          s_prov_st;          /* 产线配置状态: 0 待做 1 写入中 2 等重启 3 自检中 4 成功 5 失败 6 无法配置 */
 static uint32_t         s_prov_t0;
-static uint32_t         s_prov_rep;
-static uint32_t         s_prov_baud;        /* 配置前的波特率(失败时回退用) */
 static uint8_t          s_prov_busy;        /* 1 = 正在执行阻塞式命令(防重入兜底) */
 #endif
 
@@ -280,8 +278,8 @@ static uint8_t radar_baud_to_index(uint32_t baud)
 /* 把模块波特率配置成 RADAR_PROVISION_BAUD(掉电保存), 幂等:
  *   0 等探测结束 -> 若已是目标值则直接结束(什么都不发)
  *   1 写配置(0x00A1) -> 重启模块(0x00A3, 配置重启后生效) -> 等 RADAR_PROVISION_RESTART_MS
- *   2 驱动切到目标波特率
- *   3 自检 RADAR_PROVISION_VERIFY_MS: 收到上报帧 = 成功; 否则回退到原波特率继续工作
+ *   2 等模块重启(RADAR_PROVISION_RESTART_MS)后**重新跑一遍自适应探测**
+ *   3 复检: 探测锁定在目标波特率 = 成功; 锁定在别的值 = 模块没切成, 保持该波特率继续用
  * 结果见 radar_provision_state() 与 g_radar_dbg.prov_st */
 static void radar_provision_tick(void)
 {
@@ -307,7 +305,6 @@ static void radar_provision_tick(void)
 
         case 1U:                             /* 写配置 + 重启模块(下面两步是阻塞的, 见 radar_cmd) */
             s_prov_busy = 1U;
-            s_prov_baud = radar_get_baud();
 
             if (radar_set_uart_baud_index(radar_baud_to_index(RADAR_PROVISION_BAUD)) != LL_OK)
             {
@@ -336,35 +333,33 @@ static void radar_provision_tick(void)
             }
             break;
 
-        case 2U:                             /* 等模块按新波特率重启完成, 驱动再切过去 */
+        case 2U:                             /* 等模块重启, 然后重新跑一遍自适应探测来复检 */
             if ((m_u32Tickms - s_prov_t0) >= RADAR_PROVISION_RESTART_MS)
             {
-                s_prov_rep = radar_reports();
-                radar_port_set_baud(RADAR_PROVISION_BAUD);
-                radar_frame_init(&s_rx);
                 radar_dbg_note_u32(RADAR_DBG_EV_DRIVER_BAUD, RADAR_PROVISION_BAUD);
-                s_prov_t0 = m_u32Tickms;
-                s_prov_st = 3U;
+                s_probe_st    = 0U;          /* 重新武装探测: 状态 0 里自带 RADAR_PROBE_BOOT_MS 启动延时 */
+                s_probe_t0    = m_u32Tickms;
+                s_probe_idx   = 0U;
+                s_rep_frames  = 0U;
+                s_ack_frames  = 0U;
+                s_baud_locked = 0U;
+                s_prov_st     = 3U;
             }
             break;
 
-        case 3U:                             /* 自检: 新波特率下能否收到上报 */
-            if (radar_reports() != s_prov_rep)
+        case 3U:                             /* 复检: 探测锁定在目标波特率 = 成功 */
+            if (radar_ready() == 0U) { break; }
+
+            if ((radar_baud_locked() != 0U) && (radar_get_baud() == RADAR_PROVISION_BAUD))
             {
                 radar_dbg_note_u32(RADAR_DBG_EV_VERIFY_OK, RADAR_PROVISION_BAUD);
                 s_prov_st = 4U;
             }
-            else if ((m_u32Tickms - s_prov_t0) >= RADAR_PROVISION_VERIFY_MS)
-            {
-                /* 新波特率下没数据(模块可能没真正切换): 回退原波特率继续工作, 不影响业务 */
-                radar_port_set_baud(s_prov_baud);
-                radar_frame_init(&s_rx);
-                radar_dbg_note_u32(RADAR_DBG_EV_VERIFY_FALLBACK, s_prov_baud);
-                s_prov_st = 5U;
-            }
             else
             {
-                /* 继续等 */
+                /* 模块没切成(或写配置无效): 保持探测找到的波特率继续工作, 不影响业务 */
+                radar_dbg_note_u32(RADAR_DBG_EV_VERIFY_FALLBACK, radar_get_baud());
+                s_prov_st = 5U;
             }
             break;
 
