@@ -17,19 +17,26 @@ static uint8_t          s_baud_locked;
 
 /* ============================ 现场 Watch 只用这 3 个单值 ============================
  * 本板没有调试串口, 在 Watch 里加一堆变量抄数字的做法已经废弃(现场结论: 没法调试)。
- * 只保留下面 3 个, 且**不许再加第 4 个** —— 需要更多信息就重新定义 g_radar_comm 的取值, 不要新增变量。
- *   g_radar_lock : 1 = 已锁定模块波特率(探测成功); 0 = 还没锁定
- *   g_radar_baud : 当前波特率(锁定后即模块真实波特率)
- *   g_radar_comm : 通信状态
- *                  0 = 一个字节都没收到(模块没发/线不对/波特率全不对)
- *                  1 = 收到字节但解不出合法帧(波特率不对或帧被截断)
- *                  2 = 曾经解出合法上报帧(之后又断了)
- *                  3 = 最近 1 秒内仍有合法上报帧 ==> 正在正常通信
+ * 只保留下面 3 个, 且**不许再加第 4 个** —— 需要更多信息就重新定义取值, 不要新增变量。
+ *
+ *   g_radar_lock : 1 = 已锁定模块波特率(探测成功); 0 = 没锁住(8 档全试完仍失败)
+ *   g_radar_baud : 当前波特率(锁定时 = 模块真实波特率; 探测失败会回落到 256000)
+ *   g_radar_comm : 探测结果位图 + 标志位, 一个数就能看出问题在哪一段:
+ *                  bit0..bit7 = 各候选档是否收到过字节, 顺序同 RADAR_BAUD_TABLE:
+ *                     bit0=460800 bit1=256000 bit2=115200 bit3=9600
+ *                     bit4=19200  bit5=38400  bit6=57600  bit7=230400
+ *                  0x100 = 曾解出过合法上报帧; 0x200 = 最近 1 秒内仍有合法帧(正在正常通信)
+ *                  读法: 0x00  = 8 档全程一个字节都没收到 -> 模块没发/接线/供电
+ *                        0x08  = 只在 9600 收到过字节        -> 模块就在 9600
+ *                        0x308 = 9600 收到字节 + 解出帧 + 现在还在通 -> 正常
+ *                        0x0FF = 每档都有字节(波特率不对时的乱码也算), 但解不出帧
  * ================================================================================ */
 volatile uint32_t          g_radar_lock;
 volatile uint32_t          g_radar_baud;
 volatile uint32_t          g_radar_comm;
 static uint32_t            s_rep_last_ms;   /* 最近一次解出合法上报帧的时刻 */
+static uint32_t            s_probe_rx0;     /* 进入当前候选档时的累计接收字节数 */
+static uint32_t            s_comm_map;      /* 各候选档是否收到过字节 -> g_radar_comm 的 bit0..7 */
 static uint8_t          s_presence_src = RADAR_SRC_OUT;
 static uint8_t          s_probe_st = 0U;      /* 0=待启动 1=已切波特率待发 2=等 ACK 3=收尾 9=结束 */
 static uint8_t          s_probe_idx;
@@ -128,12 +135,14 @@ static uint32_t radar_probe_baud(uint8_t idx)
 /* 本档不收: 换下一档; 全试完 -> 回落默认波特率(locked=0) */
 static void radar_probe_next(void)
 {
+    if (radar_port_rx_bytes() != s_probe_rx0) { s_comm_map |= (1UL << s_probe_idx); }
     s_ack_ready  = 0U;
     s_probe_idx++;
 
     if (s_probe_idx >= (uint8_t)RADAR_BAUD_TABLE_CNT)
     {
         radar_port_set_baud(RADAR_BAUD_FALLBACK);
+        s_probe_rx0 = radar_port_rx_bytes();
         radar_frame_init(&s_rx);
         s_rep_frames = 0U;
         s_ack_frames = 0U;
@@ -142,6 +151,7 @@ static void radar_probe_next(void)
     }
 
     radar_port_set_baud(radar_probe_baud(s_probe_idx));
+    s_probe_rx0 = radar_port_rx_bytes();
     radar_frame_init(&s_rx);
     s_rep_frames = 0U;
     s_ack_frames = 0U;
@@ -152,6 +162,7 @@ static void radar_probe_next(void)
 /* 认定本档为模块真实波特率 */
 static void radar_probe_accept(void)
 {
+    if (radar_port_rx_bytes() != s_probe_rx0) { s_comm_map |= (1UL << s_probe_idx); }
     s_baud_locked = 1U;
     s_probe_st    = 9U;
 }
@@ -189,6 +200,7 @@ static void radar_probe_tick(void)
                 s_rep_frames = 0U;
                 s_ack_frames = 0U;
                 radar_port_set_baud(radar_probe_baud(0U));
+                s_probe_rx0 = radar_port_rx_bytes();
                 radar_frame_init(&s_rx);
                 s_probe_t0 = m_u32Tickms;
                 s_probe_st = 1U;
@@ -682,10 +694,12 @@ void radar_poll(void)
     /* 现场只看这 3 个单值(定义见文件头) */
     g_radar_lock = (uint32_t)s_baud_locked;
     g_radar_baud = radar_get_baud();
-    if ((m_u32Tickms - s_rep_last_ms) <= 1000U)   { g_radar_comm = 3U; }
-    else if (s_reports != 0U)                     { g_radar_comm = 2U; }
-    else if (radar_port_rx_bytes() != 0U)         { g_radar_comm = 1U; }
-    else                                          { g_radar_comm = 0U; }
+    /* 现场只看这 3 个单值(定义与读法见文件头) */
+    g_radar_lock = (uint32_t)s_baud_locked;
+    g_radar_baud = radar_get_baud();
+    g_radar_comm = s_comm_map;
+    if (s_reports != 0U)                        { g_radar_comm |= 0x100UL; }
+    if ((m_u32Tickms - s_rep_last_ms) <= 1000U) { g_radar_comm |= 0x200UL; }
 }
 
 /* ------------------------------ 状态查询 ------------------------------ */
