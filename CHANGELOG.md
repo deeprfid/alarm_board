@@ -15,6 +15,34 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 
 ## [Unreleased]
 
+- **硬件（现场排障结论，非固件问题）**：**雷达3 口（USART3/PB14/PB15）在 38400 及以上收不到数据，根因是 RX 线（PB15）上一颗对地滤波电容偏大** —— 拆掉该电容后三路 460800 全部自适应通过。
+  判据（把「波特率选错」和「信号带宽不够」分开）：`RADAR_BAUD_LOCK_FRAMES = 1`，模块恒定 10 Hz 上报，每档 300ms 窗口内约 3 帧 —— **只要正确那一档信号干净，一轮扫描（2.4s）必然锁定**；正确档扫到了却不锁 ⇒ 不是波特率没选对，而是该波特率下信号本身不合格。
+  量化窗口：19200 能过（bit 52.1µs，采样点 26.0µs）、38400 过不去（bit 26.0µs，采样点 13.0µs）⇒ 该路 **RC 时间常数约 6~11 µs**（如 1kΩ×6~11nF、4.7kΩ×1.3~2.3nF、10kΩ×0.6~1.1nF）；正常 ESD 滤波应在 100pF 量级（τ≈100ns~1µs）。
+  **关键旁证（排除固件）**：19200 与 38400 走的是**同一个 DIV64 分频、同一个 0.136% 误差**，固件里不存在能切在两者之间的判据；且口0/口1 用同一份 `radar_port.c` 分别跑通 460800 / 115200。
+  详见 `docs/radar_baud_debug_notes.md` §9 与 `docs/radar_multiport_todo.md` §8。
+- `[hc32f460]` **验证（现场，三口同时锁定）**：三路雷达各接一个模块同时上电，三口**各自独立锁定在不同波特率**，互不干扰：
+
+  | 口 | USART / 引脚 | `g_radar_lock` | `g_radar_baud` | `g_radar_comm` | 分频 | BRR 整数 | 帧率 |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | 0 | USART1 / PA2,PA3 | 1 | 460800 | `0x0A1A0703` | DIV1 | 26 (0x1A) | 10 Hz |
+  | 1 | USART2 / PA0,PA1 | 1 | 115200 | `0x0A6B0707` | DIV1 | 107 (0x6B) | 10 Hz |
+  | 2 | USART3 / PB14,PB15 | 1 | 9600 | `0x0A130708` | DIV64 | 19 (0x13) | 10 Hz |
+
+  三个 BRR 整数与分频公式预测逐一吻合，`0x100/0x200/0x400` 三标志全置位 —— **逐口独立探测、逐口独立换分频（9600 走 DIV64、另两口走 DIV1）、逐口 Watch 刷新全部成立**。
+  顺带把 `radar_baud_debug_notes.md` §6 曾放弃的 9600 也补齐了实测背书。
+  另：引脚功能号经数据手册核对无误 —— PA0/PA1 属 Func_Grp1（36/37 = USART2_TX/RX）、PB14/PB15 属 Func_Grp2（32/33 = USART3_TX/RX）；PB15 的 Func7 列直接标注 `USART3_CK` 可交叉验证。
+- `[hc32f460]` **refactor（第3步：radar.c 每口一份 + 按口循环）**：三路雷达（USART1/2/3）的状态与流程全部按口拆分，各跑各的。
+  - **状态数组化** `[RADAR_PORT_CNT]`：`s_rx`(分帧器)/`s_ack`/`s_ack_ready`/`s_baud_locked`/`s_rep_frames`/`s_ack_frames`/`s_reports`/`s_comm_map`/`s_probe_st`/`s_probe_idx`/`s_probe_t0`/`s_probe_rx0`/`s_rep_last_ms`/`s_fps_ms`/`s_fps_cnt`/`s_fps`/`s_link_ms`/`s_link_bytes0`/`s_win_ack_cnt`/`s_link_last_rx_ms`/`s_link_sweep_ms`/`s_presence_src`；`s_prov_*` 同步数组化；
+  - **接收跳板**：`radar_port_set_rx_handler` 的回调只带 data/len、不带口号，故每口一个跳板 `radar_rx_cb0/1/2` → `radar_on_bytes(port, data, len)`，分帧/解析/计数全部落到该口；
+  - **函数加口号**：`radar_pump` / `radar_probe_tick` / `radar_probe_next` / `radar_probe_accept` / `radar_switch_baud` / 链路监控（新拆出 `radar_link_tick`）/ `radar_cfg_cmd` 全部带 `uint8_t port`；
+  - **主循环 / 初始化**：`radar_poll()` 里 `for (p = 0; p < RADAR_PORT_CNT; p++)` 逐口推进；`radar_init()` 里逐口 `radar_port_init(p)` + `radar_port_set_rx_handler(p, rx_cb[p])`（**登记必须在 init 之后** —— `radar_port_init()` 内部会把该口回调清零）；
+  - **Watch 仍是 3 个变量**：`g_radar_lock` / `g_radar_baud` / `g_radar_comm` 变成 `[RADAR_PORT_CNT]` 数组，**位图 / BRR 整数分频指纹 / 帧率编码一字未改**；
+  - **新增按口命令入口** `radar_cmd_port()` / `radar_restart_port()` / `radar_set_uart_baud_index_port()`；不带口号的旧 API 一律保留为「口 0 兼容入口」，`radar.h` 增加 `#include "radar_port.h"` 以取得 `RADAR_PORT_CNT`（不动第 2 步已完成的 `radar_port.h`）；外部调用点（`main.c` / `common.c`）零改动；
+  - **OUT 脚按口**：新增 `s_out_port[]/s_out_pin[]`（口0 = 原 `RADAR_UART_DEV_OUT_*`，逐位等价；口1/2 = `RADAR_PORT1/2`），与 `bsp_report.c` / `common.c` / `bsp_gpio.c` 读三路 OUT 的写法一致；
+  - **单实例维护功能不随口拆分**：参数自动配置（`s_param_*`）、只读回读（`s_dump`）、产线 dump 仍走口 0；
+  - **清理**：删掉 3 处与实现自相矛盾的过期注释（仍写着「发 0x00FF 探测」「重扫先试上次锁定档」「大跨档需断电重启」），并去掉 `g_radar_lock`/`g_radar_baud` 一段完全重复的连续赋值；
+  - **构建验证**：Keil 无头全量重建，5 种配置（默认 / `TARGET=460800` / `DUMP_ONCE=1` / `PARAM_EN=1` / 三者全开）**均 0 Error / 0 Warning**，默认配置 `Code=27416 RO-data=920 RW-data=80 ZI-data=9704`。
+    其中 **`DUMP_ONCE=1` 单独**这一组抓出一处真 bug：`radar_link_ready()` 被误挪进 `#if (RADAR_PARAM_EN)` 内，该组合下报 `#223-D: declared implicitly` + `L6218E: Undefined symbol radar_link_ready`，已改回 `#if ((RADAR_PARAM_EN != 0U) || (RADAR_DUMP_ONCE != 0U))`。
 - `[hc32f460]` **fix（现场反问查出的真 bug）**：上一版为『先试原档』加的 `s_first_baud` 快捷路径有缺陷 —— 它把**重扫的第 0 窗**用来试原档，之后 `radar_probe_next()` 把 `s_probe_idx++` 后从**第 1 档开始**，于是**第 0 档（256000）被整轮跳过**。现场表现正是『改档后不重扫，重启 HC32 才行』：因为**上电探测是从第 0 档开始按表扫的**，一定覆盖 256000；而重扫路径漏了它，若模块被改到 256000 就永远扫不到。
   修法：**删除 `s_first_baud` 快捷路径**，重扫一律从候选表第 0 档（256000）开始按顺序扫完 8 档 —— 简单、且与上电探测行为完全一致（上电探测已被现场反复验证）。代价：若模块其实没改档，恢复时间由 0.3 秒变为约 1~2 秒，可接受。Code 26684，构建 0 Error / 0 Warning。
 

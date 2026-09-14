@@ -6,6 +6,10 @@
  *   while (1) { radar_poll(); ... }     // 主循环每拍调用(非阻塞)
  *   radar_read_params(&p);              // 读参数(阻塞式, 内部自行 poll, 有超时)
  *   radar_set_sensitivity(3, 40, 40);   // 设距离门 3 灵敏度
+ *
+ * 第 3 步(多口): 三路雷达(USART1/2/3)各跑各的。设备号 == 口号(0/1/2)。
+ *   - 不带口号的旧接口一律是"口 0 兼容入口"(既有调用点不用改);
+ *   - 需要指定口时用 radar_cmd_port() / radar_restart_port() 等 _port 版本。
  ******************************************************************************/
 #ifndef __RADAR_H__
 #define __RADAR_H__
@@ -13,6 +17,7 @@
 #include "radar_cfg.h"
 #include "radar_frame.h"
 #include "radar_proto.h"
+#include "radar_port.h"     /* RADAR_PORT_CNT + radar_port_* 硬件层接口 */
 
 /* "有人"判定来源 */
 #define RADAR_SRC_OUT               (0U)    /* 只用模块 OUT 脚(现有行为) */
@@ -41,9 +46,9 @@ const radar_dev_t *radar_dev(uint8_t dev);
 const radar_report_t *radar_report(uint8_t dev);
 uint8_t radar_presence(uint8_t dev);                    /* 按策略给出有人/无人 */
 uint8_t radar_uart_online(uint8_t dev);
-uint8_t radar_baud_locked(void);                        /* 自适应探测是否命中 */
-uint8_t radar_ready(void);                            /* 自适应探测是否已结束 */
-uint32_t radar_get_baud(void);
+uint8_t radar_baud_locked(void);                        /* 自适应探测是否命中(口 0 兼容入口) */
+uint8_t radar_ready(void);                              /* 自适应探测是否已结束(口 0 兼容入口) */
+uint32_t radar_get_baud(void);                          /* 当前波特率(口 0 兼容入口) */
 uint8_t radar_provision_state(void);                    /* 产线配置波特率状态: 4=已是目标值/成功, 5=失败已回退 */
 void    radar_set_presence_src(uint8_t src);
 uint8_t radar_presence_src(void);
@@ -83,17 +88,23 @@ uint8_t radar_param_state(void);    /* 0 待做 / 1 读回中 / 2 写入中 / 3 复检中 /
 
 uint32_t radar_reports(void);
 
-/* 现场 Watch 只看这 3 个单值(定义/含义见 radar.c 文件头) */
-extern volatile uint32_t g_radar_lock;
-extern volatile uint32_t g_radar_baud;
-extern volatile uint32_t g_radar_comm;
-uint32_t radar_rx_bytes(void);                         /* 串口累计收到字节数(诊断) */
-uint32_t radar_rx_drop(void);                          /* 接收缓冲丢弃字节数(诊断) */
+/* 现场 Watch 只看这 3 个。
+ * 第 3 步起每口一份: 仍是 3 个变量, 但各自是 [RADAR_PORT_CNT] 数组, 下标 0/1/2 = 雷达口 0/1/2。
+ * 位图/BRR 指纹/帧率编码与单口版**完全一致**, 定义与读法见 radar.c 文件头。 */
+extern volatile uint32_t g_radar_lock[RADAR_PORT_CNT];
+extern volatile uint32_t g_radar_baud[RADAR_PORT_CNT];
+extern volatile uint32_t g_radar_comm[RADAR_PORT_CNT];
+uint32_t radar_rx_bytes(void);                         /* 串口累计收到字节数(诊断, 口 0) */
+uint32_t radar_rx_drop(void);                          /* 接收缓冲丢弃字节数(诊断, 口 0) */
 
 /* ---------------- 命令 ---------------- */
 /* 通用命令(自动等待 ACK); 返回 LL_OK / LL_ERR / LL_ERR_TIMEOUT / LL_ERR_INVD_PARAM */
 int32_t radar_cmd(uint16_t cmd, const uint8_t *val, uint8_t val_len,
                   radar_ack_t *ack, uint32_t timeout_ms);
+
+/* 按口通用命令: 命令/ACK 事务只落在该口。radar_cmd() 等价于本函数 port=0。 */
+int32_t radar_cmd_port(uint8_t port, uint16_t cmd, const uint8_t *val, uint8_t val_len,
+                       radar_ack_t *ack, uint32_t timeout_ms);
 
 /* 语义化封装(内部自动"使能配置 -> 命令 -> 结束配置") */
 int32_t radar_read_params(radar_params_t *out);                     /* 0x0061 */
@@ -101,7 +112,9 @@ int32_t radar_set_sensitivity(uint16_t gate, uint16_t move_sens, uint16_t still_
 int32_t radar_set_max_gate(uint16_t move_gate, uint16_t still_gate, uint16_t no_body_sec); /* 0x0060 */
 int32_t radar_set_resolution(uint8_t idx);                          /* 0x00AA */
 int32_t radar_set_uart_baud_index(uint8_t idx);                     /* 0x00A1 */
-int32_t radar_restart(void);                                      /* 0x00A3: 应答后模块自动重启 */
+int32_t radar_set_uart_baud_index_port(uint8_t port, uint8_t idx);  /* 0x00A1, 指定口 */
+int32_t radar_restart(void);                                        /* 0x00A3: 应答后模块自动重启 */
+int32_t radar_restart_port(uint8_t port);                           /* 0x00A3, 指定口 */
 int32_t radar_eng_mode(uint8_t on);                                 /* 0x0062 / 0x0063 */
 int32_t radar_noise_start(uint16_t sec);                            /* 0x000B */
 int32_t radar_noise_status(uint16_t *status);                       /* 0x001B: 0 未执行 1 执行中 2 完成 */
