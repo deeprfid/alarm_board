@@ -41,17 +41,16 @@
 #define RADAR_UART_RX_PIN               (GPIO_PIN_03)
 #define RADAR_UART_RX_FUNC              (GPIO_FUNC_33)
 
-/* ============================ 雷达口目标波特率(唯一需要关心的项) ============================
- * 本产品统一用 460800。驱动上电流程(全自动、幂等):
- *   ① 自适应: 先不管模块当前是多少, 逐档试出它当前的波特率(判据 = 能收到上报帧);
- *   ② 已是 RADAR_BAUD_TARGET  -> 什么都不做;
- *      否则在这个波特率下发 0x00A1, 把**模块**的波特率改成 RADAR_BAUD_TARGET
- *      (写进模块 flash, 掉电不丢失);
- *   ③ 发 0x00A3 重启模块生效 -> 500ms 后重跑一遍自适应复检 -> 又锁定 460800 = 成功;
- *   ④ 从此每次上电: 模块自己就是 460800, 自适应第一档(460800)就命中, 不再写模块。
- * 填 0 = 不自动配置, 只自适应跟随模块当前的波特率。
+/* USART 挂的 PCLK1 频率(本工程 HCLK=200MHz、PCLK1=DIV2 -> 100MHz); 用于按波特率选分频 */
+#define RADAR_UART_PCLK_HZ              (100000000UL)
+/* ============================ 模块波特率目标值(产线配置, 可选) ============================
+ * 0 = **只跟随模块**(出厂默认): 上电纯监听逐档探测, 模块当前是哪一档就用哪一档, 一个命令都不发。
+ *     客户会用手机 APP 自由改模块波特率, 固件必须跟得上 —— 所以默认不写模块。
+ * 非 0 = 产线配置: 探测到模块不是该值, 就发 0x00A1 把模块波特率改成它(写进模块 flash, 掉电保存),
+ *        再 0x00A3 重启并复检。只在产线/调试时用, 平时不要开(会跟客户的 APP 设置打架)。
+ * 禁止: 探测阶段永远**纯监听**, 绝不发 0x00FF/0x00FE(会让模块进配置态并停止上报)。
  */
-#define RADAR_BAUD_TARGET               (460800UL)
+#define RADAR_BAUD_TARGET               (0UL)
 
 #define RADAR_BAUD_LOCK_FRAMES          (1U)        /* 监听阶段收到几个合法上报帧就算命中
                                                  * (帧头/长度/帧尾/帧内校验齐全, 乱码凑不出一整帧) */
@@ -67,13 +66,12 @@
                                                      * 460800 放第一档: 配置好之后一档命中,
                                                      * 其余档只用于兼容"还没配置过"的模块 */
 #define RADAR_BAUD_FALLBACK             (256000UL)
-/* ============================ 雷达口固定波特率(本产品口径) ============================
- * 非 0 = **上电就用该波特率(走初始化路径)**, 且**不做任何运行时波特率切换**、不写模块、
- *        上电也不发任何命令 —— 只收模块主动上报的帧。
- * 现场实测: 模块在 460800、驱动在初始化时就设 460800 -> 通信正常;
- *           而"先按 256000 初始化、运行时再切到 460800" -> 不通(见 docs 里的调试记录)。
- * 因此本产品按"固定 460800"使用; 填 0 才回到(未验证通过的)自适应模式。 */
-#define RADAR_BAUD_INIT_FIXED           (460800UL)
+/* ============================ 上电初始波特率(调试用) ============================
+ * 0  = **自适应**(出厂口径): 先按 RADAR_BAUD_FALLBACK 收, 再由探测按 RADAR_BAUD_TABLE
+ *      逐档**纯监听**, 听到合法上报帧就锁定该档 —— 客户 APP 把模块改成哪一档都能通。
+ * 非 0 = 调试/单档定位: 上电就用该波特率(走初始化路径), 不做任何换档。
+ */
+#define RADAR_BAUD_INIT_FIXED           (0UL)
 /* ==================== 雷达口时钟分频 / 过采样(不可随意改) ====================
  * 固定 DIV4 + 8 倍过采样, 与现场确认可用的版本一致。依据(hc32_ll_usart.c 源码):
  *   - PR.PSC 是 2 位, 实际分频 = 4^PSC, 只有 /1 /4 /16 /64 四档;
@@ -96,18 +94,6 @@
 #define RADAR_PROV_RESTART_MS           (500U)      /* 模块重启后等多久开始复检(复检=重跑自适应, 自带 1s 启动延时) */
 
 /* ============================ RX DMA: USART1_RI -> DMA2 CH1 ============================ */
-#define RADAR_RX_DMA_UNIT               (CM_DMA2)
-#define RADAR_RX_DMA_CH                 (DMA_CH1)
-#define RADAR_RX_DMA_FCG_ENABLE()       (FCG_Fcg0PeriphClockCmd(FCG0_PERIPH_DMA2, ENABLE))
-#define RADAR_RX_DMA_TRIG_SEL           (AOS_DMA2_1)
-#define RADAR_RX_DMA_TRIG_EVT_SRC       (EVT_SRC_USART1_RI)
-#define RADAR_RX_DMA_RECONF_TRIG_SEL    (AOS_DMA_RC)
-#define RADAR_RX_DMA_RECONF_TRIG_EVT_SRC (EVT_SRC_AOS_STRG)
-#define RADAR_RX_DMA_TC_INT             (DMA_INT_TC_CH1)
-#define RADAR_RX_DMA_TC_FLAG            (DMA_FLAG_TC_CH1)
-#define RADAR_RX_DMA_TC_IRQn            (INT005_IRQn)
-#define RADAR_RX_DMA_TC_INT_SRC         (INT_SRC_DMA2_TC1)
-
 /* ============================ TX DMA: DMA2 CH0 -> USART1_TI ============================ */
 #define RADAR_TX_DMA_UNIT               (CM_DMA2)
 #define RADAR_TX_DMA_CH                 (DMA_CH0)
@@ -119,23 +105,17 @@
 #define RADAR_TX_DMA_TC_IRQn            (INT006_IRQn)
 #define RADAR_TX_DMA_TC_INT_SRC         (INT_SRC_DMA2_TC0)
 
-/* ============================ TMR0: 接收超时(帧间隔) ============================ */
-#define RADAR_TMR0_UNIT                 (CM_TMR0_1)
-#define RADAR_TMR0_CH                   (TMR0_CH_A)
-#define RADAR_TMR0_FCG_ENABLE()         (FCG_Fcg2PeriphClockCmd(FCG2_PERIPH_TMR0_1, ENABLE))
-#define RADAR_RX_TIMEOUT_BITS           (100U)      /* 空闲判定 = (compare+3)*8/32768 秒; 100 -> 约 3.2ms,
-                                                     * 460800 下最长帧(工程模式 45B)只有 1ms, 够用 */
-
 /* ============================ USART 中断 ============================ */
 #define RADAR_UART_TX_CPLT_IRQn         (INT007_IRQn)
 #define RADAR_UART_TX_CPLT_INT_SRC      (INT_SRC_USART1_TCI)
 #define RADAR_UART_RX_ERR_IRQn          (INT008_IRQn)
 #define RADAR_UART_RX_ERR_INT_SRC       (INT_SRC_USART1_EI)
-#define RADAR_UART_RX_TIMEOUT_IRQn      (INT009_IRQn)
-#define RADAR_UART_RX_TIMEOUT_INT_SRC   (INT_SRC_USART1_RTO)
+
+/* 逐字节接收中断(RI): 本工程原来没用到 INT012, 分配给它 */
+#define RADAR_UART_RX_IRQn              (INT012_IRQn)
+#define RADAR_UART_RX_INT_SRC           (INT_SRC_USART1_RI)
 
 /* ============================ 缓冲与超时 ============================ */
-#define RADAR_RX_WIN                    (256U)      /* DMA 接收窗口 */
 #define RADAR_RX_RING_SIZE              (512U)      /* 软件环形缓冲 */
 #define RADAR_TX_MAX                    (32U)       /* 单条命令帧最大长度 */
 #define RADAR_FRAME_MAX                 (64U)       /* 单帧最大长度(工程模式 45B) */

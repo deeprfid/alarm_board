@@ -24,6 +24,8 @@ void radar_port_set_baud(uint32_t baud);
 /* 丢弃接收缓冲与 DMA 窗口里的残留字节 */
 void radar_port_rx_flush(void);
 uint32_t radar_port_get_baud(void);
+/* 当前波特率是否表示得出来(0 = 分频/BRR 设不下, 探测时应跳过该档) */
+uint8_t radar_port_baud_ok(void);
 
 /* 收到字节时的回调(data 可能是 1 字节) */
 void radar_port_set_rx_handler(void (*handler)(const uint8_t *data, uint16_t len));
