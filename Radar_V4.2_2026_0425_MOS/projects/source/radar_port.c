@@ -252,47 +252,55 @@ void radar_port_rx_flush(void)
  *        (USART_UART_Init 重写 CR1/CR2/CR3/PR/BRR, 之后必须重新使能 RX/TX)。
  * 之所以要回读: 现场曾出现 USART_SetBaudrate() 返回 LL_OK 但 BRR 没变的静默失败,
  *           软件记录值(460800)与硬件真值(256000)不一致, 直接把自适应带偏。 */
+/* 换波特率: **整套重来一遍, 不留任何痕迹** ——
+ *   关收发 -> USART_DeInit(把 CR1/CR2/CR3/PR/BRR 全部清回默认) -> 重新 StructInit + Init
+ *   -> 清状态标志与 NVIC 挂起 -> 重新使能收发 -> 清环形缓冲。
+ * 不再用只改 PR+BRR 的最小写法: 换档本来就极少发生(自适应探测每档一次),
+ * 一次干净的重初始化比省几个寄存器写更可靠、更好推理。
+ * 仍保留一道**回读校验**: Init 之后按 PR 反推 C, 核对 BRR 整数分频是否等于
+ *   DIV_Integer = C/(B*8*(2-OVER8)) - 1
+ * 因为现场出现过返回 LL_OK 但没写进 BRR 的静默失败, 结果记入 s_baud_ok / g_radar_comm 的 0x400 位。 */
 void radar_port_set_baud(uint32_t baud)
 {
-    uint32_t div     = (radar_pick_clk_div(baud) == USART_CLK_DIV1)  ? 1UL :
-                       (radar_pick_clk_div(baud) == USART_CLK_DIV4)  ? 4UL :
-                       (radar_pick_clk_div(baud) == USART_CLK_DIV16) ? 16UL : 64UL;
-    uint32_t c       = RADAR_UART_PCLK_HZ / div;
-    uint32_t exp_int = (c / (baud * 8UL)) - 1UL;          /* 8 倍过采样的整数分频期望值 */
-    uint32_t got_int;
+    stc_usart_uart_init_t stcUartInit;
     float32_t f32Err = 0.0F;
+    uint32_t  psc;
+    uint32_t  c;
+    uint32_t  exp_int;
+    uint32_t  got_int;
 
-    s_baud = baud;
-
-    /* 关收发(不动其它配置): 换波特率时避免半字节/中断状态干扰; 写完立刻恢复 */
+    /* 1) 先停收发, 再整片复位 */
     USART_FuncCmd(RADAR_UART_UNIT, (USART_RX | USART_TX | USART_INT_RX), DISABLE);
+    USART_DeInit(RADAR_UART_UNIT);
 
-    USART_SetClockDiv(RADAR_UART_UNIT, radar_pick_clk_div(baud));   /* 只改 PR */
-    (void)USART_SetBaudrate(RADAR_UART_UNIT, baud, &f32Err);        /* 只改 BRR */
+    /* 2) 完整(重新)初始化 */
+    (void)USART_UART_StructInit(&stcUartInit);
+    stcUartInit.u32ClockDiv      = radar_pick_clk_div(baud);   /* 分频随波特率走 */
+    stcUartInit.u32CKOutput      = USART_CK_OUTPUT_DISABLE;
+    stcUartInit.u32Baudrate      = baud;
+    stcUartInit.u32OverSampleBit = USART_OVER_SAMPLE_8BIT;
 
+    s_baud    = baud;
+    s_baud_ok = (LL_OK == USART_UART_Init(RADAR_UART_UNIT, &stcUartInit, &f32Err)) ? 1U : 0U;
+
+    /* 3) 回读校验: 防止返回 OK 却没写进 BRR(现场踩过) */
+    psc     = READ_REG32_BIT(RADAR_UART_UNIT->PR, USART_PR_PSC);
+    c       = RADAR_UART_PCLK_HZ >> (psc * 2UL);
+    exp_int = (c / (baud * 8UL)) - 1UL;
     got_int = (RADAR_UART_UNIT->BRR >> 8) & 0xFFUL;
-    if (got_int == exp_int)
-    {
-        s_baud_ok = 1U;                                  /* 最小写路径生效 */
-        USART_FuncCmd(RADAR_UART_UNIT, (USART_RX | USART_TX | USART_INT_RX), ENABLE);
-    }
-    else
-    {
-        stc_usart_uart_init_t stcUartInit;               /* 兜底: 完整初始化 */
+    if (got_int != exp_int) { s_baud_ok = 0U; }
 
-        (void)USART_UART_StructInit(&stcUartInit);
-        stcUartInit.u32ClockDiv      = radar_pick_clk_div(baud);
-        stcUartInit.u32CKOutput      = USART_CK_OUTPUT_DISABLE;
-        stcUartInit.u32Baudrate      = baud;
-        stcUartInit.u32OverSampleBit = USART_OVER_SAMPLE_8BIT;
-        s_baud_ok = (LL_OK == USART_UART_Init(RADAR_UART_UNIT, &stcUartInit, NULL)) ? 1U : 0U;
-        USART_FuncCmd(RADAR_UART_UNIT, (USART_RX | USART_TX | USART_INT_RX), ENABLE);
-    }
+    /* 4) 不留痕迹: 清状态标志 / NVIC 挂起 / 发送忙标志, 再开收发并清缓冲 */
+    USART_ClearStatus(RADAR_UART_UNIT, (USART_FLAG_PARITY_ERR | USART_FLAG_FRAME_ERR |
+                                       USART_FLAG_OVERRUN | USART_FLAG_TX_CPLT));
+    NVIC_ClearPendingIRQ(RADAR_UART_RX_IRQn);
+    NVIC_ClearPendingIRQ(RADAR_UART_TX_CPLT_IRQn);
+    s_tx_busy = 0U;
 
+    USART_FuncCmd(RADAR_UART_UNIT, (USART_RX | USART_TX | USART_INT_RX), ENABLE);
     radar_port_rx_flush();
 }
-/* 硬件实际在跑的波特率(按 PR 分频 + BRR 整数分频反推, 再就近取协议表档位)。
- * 现场只信硬件: 软件记录的 s_baud 曾与硬件真值不一致(静默写失败), 就是靠这个数发现的。 */
+
 uint32_t radar_port_baud_actual(void)
 {
     static const uint32_t tab[] = RADAR_BAUD_TABLE;

@@ -15,6 +15,9 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 
 ## [Unreleased]
 
+- `[hc32f460]` **fix（按现场口径）**：**换波特率一律整套重来、不留任何痕迹** —— `radar_port_set_baud()` 现在固定执行：关收发 → `USART_DeInit()`（CR1/CR2/CR3/PR/BRR 全部清回默认）→ `StructInit` + `USART_UART_Init()`（分频随波特率选、`CKOutput` 不输出、8 倍过采样）→ 清 PE/FE/ORE/TX_CPLT 状态 → 清 RX/TX 的 NVIC 挂起 → 复位 `s_tx_busy` → 重新使能 `RX|TX|INT_RX` → 清环形缓冲。删除了上一版『只改 PR+BRR』的最小写法。
+  保留一道**回读校验**（Init 后按 PR 反推 C，核对 BRR 整数分频 = `C/(B*8*(2-OVER8))-1`），失败即置 `s_baud_ok=0` —— 这是针对现场『返回 LL_OK 却没写进 BRR』那次静默失败的保险。`USART_DeInit()` 同时保留在**初始化路径**（FCG 使能之后），使初始化幂等。Code 26488，构建 0 Error / 0 Warning。
+
 - `[hc32f460]` **fix**: 初始化前加 `USART_DeInit()`（在 FCG 使能之后），使雷达串口初始化**幂等**、不受上电前残留配置影响；运行时换档则改为**先关收发**(`RX|TX|INT_RX` DISABLE，不改其它寄存器) → 写 `PR`+`BRR` → **回读确认** → 恢复收发，确认失败才退回完整初始化。
   结论：`USART_DeInit()` 适合放在**初始化前**（保证确定初态），不适合当**运行中换波特率**的常规手段 —— 它会把 `CR1/CR2/CR3/PR` 一并复位（REN/TEN、格式、流控全丢），之后必须整套重配再使能收发，等于『完整初始化多绕一步』；它在运行时的价值是作为**外设疑似卡死时的兜底复位**。Code 26652，构建 0 Error / 0 Warning。
 
