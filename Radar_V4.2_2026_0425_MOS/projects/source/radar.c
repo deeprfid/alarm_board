@@ -45,7 +45,6 @@ static uint32_t            s_comm_map;      /* 各候选档是否收到过字节 -> g_radar
 static uint32_t            s_link_ms;       /* 链路监控窗口起点 */
 static uint32_t            s_link_bytes0;   /* 窗口起点的累计接收字节数 */
 static uint32_t            s_win_ack_cnt;   /* 本窗口解出的 ACK 帧数(与上报帧一起算合法帧) */
-static uint32_t            s_first_baud;    /* 重扫时先试的档(上次锁定的真实波特率), 0=直接按表扫 */
 static uint32_t            s_link_last_rx_ms;   /* 最近一次收到字节的时刻 */
 static uint32_t            s_link_sweep_ms;     /* 上次兜底重扫的时刻 */
 static uint32_t            s_fps_ms;        /* 帧率统计窗口起点 */
@@ -154,10 +153,6 @@ static uint32_t radar_probe_baud(uint8_t idx)
 static void radar_probe_next(void)
 {
     if (radar_port_rx_bytes() != s_probe_rx0) { s_comm_map |= (1UL << s_probe_idx); }
-    if (s_first_baud != 0U)                  /* 刚试完重扫的第 0 窗(原档): 复位标记, 按表从头扫 */
-    {
-        s_first_baud = 0U;
-    }
     s_ack_ready  = 0U;
     s_probe_idx++;
 
@@ -238,7 +233,7 @@ static void radar_probe_tick(void)
             if ((m_u32Tickms - s_probe_t0) >= RADAR_PROBE_BOOT_MS)
             {
                 s_probe_idx  = 0U;
-                radar_switch_baud((s_first_baud != 0U) ? s_first_baud : radar_probe_baud(0U));
+                radar_switch_baud(radar_probe_baud(0U));   /* 从头按候选表扫(第0档=256000) */
                 s_probe_rx0 = radar_port_rx_bytes();
                 s_probe_t0 = m_u32Tickms;
                 s_probe_st = 1U;
@@ -754,7 +749,6 @@ void radar_poll(void)
 
         if ((s_baud_locked != 0U) && (dBytes >= 32U) && (dFrames == 0U))
         {
-            s_first_baud  = radar_port_baud_actual();      /* 先试原档, 恢复代价最小 */
             s_baud_locked = 0U;
             s_probe_st    = 0U;                            /* 重新走探测(状态0自带启动延时) */
             s_probe_t0    = m_u32Tickms;
@@ -770,7 +764,6 @@ void radar_poll(void)
                  ((m_u32Tickms - s_link_sweep_ms) >= RADAR_LINK_SWEEP_MIN_MS))
         {
             /* 兜底: 锁定着却长时间一个字节都没有(模块被换到连乱码都收不到的档/长时间静默) */
-            s_first_baud  = radar_port_baud_actual();
             s_baud_locked = 0U;
             s_probe_st    = 0U;
             s_probe_t0    = m_u32Tickms;
