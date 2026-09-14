@@ -42,6 +42,10 @@ volatile uint32_t          g_radar_comm;
 static uint32_t            s_rep_last_ms;   /* 最近一次解出合法上报帧的时刻 */
 static uint32_t            s_probe_rx0;     /* 进入当前候选档时的累计接收字节数 */
 static uint32_t            s_comm_map;      /* 各候选档是否收到过字节 -> g_radar_comm 的 bit0..7 */
+static uint32_t            s_link_ms;       /* 链路监控窗口起点 */
+static uint32_t            s_link_bytes0;   /* 窗口起点的累计接收字节数 */
+static uint32_t            s_win_ack_cnt;   /* 本窗口解出的 ACK 帧数(与上报帧一起算合法帧) */
+static uint32_t            s_first_baud;    /* 重扫时先试的档(上次锁定的真实波特率), 0=直接按表扫 */
 static uint32_t            s_fps_ms;        /* 帧率统计窗口起点 */
 static uint32_t            s_fps_cnt;       /* 本窗口内收到的合法上报帧数 */
 static uint32_t            s_fps;           /* 上一秒的帧率(Hz) */
@@ -73,6 +77,7 @@ static void radar_on_bytes(const uint8_t *data, uint16_t len)
                 if (radar_proto_parse_ack(&f, &s_ack) != 0)
                 {
                     s_ack_frames++;
+                s_win_ack_cnt++;
                     s_ack_ready = 1U;
                 }
             }
@@ -147,6 +152,10 @@ static uint32_t radar_probe_baud(uint8_t idx)
 static void radar_probe_next(void)
 {
     if (radar_port_rx_bytes() != s_probe_rx0) { s_comm_map |= (1UL << s_probe_idx); }
+    if (s_first_baud != 0U)                  /* 刚试完重扫的第 0 窗(原档): 复位标记, 按表从头扫 */
+    {
+        s_first_baud = 0U;
+    }
     s_ack_ready  = 0U;
     s_probe_idx++;
 
@@ -227,7 +236,7 @@ static void radar_probe_tick(void)
             if ((m_u32Tickms - s_probe_t0) >= RADAR_PROBE_BOOT_MS)
             {
                 s_probe_idx  = 0U;
-                radar_switch_baud(radar_probe_baud(0U));
+                radar_switch_baud((s_first_baud != 0U) ? s_first_baud : radar_probe_baud(0U));
                 s_probe_rx0 = radar_port_rx_bytes();
                 s_probe_t0 = m_u32Tickms;
                 s_probe_st = 1U;
@@ -728,6 +737,32 @@ void radar_poll(void)
     if (s_reports != 0U)                        { g_radar_comm |= 0x100UL; }
     if ((m_u32Tickms - s_rep_last_ms) <= 1000U) { g_radar_comm |= 0x200UL; }
     if (radar_port_baud_ok() != 0U)             { g_radar_comm |= 0x400UL; }
+    /* 链路监控: 有字节进来却一个合法帧都解不出 => 波特率被改了(乱码), 立刻重扫。
+     * 不用发任何命令, 纯监听。判据(现场定): 最近 1 秒 字节增量 >= 32 且 合法帧(上报+ACK) == 0。
+     * 注意两点:
+     *   ① '字节增量'条件自动排除'模块进配置模式且安静'(那时一个字节都没有) -> 不误扫;
+     *   ② '合法帧'把 ACK 也算进来, 所以 APP 正在配置(有 ACK)时也不会误扫。
+     * 重扫顺序: 先试上次锁定的那一档(300ms), 再按候选表依次 -> 最坏 2.4 秒跟上新档。
+     * 已知未覆盖: 模块被换到'连乱码都收不到'的大跨档(如 38400 换到 460800 时通道全静默),
+     *             此时字节增量为 0, 本判据不触发 -> 需断电重启(若要覆盖需另加低频兜底扫)。 */
+    if ((m_u32Tickms - s_link_ms) >= 1000U)
+    {
+        uint32_t dBytes = radar_port_rx_bytes() - s_link_bytes0;
+        uint32_t dFrames = s_fps + s_win_ack_cnt;         /* 本窗口解出的合法帧(上报+ACK) */
+
+        if ((s_baud_locked != 0U) && (dBytes >= 32U) && (dFrames == 0U))
+        {
+            s_first_baud  = radar_port_baud_actual();      /* 先试原档, 恢复代价最小 */
+            s_baud_locked = 0U;
+            s_probe_st    = 0U;                            /* 重新走探测(状态0自带启动延时) */
+            s_probe_t0    = m_u32Tickms;
+            s_probe_idx   = 0U;
+        }
+
+        s_link_bytes0 = radar_port_rx_bytes();
+        s_win_ack_cnt = 0U;
+        s_link_ms     = m_u32Tickms;
+    }
     if ((m_u32Tickms - s_fps_ms) >= 1000U)                      /* 每秒结算一次帧率 */
     {
         s_fps     = s_fps_cnt;
