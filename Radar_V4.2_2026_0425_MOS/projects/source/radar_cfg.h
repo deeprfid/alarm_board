@@ -117,8 +117,11 @@
 #define RADAR_BAUD_TABLE                { 256000UL, 460800UL, 115200UL, 9600UL, 19200UL, \
                                           38400UL, 57600UL, 230400UL }
 #define RADAR_BAUD_TABLE_CNT            (8U)        /* 协议表6 全部 8 档(无 921600);
-                                                     * 460800 放第一档: 配置好之后一档命中,
-                                                     * 其余档只用于兼容"还没配置过"的模块 */
+                                                     * 256000 放第一档: 模块出厂/APP 默认值,
+                                                     * 也是端口上电初值(RADAR_BAUD_FALLBACK),
+                                                     * 出厂模块第 1 个窗口即命中;
+                                                     * 460800 退第二档, 其余档只用于兼容已被改过
+                                                     * 波特率的模块(客户会用 APP 自由改档) */
 #define RADAR_BAUD_FALLBACK             (256000UL)
 /* ============================ 上电初始波特率(调试用) ============================
  * 0  = **自适应**(出厂口径): 先按 RADAR_BAUD_FALLBACK 收, 再由探测按 RADAR_BAUD_TABLE
@@ -126,19 +129,27 @@
  * 非 0 = 调试/单档定位: 上电就用该波特率(走初始化路径), 不做任何换档。
  */
 #define RADAR_BAUD_INIT_FIXED           (0UL)
-/* ==================== 雷达口时钟分频 / 过采样(不可随意改) ====================
- * 固定 DIV4 + 8 倍过采样, 与现场确认可用的版本一致。依据(hc32_ll_usart.c 源码):
+/* ==================== 雷达口时钟分频 / 过采样 ====================
+ * 实现见 radar_port.c 的 radar_pick_clk_div(): **分频随波特率自动选**
+ *     baud < 115200 -> DIV64 (C = 1.5625MHz);   否则 -> DIV1 (C = 100MHz)
+ * (照抄扫描台主板同款 HC32F460 的量产写法, 取代早期写死 DIV4 的版本。)
+ * 过采样固定 8 倍(USART_OVER_SAMPLE_8BIT), CKOutput 关闭。
+ *
+ * 为什么必须随波特率选 —— 依据 hc32_ll_usart.c 源码(非推测):
  *   - PR.PSC 是 2 位, 实际分频 = 4^PSC, 只有 /1 /4 /16 /64 四档;
  *   - BRR 整数分频只有 8 位: DIV_Integer = C/(B*8*(2-OVER8)) - 1 必须 <= 255,
- *     否则 USART_SetBaudrate() 返回错误, 且根本**不写 BRR**(端口保持复位波特率)。
- * 本工程 PCLK1 = 100MHz, 于是:
- *   C = 25MHz    (DIV4) : 8 倍过采样算不出 9600(需 324>255), 但 460800 正常 —— 本产品用这一档;
- *   C = 6.25MHz  (DIV16): 8 倍过采样 8 档全能算, 但 460800 的整数分频为 0(靠小数凑, 不推荐);
- *   C = 1.5625MHz(DIV64): SDK 例程里 115200 / 9600 用的就是这一档(只跑一个低波特率时精度最好),
- *                         但 >=230400 三档全部算不出来 —— 那是单档优化, 不是通用答案。
- * 结论: 本产品只用 460800 -> DIV4 + 8 倍。若要支持 9600 等低波特率必须同时改分频和过采样;
- *       但 2026-09-14 实测已证明低波特率收不到帧与分频/BRR 无关(BRR 回读完全正确), 该方向已放弃,
- *       详见 docs/radar_baud_debug_notes.md 第 5、6 节。
+ *     否则 USART_SetBaudrate() 返回错误, 且根本**不写 BRR**(端口静默停在旧波特率)。
+ * 本工程 PCLK1 = 100MHz, 四条约束下协议表 6 的可表示性(8 倍过采样):
+ *   C = 100MHz   (DIV1) : 仅 57600~460800, 9600/19200/38400 算不出;
+ *   C = 25MHz    (DIV4) : 9600 需 324>255 算不出, 其余可;
+ *   C = 6.25MHz  (DIV16): 8 档全能算, 但 460800 整数分频为 0(靠小数凑, 不推荐);
+ *   C = 1.5625MHz(DIV64): 仅 9600~115200, >=230400 三档全部算不出。
+ *   => 单一分频无法覆盖全表, 所以按波特率二分(没有"固定某一档"这回事)。
+ *   SDK 例程选 DIV64 是单档低波特率的精度优化, 不是通用答案; 取舍详见
+ *   docs/radar_baud_debug_notes.md 第 5 节。
+ *
+ * 现场实测(多口化后三路同时在线, 各自锁定不同档): 460800/115200/9600 的 BRR 整数
+ * 分别为 26/107/19, 与公式预测逐一吻合, 均稳定 10Hz 出帧 —— 见同文档 §8.5 与 §9。
  */
 /* 波特率 -> 协议表 6 索引(0x00A1 用), 索引 = 位置 + 1 */
 #define RADAR_BAUD_IDX_TABLE            { 9600UL, 19200UL, 38400UL, 57600UL, 115200UL, 230400UL, 256000UL, 460800UL }
@@ -147,21 +158,12 @@
 /* 产线配置(内部): 重启模块后等多久再复检(RADAR_BAUD_TARGET 非 0 时生效) */
 #define RADAR_PROV_RESTART_MS           (500U)      /* 模块重启后等多久开始复检(复检=重跑自适应, 自带 1s 启动延时) */
 
-/* ============================ RX DMA: USART1_RI -> DMA2 CH1 ============================ */
-/* ============================ TX DMA: DMA2 CH0 -> USART1_TI ============================ */
-#define RADAR_TX_DMA_UNIT               (CM_DMA2)
-#define RADAR_TX_DMA_CH                 (DMA_CH0)
-#define RADAR_TX_DMA_FCG_ENABLE()       (FCG_Fcg0PeriphClockCmd(FCG0_PERIPH_DMA2, ENABLE))
-#define RADAR_TX_DMA_TRIG_SEL           (AOS_DMA2_0)
-#define RADAR_TX_DMA_TRIG_EVT_SRC       (EVT_SRC_USART1_TI)
-#define RADAR_TX_DMA_TC_INT             (DMA_INT_TC_CH0)
-#define RADAR_TX_DMA_TC_FLAG            (DMA_FLAG_TC_CH0)
-#define RADAR_TX_DMA_TC_IRQn            (INT006_IRQn)
-#define RADAR_TX_DMA_TC_INT_SRC         (INT_SRC_DMA2_TC0)
-
-/* ============================ USART 中断 ============================ */
-#define RADAR_UART_TX_CPLT_IRQn         (INT007_IRQn)
-#define RADAR_UART_TX_CPLT_INT_SRC      (INT_SRC_USART1_TCI)
+/* ============================ USART 中断 ============================
+ * 注: 接收走**逐字节 RI 中断**、发送走**轮询 TXE**(见 radar_port.c),
+ *     所以既不用 DMA, 也不注册发送完成(TCI)中断。
+ * 原先的 RX DMA(USART1_RI -> DMA2 CH1)、TX DMA(DMA2 CH0 -> USART1_TI)与
+ * RADAR_UART_TX_CPLT_* 已随"改逐字节中断方案"删除, 这里不再保留死宏
+ * (留着的后果: 会让人以为还在用 DMA2/INT006/INT007)。 */
 #define RADAR_UART_RX_ERR_IRQn          (INT008_IRQn)
 #define RADAR_UART_RX_ERR_INT_SRC       (INT_SRC_USART1_EI)
 
