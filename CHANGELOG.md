@@ -15,6 +15,11 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 
 ## [Unreleased]
 
+- **Watch 口径收敛**：现场明确『Watch 最多留 3 个变量』，因此雷达只暴露这 **3 个单值**，且**以后不许再加第 4 个**（要更多信息就改 `g_radar_comm` 的取值定义，不加变量）：
+  `g_radar_lock` = 1 已锁定模块波特率 / 0 未锁定；`g_radar_baud` = 当前波特率（锁定后即模块真实波特率）；
+  `g_radar_comm` = 通信状态（0 一个字节都没收到 / 1 收到字节但解不出合法帧 / 2 曾解出合法上报帧后又断 / 3 最近 1 秒内仍有合法上报帧＝正在正常通信）。
+  实现：`radar.c` 新增 3 个全局 + 上报帧时刻戳，在 `radar_poll()` 末尾更新；`radar.h` 加 extern。Code 26108 → 26184，构建 0 Error / 0 Warning。
+
 - `[hc32f460]` **fix**: 分频规则改为**照抄扫描台主板（同款 HC32F460）量产在用的写法**：`(baud < 115200) ? DIV64 : DIV1`（8 倍采样周期 `UsartSampleBit8`、LSB 优先、1 停止位、无校验一致）。换算到本工程（C = PCLK1 = 100MHz/分频）：<115200 → C=1.5625MHz（9600 整数分频 20，误差 +0.13%）；≥115200 → C=100MHz（460800 整数分频 27，误差 +0.08%）。**取代我上一版自拟的三段式 {DIV4/DIV16/DIV64}** —— 有量产参考就不自创规则。
 - `[hc32f460]` **fix**: `stcUartInit.u32CKOutput` 由 `USART_CK_OUTPUT_ENABLE` 改为 **`USART_CK_OUTPUT_DISABLE`**（与扫描台参考实现『时钟不输出』一致；异步 UART 下本不该输出 CK，原先与参考实现不一致）。Code 26132 → 26108，构建 0 Error / 0 Warning。
 

@@ -14,6 +14,22 @@ static radar_ack_t      s_ack;
 static volatile uint8_t s_ack_ready;
 static uint32_t         s_reports;
 static uint8_t          s_baud_locked;
+
+/* ============================ 现场 Watch 只用这 3 个单值 ============================
+ * 本板没有调试串口, 在 Watch 里加一堆变量抄数字的做法已经废弃(现场结论: 没法调试)。
+ * 只保留下面 3 个, 且**不许再加第 4 个** —— 需要更多信息就重新定义 g_radar_comm 的取值, 不要新增变量。
+ *   g_radar_lock : 1 = 已锁定模块波特率(探测成功); 0 = 还没锁定
+ *   g_radar_baud : 当前波特率(锁定后即模块真实波特率)
+ *   g_radar_comm : 通信状态
+ *                  0 = 一个字节都没收到(模块没发/线不对/波特率全不对)
+ *                  1 = 收到字节但解不出合法帧(波特率不对或帧被截断)
+ *                  2 = 曾经解出合法上报帧(之后又断了)
+ *                  3 = 最近 1 秒内仍有合法上报帧 ==> 正在正常通信
+ * ================================================================================ */
+volatile uint32_t          g_radar_lock;
+volatile uint32_t          g_radar_baud;
+volatile uint32_t          g_radar_comm;
+static uint32_t            s_rep_last_ms;   /* 最近一次解出合法上报帧的时刻 */
 static uint8_t          s_presence_src = RADAR_SRC_OUT;
 static uint8_t          s_probe_st = 0U;      /* 0=待启动 1=已切波特率待发 2=等 ACK 3=收尾 9=结束 */
 static uint8_t          s_probe_idx;
@@ -51,6 +67,7 @@ static void radar_on_bytes(const uint8_t *data, uint16_t len)
                 {
                     s_rep_frames++;
                     s_dev[0].last_rx_ms = m_u32Tickms;
+                    s_rep_last_ms = m_u32Tickms;
                     s_reports++;
                 }
             }
@@ -661,6 +678,14 @@ void radar_poll(void)
     /* 与串口同一模块的 OUT 脚(可选判定源) */
     s_dev[0].out_present = (GPIO_ReadInputPins(RADAR_UART_DEV_OUT_PORT, RADAR_UART_DEV_OUT_PIN) == PIN_SET) ? 1U : 0U;
     s_dev[0].uart_online = ((m_u32Tickms - s_dev[0].last_rx_ms) <= RADAR_REPORT_STALE_MS) ? 1U : 0U;
+
+    /* 现场只看这 3 个单值(定义见文件头) */
+    g_radar_lock = (uint32_t)s_baud_locked;
+    g_radar_baud = radar_get_baud();
+    if ((m_u32Tickms - s_rep_last_ms) <= 1000U)   { g_radar_comm = 3U; }
+    else if (s_reports != 0U)                     { g_radar_comm = 2U; }
+    else if (radar_port_rx_bytes() != 0U)         { g_radar_comm = 1U; }
+    else                                          { g_radar_comm = 0U; }
 }
 
 /* ------------------------------ 状态查询 ------------------------------ */

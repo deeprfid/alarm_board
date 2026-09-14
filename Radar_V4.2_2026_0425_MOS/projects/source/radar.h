@@ -82,6 +82,11 @@ const radar_dump_t *radar_dump(void);
 uint8_t radar_param_state(void);    /* 0 待做 / 1 读回中 / 2 写入中 / 3 复检中 / 4 成功或本来就一致 / 5 失败 */
 
 uint32_t radar_reports(void);
+
+/* 现场 Watch 只看这 3 个单值(定义/含义见 radar.c 文件头) */
+extern volatile uint32_t g_radar_lock;
+extern volatile uint32_t g_radar_baud;
+extern volatile uint32_t g_radar_comm;
 uint32_t radar_rx_bytes(void);                         /* 串口累计收到字节数(诊断) */
 uint32_t radar_rx_drop(void);                          /* 接收缓冲丢弃字节数(诊断) */
 
