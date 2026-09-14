@@ -241,31 +241,57 @@ void radar_port_rx_flush(void)
  * 于是自适应在 460800 档收到的是模块 256000 的帧, 被误判成已锁定。
  * 初始化路径已被现场证明能正确写入(INIT_FIXED=460800 那版就是靠它通的), 所以换档也用它。
  * 逐字节中断方案下换档不需要碰 DMA, 重新 Init 之后把 RX/TX 再使能一次即可。 */
+/* 换波特率: **只动 PR + BRR**(最小改动), 并且**写完回读确认**, 不信任返回值。
+ * 1) 先按新波特率选分频并写 PR, 再算 BRR(DIV_Integer = C/(B*8*(2-OVER8)) - 1) 写进去;
+ * 2) 回读 BRR 的整数分频, 与我们的期望值比对:
+ *      - 一致 -> 生效(正常路径, 不动其它寄存器, RX/TX 保持使能);
+ *      - 不一致 -> 说明这条最小写路径在当前状态下没写进去, 退回**完整初始化**兜底
+ *        (USART_UART_Init 重写 CR1/CR2/CR3/PR/BRR, 之后必须重新使能 RX/TX)。
+ * 之所以要回读: 现场曾出现 USART_SetBaudrate() 返回 LL_OK 但 BRR 没变的静默失败,
+ *           软件记录值(460800)与硬件真值(256000)不一致, 直接把自适应带偏。 */
 void radar_port_set_baud(uint32_t baud)
 {
-    stc_usart_uart_init_t stcUartInit;
+    uint32_t div     = (radar_pick_clk_div(baud) == USART_CLK_DIV1)  ? 1UL :
+                       (radar_pick_clk_div(baud) == USART_CLK_DIV4)  ? 4UL :
+                       (radar_pick_clk_div(baud) == USART_CLK_DIV16) ? 16UL : 64UL;
+    uint32_t c       = RADAR_UART_PCLK_HZ / div;
+    uint32_t exp_int = (c / (baud * 8UL)) - 1UL;          /* 8 倍过采样的整数分频期望值 */
+    uint32_t got_int;
+    float32_t f32Err = 0.0F;
 
-    (void)USART_UART_StructInit(&stcUartInit);
-    stcUartInit.u32ClockDiv      = radar_pick_clk_div(baud);   /* 分频随波特率走 */
-    stcUartInit.u32CKOutput      = USART_CK_OUTPUT_DISABLE;
-    stcUartInit.u32Baudrate      = baud;
-    stcUartInit.u32OverSampleBit = USART_OVER_SAMPLE_8BIT;
+    s_baud = baud;
 
-    s_baud    = baud;
-    s_baud_ok = (LL_OK == USART_UART_Init(RADAR_UART_UNIT, &stcUartInit, NULL)) ? 1U : 0U;
-    USART_FuncCmd(RADAR_UART_UNIT, (USART_RX | USART_TX | USART_INT_RX), ENABLE);
+    USART_SetClockDiv(RADAR_UART_UNIT, radar_pick_clk_div(baud));   /* 只改 PR */
+    (void)USART_SetBaudrate(RADAR_UART_UNIT, baud, &f32Err);        /* 只改 BRR */
+
+    got_int = (RADAR_UART_UNIT->BRR >> 8) & 0xFFUL;
+    if (got_int == exp_int)
+    {
+        s_baud_ok = 1U;                                  /* 最小写路径生效 */
+    }
+    else
+    {
+        stc_usart_uart_init_t stcUartInit;               /* 兜底: 完整初始化 */
+
+        (void)USART_UART_StructInit(&stcUartInit);
+        stcUartInit.u32ClockDiv      = radar_pick_clk_div(baud);
+        stcUartInit.u32CKOutput      = USART_CK_OUTPUT_DISABLE;
+        stcUartInit.u32Baudrate      = baud;
+        stcUartInit.u32OverSampleBit = USART_OVER_SAMPLE_8BIT;
+        s_baud_ok = (LL_OK == USART_UART_Init(RADAR_UART_UNIT, &stcUartInit, NULL)) ? 1U : 0U;
+        USART_FuncCmd(RADAR_UART_UNIT, (USART_RX | USART_TX | USART_INT_RX), ENABLE);
+    }
+
     radar_port_rx_flush();
 }
-/* 硬件**实际**在跑的波特率(按 PR 分频 + BRR 整数分频反推, 再就近取协议表档位)。
- * 用途: 现场只信硬件, 不信软件记录的 s_baud —— 两者不一致就说明换档没生效。
- * 说明: BRR 小数是『只能把波特率往下拉(最多 2 倍)』的模型, 因此反推只取整数分频近似,
- *       8 档之间相差 2 倍以上, 就近取档足够区分是哪一档。 */
+/* 硬件实际在跑的波特率(按 PR 分频 + BRR 整数分频反推, 再就近取协议表档位)。
+ * 现场只信硬件: 软件记录的 s_baud 曾与硬件真值不一致(静默写失败), 就是靠这个数发现的。 */
 uint32_t radar_port_baud_actual(void)
 {
     static const uint32_t tab[] = RADAR_BAUD_TABLE;
     uint32_t psc = READ_REG32_BIT(RADAR_UART_UNIT->PR, USART_PR_PSC);
-    uint32_t c   = RADAR_UART_PCLK_HZ >> (psc * 2UL);              /* C = PCLK1 / 4^PSC */
-    uint32_t k   = ((RADAR_UART_UNIT->BRR >> 8) & 0xFFUL) + 1UL;   /* DIV_Integer + 1 */
+    uint32_t c   = RADAR_UART_PCLK_HZ >> (psc * 2UL);
+    uint32_t k   = ((RADAR_UART_UNIT->BRR >> 8) & 0xFFUL) + 1UL;
     uint32_t approx;
     uint32_t best = 0UL;
     uint32_t diff;
@@ -273,7 +299,7 @@ uint32_t radar_port_baud_actual(void)
     uint8_t  i;
 
     if (k == 0UL) { return 0UL; }
-    approx = c / (8UL * k);                                        /* 整数分频对应波特率(近似) */
+    approx = c / (8UL * k);
 
     for (i = 0U; i < (uint8_t)RADAR_BAUD_TABLE_CNT; i++)
     {
