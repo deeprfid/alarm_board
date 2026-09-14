@@ -26,26 +26,6 @@ volatile uint32_t          g_radar_tx_timeout_cnt;
 static volatile uint32_t   s_rx_bytes;
 static volatile uint32_t   s_rx_drop;
 static uint32_t            s_baud;
-volatile uint32_t          g_radar_brr;   /* 波特率寄存器实际值(16倍过采样: 9600->0xA17F=41471, 460800->0x0262=610) */
-volatile uint32_t          g_radar_rx_bytes;
-volatile uint32_t          g_radar_pin_low;
-volatile uint32_t          g_radar_dma_left;
-volatile uint32_t          g_radar_rx_err;   /* RX 错误中断(帧错/校验错/溢出)次数 */
-volatile uint32_t          g_radar_low_pct;   /* 最近 1 秒 PA3 为低电平的采样占比(0~100) */
-volatile uint32_t          g_radar_bps;       /* 最近 1 秒搬进环形缓冲的字节数 */
-volatile uint32_t          g_radar_dma_fill;  /* 最近 1 秒 RX DMA 实际搬走的字节数(不依赖超时路径) */
-volatile uint32_t          g_radar_poll_hz;   /* 最近 1 秒 radar_port_poll 被调用次数 */
-volatile uint32_t          g_radar_to_hz;     /* 最近 1 秒 RX 空闲超时中断次数 */
-volatile uint32_t          g_radar_win_hz;    /* 最近 1 秒 RX 窗口满(DMA TC)中断次数 */
-static uint32_t            s_to_cnt;
-static uint32_t            s_win_cnt;
-static uint32_t            s_prev_to;
-static uint32_t            s_prev_win;
-static uint32_t            s_win_ms;
-static uint32_t            s_win_bytes;
-static uint32_t            s_win_polls;
-static uint32_t            s_win_lows;
-static uint32_t            s_win_fill;
 static void (*s_rx_cb)(const uint8_t *data, uint16_t len) = 0;
 
 /* ------------------------------ 中断回调 ------------------------------ */
@@ -54,7 +34,6 @@ static void radar_rx_dma_tc_cb(void)
     /* 窗口满: 整窗上抛(雷达帧远小于窗口, 只有异常突发才会走到这里) */
     if (BUF_Write(&s_rx_ring, s_rx_win, RADAR_RX_WIN) != RADAR_RX_WIN) { s_rx_drop++; }
     s_rx_bytes += RADAR_RX_WIN;
-    s_win_cnt++;
 
     AOS_SW_Trigger();                                   /* 重新装载 RX DMA */
     DMA_ClearTransCompleteStatus(RADAR_RX_DMA_UNIT, RADAR_RX_DMA_TC_FLAG);
@@ -64,7 +43,6 @@ static void radar_rx_timeout_cb(void)
 {
     uint16_t left = (uint16_t)DMA_GetTransCount(RADAR_RX_DMA_UNIT, RADAR_RX_DMA_CH);
     uint16_t got = (uint16_t)(RADAR_RX_WIN - left);
-    s_to_cnt++;
 
     if (got > 0U)
     {
@@ -92,7 +70,6 @@ static void radar_tx_complete_cb(void)
 
 static void radar_rx_error_cb(void)
 {
-    g_radar_rx_err++;
     (void)USART_ReadData(RADAR_UART_UNIT);
     USART_ClearStatus(RADAR_UART_UNIT,
                       (USART_FLAG_PARITY_ERR | USART_FLAG_FRAME_ERR | USART_FLAG_OVERRUN));
@@ -247,19 +224,14 @@ void radar_port_init(void)
     RADAR_UART_FCG_ENABLE();
 
     (void)USART_UART_StructInit(&stcUartInit);
-    stcUartInit.u32ClockDiv      = RADAR_BAUD_CLK_DIV;
+    stcUartInit.u32ClockDiv      = USART_CLK_DIV4;
     stcUartInit.u32CKOutput      = USART_CK_OUTPUT_ENABLE;
     stcUartInit.u32Baudrate      = s_baud;
-    /* 时钟分频/过采样: 取值说明见 radar_cfg.h 的 RADAR_BAUD_CLK_DIV。
-     * DDL 的 BRR 整数分频只有 8 位(<=255), 8 倍过采样下 C 必须 <= 2048*最低波特率;
-     * 本档 C = 100MHz/16 = 6.25MHz + 8 倍过采样 -> 9600~460800 全部可表示。 */
-    stcUartInit.u32OverSampleBit = RADAR_BAUD_OVER_SAMPLE;
+    stcUartInit.u32OverSampleBit = USART_OVER_SAMPLE_8BIT;
     (void)USART_UART_Init(RADAR_UART_UNIT, &stcUartInit, NULL);
 
     (void)radar_dma_config();
     radar_tmr0_config(RADAR_RX_TIMEOUT_BITS);
-
-    g_radar_brr = RADAR_UART_UNIT->BRR;      /* 回读: 确认初始化时波特率真的写进去了 */
 
     /* TX 完成 */
     stcIrqSigninConfig.enIRQn      = RADAR_UART_TX_CPLT_IRQn;
@@ -358,7 +330,6 @@ void radar_port_set_baud(uint32_t baud)
 
     s_baud = baud;
     (void)USART_SetBaudrate(RADAR_UART_UNIT, baud, &f32Err);
-    g_radar_brr = RADAR_UART_UNIT->BRR;
     radar_port_rx_flush();          /* 换波特率后, 旧波特率的残留字节全部作废 */
 }
 
@@ -374,38 +345,7 @@ void radar_port_set_rx_handler(void (*handler)(const uint8_t *data, uint16_t len
 
 void radar_port_poll(void)
 {
-    uint8_t  b;
-    uint32_t now;
-    uint32_t left;
-
-    /* 1 秒窗口统计: 区分"线上没数据 / 常低(断裂) / 悬空噪声 / 正常数据", 以及 3 个关键速率:
-     * DMA 实际搬了多少字节 / 空闲超时中断多少次 / 窗口满中断多少次。
-     * 背景: 现场看到"运行时 rx_bytes 一直是 0, 暂停再跑就变 0x100",
-     *       需要用 g_radar_dma_fill 与 g_radar_to_hz 判断是不是超时中断把 DMA 计数反复重置了。 */
-    now = m_u32Tickms;
-    g_radar_rx_bytes = s_rx_bytes;
-    s_win_polls++;
-    if (PIN_SET != GPIO_ReadInputPins(RADAR_UART_RX_PORT, RADAR_UART_RX_PIN)) { g_radar_pin_low++; s_win_lows++; }
-    left = (uint32_t)DMA_GetTransCount(RADAR_RX_DMA_UNIT, RADAR_RX_DMA_CH);
-    g_radar_dma_left = left;
-    if ((RADAR_RX_WIN - left) > s_win_fill) { s_win_fill = RADAR_RX_WIN - left; }
-
-    if ((uint32_t)(now - s_win_ms) >= 1000U)
-    {
-        g_radar_poll_hz  = s_win_polls;
-        g_radar_low_pct  = (s_win_polls != 0U) ? ((s_win_lows * 100U) / s_win_polls) : 0U;
-        g_radar_bps      = s_rx_bytes - s_win_bytes;
-        g_radar_dma_fill = s_win_fill;
-        g_radar_to_hz    = s_to_cnt  - s_prev_to;
-        g_radar_win_hz   = s_win_cnt - s_prev_win;
-        s_prev_to   = s_to_cnt;
-        s_prev_win  = s_win_cnt;
-        s_win_bytes = s_rx_bytes;
-        s_win_ms    = now;
-        s_win_polls = 0U;
-        s_win_lows  = 0U;
-        s_win_fill  = 0U;
-    }
+    uint8_t b;
 
     while (BUF_UsedSize(&s_rx_ring) > 0U)
     {

@@ -15,6 +15,24 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 
 ## [Unreleased]
 
+- `[hc32f460]` **revert**: 雷达口**放弃 9600 / 低波特率 / 运行时换档调试**，回到现场确认可用的**固定 460800**：
+  `RADAR_BAUD_INIT_FIXED = 460800UL`（初始化路径设定）、时钟分频 `USART_CLK_DIV4` + **8 倍过采样**、
+  上电**不做任何运行时波特率切换、不发任何命令**（纯听模块上报）。
+  `radar_port.c` / `radar_port.h` / `radar_cfg.h` 回退到现场验证版（`b6d8210`），并**删除本次调试新增的全部诊断变量与 1 秒窗口统计**：
+  `g_radar_brr`、`g_radar_rx_bytes`、`g_radar_pin_low`、`g_radar_dma_left`、`g_radar_rx_err`、`g_radar_low_pct`、`g_radar_bps`、
+  `g_radar_dma_fill`、`g_radar_poll_hz`、`g_radar_to_hz`、`g_radar_win_hz` 及配套静态量与 `radar_port_poll()` 的统计分支。
+  `radar_cfg.h` 保留一段分频/过采样选法注释（DIV4+8 倍的适用边界、`USART_CLK_DIV64` 只适合单档低波特率）；
+  `RADAR_RX_TIMEOUT_BITS` 仍为 100（约 3.2ms，460800 下最长帧 1ms）。Code 27696，构建 0 Error / 0 Warning。
+- `[hc32f460]` **docs**: `docs/radar_baud_debug_notes.md` 新增第 5、6 节。
+  **§5 分频/过采样约束**（依据 DDL 源码）：`PR.PSC` 为 2 位、实际分频 = 4^PSC（仅 /1 /4 /16 /64）；BRR 整数分频只有 8 位，
+  `DIV_Integer = C/(B*8*(2-OVER8)) - 1` 超限时 `USART_SetBaudrate()` 返回错误**且不写 BRR**；给出四档分频 × 两种过采样下
+  协议表 6 全 8 档的可表示性（DIV4+8 倍算不出 9600；DIV16+8 倍与 DIV4+16 倍全档可用；DIV64 在 8 倍下只到 115200），
+  以及『SDK 例程选 `USART_CLK_DIV64` 是单档低波特率的精度优化、不是通用答案』的结论。
+  **§6 放弃结论**：9600 的 BRR 回读正确（`0xA1FF` / `0x50FF`，bit7 为 DDL 写掩码外的残留位）、三档分频都能表示 9600（误差 ≤0.22%），
+  故『收不到帧』与分频/BRR 无关；关键现象是**运行中 `g_radar_rx_bytes` 恒 0、Keil 暂停再恢复即变 `0x100`（整窗 256B）**，
+  指向『运行时接收链被打断』而非波特率；并记录**调试手段本身失效**（本板无串口、Watch 只能抄单值，多标量交叉判读现场不可行），
+  后续再碰此类问题须先解决可观测性。
+
 - `[hc32f460]` **fix**: UART4 RX DMA 窗口由固定 32B 改为 **512B 整帧窗口**（`bsp_rs485.c` 新增 `RS485_RX_WIN=512`，`m_au8RxBuf` 随之放大，TC/空闲超时上抛均按窗口计算）——消除不定长帧 >32B 时每 32B 边界“DMA TC 停→AOS_SW_Trigger 重装”窗口丢字节，整帧一次落入 DMA 块、空闲 flush 才上抛；针对 0xAA 128B 负载（134B 帧）偶发整帧丢失（errcnt=0、rxcnt 短少）修复。legacy 32B 帧路径不受影响。
 
 ### Added
