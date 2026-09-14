@@ -20,6 +20,14 @@ void radar_port_tx_watchdog(uint32_t now_ms);
 /* 波特率寄存器实际值(单值回读, 便于 Watch 手抄) */
 extern volatile uint32_t g_radar_brr;
 
+/* 单值诊断(Watch 里直接抄一个数字):
+ *   g_radar_rx_bytes : 累计收到字节数(0 = DMA 一个字节都没搬进来)
+ *   g_radar_pin_low  : RX 引脚采到低电平的次数(>0 = 线上确实有数据活动/起始位)
+ *   g_radar_dma_left : RX DMA 通道剩余传输计数(等于窗口大小=没搬动; 递减=正在搬; 0=窗口满未重挂) */
+extern volatile uint32_t g_radar_rx_bytes;
+extern volatile uint32_t g_radar_pin_low;
+extern volatile uint32_t g_radar_dma_left;
+
 /* 诊断计数(Keil Watch 里直接看这几个名字):
  *   g_radar_tx_dma_tc_cnt : TX DMA 传输完成次数    (0 = DMA 根本没跑/没触发)
  *   g_radar_tx_tci_cnt    : USART1 发送完成中断次数(0 = 上面有数但 TCI 没来 -> 中断映射问题)

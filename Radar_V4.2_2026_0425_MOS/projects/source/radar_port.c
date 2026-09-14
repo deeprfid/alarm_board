@@ -27,6 +27,9 @@ static volatile uint32_t   s_rx_bytes;
 static volatile uint32_t   s_rx_drop;
 static uint32_t            s_baud;
 volatile uint32_t          g_radar_brr;   /* 波特率寄存器实际值(16倍过采样: 9600->0xA17F=41471, 460800->0x0262=610) */
+volatile uint32_t          g_radar_rx_bytes;
+volatile uint32_t          g_radar_pin_low;
+volatile uint32_t          g_radar_dma_left;
 static void (*s_rx_cb)(const uint8_t *data, uint16_t len) = 0;
 
 /* ------------------------------ 中断回调 ------------------------------ */
@@ -353,6 +356,11 @@ void radar_port_set_rx_handler(void (*handler)(const uint8_t *data, uint16_t len
 void radar_port_poll(void)
 {
     uint8_t b;
+
+    /* 单值诊断: 字节数 / 线上活动 / DMA 剩余计数 */
+    g_radar_rx_bytes = s_rx_bytes;
+    if (PIN_SET != GPIO_ReadInputPins(RADAR_UART_RX_PORT, RADAR_UART_RX_PIN)) { g_radar_pin_low++; }
+    g_radar_dma_left = (uint32_t)DMA_GetTransCount(RADAR_RX_DMA_UNIT, RADAR_RX_DMA_CH);
 
     while (BUF_UsedSize(&s_rx_ring) > 0U)
     {
