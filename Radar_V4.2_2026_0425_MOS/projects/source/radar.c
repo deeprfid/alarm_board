@@ -154,6 +154,7 @@ static void radar_probe_next(void)
     {
         radar_switch_baud(RADAR_BAUD_FALLBACK);
         s_probe_rx0 = radar_port_rx_bytes();
+        s_probe_t0   = m_u32Tickms;   /* 重扫计时起点 */
         s_probe_st   = 9U;
         return;
     }
@@ -207,7 +208,18 @@ static void radar_switch_baud(uint32_t baud)
 }
 static void radar_probe_tick(void)
 {
-    if (s_probe_st >= 9U) { return; }        /* 已结束 */
+    if (s_probe_st >= 9U)                    /* 探测已结束 */
+    {
+        /* 一整轮 8 档都没锁定 -> 隔 RADAR_PROBE_RETRY_MS 重新扫一轮。
+         * 否则会一直停在 fallback 波特率(lock=0)直到断电重启 —— 模块比本板上电晚,
+         * 或某一轮刚好错过上报时, 就再也追不上了。 */
+        if ((s_baud_locked == 0U) && ((m_u32Tickms - s_probe_t0) >= RADAR_PROBE_RETRY_MS))
+        {
+            s_probe_st = 0U;                 /* 重新武装: 状态 0 自带启动延时 */
+            s_probe_t0 = m_u32Tickms;
+        }
+        return;
+    }
 
     switch (s_probe_st)
     {

@@ -54,7 +54,10 @@
 
 #define RADAR_BAUD_LOCK_FRAMES          (1U)        /* 监听阶段收到几个合法上报帧就算命中
                                                  * (帧头/长度/帧尾/帧内校验齐全, 乱码凑不出一整帧) */
-#define RADAR_PROBE_LISTEN_MS           (2000U)     /* 每档只听多久(不发任何命令) */
+#define RADAR_PROBE_LISTEN_MS           (300U)
+
+/* 一整轮 8 档都没锁定时, 隔多久重扫一轮(避免'偶尔没锁上就永久失败', 需断电重启) */
+#define RADAR_PROBE_RETRY_MS            (5000U)     /* 每档只听多久(不发任何命令) */
 #define RADAR_RX_TIMEOUT_BITS_HINT      (0U)        /* 占位: 见下方 RADAR_RX_TIMEOUT_BITS 说明 */
 
 /* 上电自适应波特率探测顺序: 覆盖协议表 6 的全部 8 档。
