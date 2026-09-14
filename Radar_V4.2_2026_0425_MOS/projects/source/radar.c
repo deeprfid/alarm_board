@@ -697,10 +697,10 @@ void radar_poll(void)
 
     /* 现场只看这 3 个单值(定义见文件头) */
     g_radar_lock = (uint32_t)s_baud_locked;
-    g_radar_baud = radar_get_baud();
+    g_radar_baud = radar_port_baud_actual();   /* 只信硬件实际值 */
     /* 现场只看这 3 个单值(定义与读法见文件头) */
     g_radar_lock = (uint32_t)s_baud_locked;
-    g_radar_baud = radar_get_baud();
+    g_radar_baud = radar_port_baud_actual();   /* 只信硬件实际值 */
     g_radar_comm = s_comm_map;
     if (s_reports != 0U)                        { g_radar_comm |= 0x100UL; }
     if ((m_u32Tickms - s_rep_last_ms) <= 1000U) { g_radar_comm |= 0x200UL; }

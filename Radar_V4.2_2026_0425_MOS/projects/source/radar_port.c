@@ -235,16 +235,54 @@ void radar_port_rx_flush(void)
 
 /* 换波特率: 分频按新波特率重选, 再算 BRR; 失败置 s_baud_ok=0 供上层跳过该档。
  * 不再需要停/重挂 DMA —— 这是逐字节中断方案带来的最大好处。 */
+/* 换波特率: **走初始化路径**(USART_UART_Init), 不再用运行时 USART_SetBaudrate()。
+ * 原因(2026-09-14 现场用 BRR 指纹查出): 运行时 SetClockDiv+SetBaudrate 即使返回 LL_OK,
+ * BRR 也可能没真正改变 —— 现象是 g_radar_baud 显示 460800, 而 BRR 整数分频仍是 256000 的值(47),
+ * 于是自适应在 460800 档收到的是模块 256000 的帧, 被误判成已锁定。
+ * 初始化路径已被现场证明能正确写入(INIT_FIXED=460800 那版就是靠它通的), 所以换档也用它。
+ * 逐字节中断方案下换档不需要碰 DMA, 重新 Init 之后把 RX/TX 再使能一次即可。 */
 void radar_port_set_baud(uint32_t baud)
 {
-    float32_t f32Err = 0.0F;
+    stc_usart_uart_init_t stcUartInit;
 
-    USART_SetClockDiv(RADAR_UART_UNIT, radar_pick_clk_div(baud));
-    s_baud = baud;
-    s_baud_ok = (LL_OK == USART_SetBaudrate(RADAR_UART_UNIT, baud, &f32Err)) ? 1U : 0U;
+    (void)USART_UART_StructInit(&stcUartInit);
+    stcUartInit.u32ClockDiv      = radar_pick_clk_div(baud);   /* 分频随波特率走 */
+    stcUartInit.u32CKOutput      = USART_CK_OUTPUT_DISABLE;
+    stcUartInit.u32Baudrate      = baud;
+    stcUartInit.u32OverSampleBit = USART_OVER_SAMPLE_8BIT;
+
+    s_baud    = baud;
+    s_baud_ok = (LL_OK == USART_UART_Init(RADAR_UART_UNIT, &stcUartInit, NULL)) ? 1U : 0U;
+    USART_FuncCmd(RADAR_UART_UNIT, (USART_RX | USART_TX | USART_INT_RX), ENABLE);
     radar_port_rx_flush();
 }
+/* 硬件**实际**在跑的波特率(按 PR 分频 + BRR 整数分频反推, 再就近取协议表档位)。
+ * 用途: 现场只信硬件, 不信软件记录的 s_baud —— 两者不一致就说明换档没生效。
+ * 说明: BRR 小数是『只能把波特率往下拉(最多 2 倍)』的模型, 因此反推只取整数分频近似,
+ *       8 档之间相差 2 倍以上, 就近取档足够区分是哪一档。 */
+uint32_t radar_port_baud_actual(void)
+{
+    static const uint32_t tab[] = RADAR_BAUD_TABLE;
+    uint32_t psc = READ_REG32_BIT(RADAR_UART_UNIT->PR, USART_PR_PSC);
+    uint32_t c   = RADAR_UART_PCLK_HZ >> (psc * 2UL);              /* C = PCLK1 / 4^PSC */
+    uint32_t k   = ((RADAR_UART_UNIT->BRR >> 8) & 0xFFUL) + 1UL;   /* DIV_Integer + 1 */
+    uint32_t approx;
+    uint32_t best = 0UL;
+    uint32_t diff;
+    uint32_t bestdiff = 0xFFFFFFFFUL;
+    uint8_t  i;
 
+    if (k == 0UL) { return 0UL; }
+    approx = c / (8UL * k);                                        /* 整数分频对应波特率(近似) */
+
+    for (i = 0U; i < (uint8_t)RADAR_BAUD_TABLE_CNT; i++)
+    {
+        diff = (approx > tab[i]) ? (approx - tab[i]) : (tab[i] - approx);
+        if (diff < bestdiff) { bestdiff = diff; best = tab[i]; }
+    }
+
+    return best;
+}
 uint32_t radar_port_get_baud(void)
 {
     return s_baud;
