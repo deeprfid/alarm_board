@@ -15,6 +15,9 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 
 ## [Unreleased]
 
+- `[hc32f460]` **fix**: 初始化前加 `USART_DeInit()`（在 FCG 使能之后），使雷达串口初始化**幂等**、不受上电前残留配置影响；运行时换档则改为**先关收发**(`RX|TX|INT_RX` DISABLE，不改其它寄存器) → 写 `PR`+`BRR` → **回读确认** → 恢复收发，确认失败才退回完整初始化。
+  结论：`USART_DeInit()` 适合放在**初始化前**（保证确定初态），不适合当**运行中换波特率**的常规手段 —— 它会把 `CR1/CR2/CR3/PR` 一并复位（REN/TEN、格式、流控全丢），之后必须整套重配再使能收发，等于『完整初始化多绕一步』；它在运行时的价值是作为**外设疑似卡死时的兜底复位**。Code 26652，构建 0 Error / 0 Warning。
+
 - `[hc32f460]` **fix**: 换档改为**最小改动 + 回读确认**：先只写 PR（按波特率选分频）与 BRR（`USART_SetClockDiv` + `USART_SetBaudrate`），随后**回读 BRR 整数分频与期望值比对**；一致则不动其它寄存器（RX/TX 保持使能），不一致才退回完整 `USART_UART_Init()` 兜底（并重新使能 RX/TX）。
   此前直接拿 `USART_UART_Init()` 换档是拿大锤敲钉子 —— 它会重写 CR1/CR2/CR3/PR/BRR（连 REN/TEN 一起清掉）。同时这一步也把『`SetBaudrate` 返回 LL_OK 却静默没写进 BRR』变成**可检测**（现场就是靠 BRR 指纹 `0x2F`(=256000) 发现软件记录 460800 是假的）。
 - `[hc32f460]` **fix（启动顺序）**：`LL_PERIPH_WE/WP` 改为 SDK 例程的顺序 —— `WE` 放在所有初始化之前、`WP` 放在 `radar_init()` 之后。原来 `WP` 在所有初始化之前，等于让 GPIO/FCG/PWC/EFM/SRAM 各组寄存器**初始化期就处于写保护**，这类写丢失是静默的（`LL_PERIPH_SEL` 不含 USART，因此不影响 BRR，但会影响引脚复用/外设时钟/时钟配置等）。

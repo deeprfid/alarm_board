@@ -146,6 +146,9 @@ void radar_port_init(void)
 
     RADAR_UART_FCG_ENABLE();
 
+    /* 先复位到确定状态: 使初始化幂等, 不受上电前残留配置/引导程序影响 */
+    USART_DeInit(RADAR_UART_UNIT);
+
     (void)USART_UART_StructInit(&stcUartInit);
     stcUartInit.u32ClockDiv      = radar_pick_clk_div(s_baud);   /* 分频随波特率走 */
     stcUartInit.u32CKOutput      = USART_CK_OUTPUT_DISABLE;   /* 同扫描台参考实现: 时钟不输出 */
@@ -261,6 +264,9 @@ void radar_port_set_baud(uint32_t baud)
 
     s_baud = baud;
 
+    /* 关收发(不动其它配置): 换波特率时避免半字节/中断状态干扰; 写完立刻恢复 */
+    USART_FuncCmd(RADAR_UART_UNIT, (USART_RX | USART_TX | USART_INT_RX), DISABLE);
+
     USART_SetClockDiv(RADAR_UART_UNIT, radar_pick_clk_div(baud));   /* 只改 PR */
     (void)USART_SetBaudrate(RADAR_UART_UNIT, baud, &f32Err);        /* 只改 BRR */
 
@@ -268,6 +274,7 @@ void radar_port_set_baud(uint32_t baud)
     if (got_int == exp_int)
     {
         s_baud_ok = 1U;                                  /* 最小写路径生效 */
+        USART_FuncCmd(RADAR_UART_UNIT, (USART_RX | USART_TX | USART_INT_RX), ENABLE);
     }
     else
     {
