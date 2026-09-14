@@ -15,6 +15,15 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 
 ## [Unreleased]
 
+- **规范**：**今后完全抛弃『往 Keil Watch 加变量』的调试方法**。现场多次确认：本板无调试串口，Watch 只能一个个人工抄单值，
+  结构体/数组/函数表达式都取不出来，按秒统计+多标量交叉判读在现场『没法调试』。今后需要观测只允许三条路：
+  ① 肉眼可见通道（板载 LED/蜂鸣器闪码）；② 既有 RS485 上行帧字段（32B `gpio_pdu`）；③ 调试器 Memory **整块**导出，且临时观测代码用完即删。
+  判断标准：凡要求『人坐在 Keil 前逐个抄数字』的方法一律不合格。规范与本次删除清单见 `docs/radar_baud_debug_notes.md` §7。
+- `[hc32f460]` **chore**: 按上述规范**删除全部调试脚手架** —— 删除 `radar_dbg.h`（含 `g_radar_dbg` 快照结构、`radar_dbg_poll()`）、
+  `radar_cfg.h` 的 `RADAR_DBG_EN` / `RADAR_DBG_PERIOD_MS` / `RADAR_DBG_RX_STALL_MS`、`main.h` 的 `#include "radar_dbg.h"`、
+  `main.c` 的 `radar_dbg_poll()` 调用、`radar.c` 末尾的调试段与其前置声明、
+  `radar_port.c/.h` 的 3 个 TX 诊断计数（`g_radar_tx_dma_tc_cnt` / `g_radar_tx_tci_cnt` / `g_radar_tx_timeout_cnt`）——
+  **TX 看门狗功能本身保留**（`radar_port_tx_watchdog()`）。Code 27696 → 27664，构建 0 Error / 0 Warning。
 - `[hc32f460]` **docs**: 诊断版实测数据补齐到 `docs/radar_baud_debug_notes.md` §6.1（模块按 APP 设为 9600、驱动上电即 9600、不改档不发命令）：
   `g_radar_low_pct=13`（与『9600 + ~10Hz 上报』推算的 12% 低电平占比吻合）、`g_radar_dma_fill=15` 字节/秒、`g_radar_to_hz=0`、
   `g_radar_win_hz=0`、`g_radar_bps=0`、`g_radar_rx_err=0`、`g_radar_poll_hz=204509`。

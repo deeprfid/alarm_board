@@ -2,7 +2,6 @@
  * radar.c -- LD2410C 雷达服务层实现
  ******************************************************************************/
 #include "radar.h"
-#include "radar_dbg.h"       /* 调试接口声明(上板验证用, 实现见文件末尾) */
 #include "radar_port.h"       /* 硬件层: init/write/tx_busy/set_baud/poll */
 #include <string.h>           /* memset */
 
@@ -28,18 +27,11 @@ static uint8_t          s_prov_busy;        /* 1 = 正在执行阻塞式命令(防重入兜底
 #endif
 
 /* ------------------------------ 收字节 -> 分帧 -> 解析 ------------------------------ */
-#if (RADAR_DBG_EN != 0U)
-static void radar_dbg_capture(const uint8_t *data, uint16_t len);   /* 定义见文件末尾调试段 */
-#endif
 
 static void radar_on_bytes(const uint8_t *data, uint16_t len)
 {
     radar_frame_t f;
     uint16_t i;
-
-#if (RADAR_DBG_EN != 0U)
-    radar_dbg_capture(data, len);       /* 抓原始字节(判断波特率/接线) */
-#endif
 
     for (i = 0U; i < len; i++)
     {
@@ -557,7 +549,7 @@ static uint8_t radar_baud_to_index(uint32_t baud)
  *   1 写配置(0x00A1) -> 重启模块(0x00A3, 配置重启后生效) -> 等 RADAR_PROV_RESTART_MS
  *   2 等模块重启(RADAR_PROV_RESTART_MS)后**重新跑一遍自适应探测**
  *   3 复检: 探测锁定在目标波特率 = 成功; 锁定在别的值 = 模块没切成, 保持该波特率继续用
- * 结果见 radar_provision_state() 与 g_radar_dbg.prov_st */
+ * 结果见 radar_provision_state() */
 static void radar_provision_tick(void)
 {
     if (s_prov_busy != 0U) { return; }       /* 阻塞命令执行中(兜底, 正常路径不会进) */
@@ -934,78 +926,3 @@ int32_t radar_noise_status(uint16_t *status)
 
     return (radar_proto_parse_u16(&ack, status) != 0) ? LL_OK : LL_ERR;
 }
-
-/* ==========================================================================================
- * 雷达调试快照(上板验证用, 临时) —— 总开关: radar_cfg.h 的 RADAR_DBG_EN
- * 只往结构体 g_radar_dbg 写数值, 不做任何串口/printf/文本输出(本板没有连电脑的串口)。
- * 实现放本文件末尾是为了不动 Keil 工程(新建 .c 需手工加入, 且 Keil GUI 会覆盖 .uvprojx)。
- * ========================================================================================== */
-#if (RADAR_DBG_EN != 0U)
-
-volatile radar_dbg_snap_t g_radar_dbg;
-
-static uint32_t s_dbg_upd_ms;           /* 上次刷新快照的时刻 */
-static uint32_t s_dbg_baud_last;        /* 上次的波特率(变化则重抓头部字节) */
-static uint8_t  s_dbg_head_n;           /* 已抓的头部字节数 */
-
-/* 记录"本波特率下收到的最前面几个字节": 用来判断模块真实波特率/接线是否通 */
-static void radar_dbg_capture(const uint8_t *data, uint16_t len)
-{
-    uint16_t i;
-
-    if (data == 0) { return; }
-
-    for (i = 0U; (i < len) && (s_dbg_head_n < (uint8_t)RADAR_DBG_RX_HEAD); i++)
-    {
-        g_radar_dbg.rx_head[s_dbg_head_n] = data[i];
-        s_dbg_head_n++;
-    }
-}
-
-static void dbg_update_snap(void)
-{
-    const radar_dev_t    *d = radar_dev(0);
-    const radar_report_t *r = radar_report(0);
-
-    g_radar_dbg.ms       = m_u32Tickms;
-    g_radar_dbg.probe_st = (uint32_t)s_probe_st;
-    g_radar_dbg.lock     = (uint32_t)radar_baud_locked();
-    g_radar_dbg.baud     = radar_get_baud();
-    g_radar_dbg.prov_st  = (uint32_t)radar_provision_state();
-    g_radar_dbg.rep      = radar_reports();
-    g_radar_dbg.fer      = radar_frames_err();
-    g_radar_dbg.rx       = radar_rx_bytes();
-    g_radar_dbg.out      = (d != 0) ? (uint32_t)d->out_present : 0U;
-    g_radar_dbg.online   = (d != 0) ? (uint32_t)d->uart_online : 0U;
-    g_radar_dbg.pre      = (uint32_t)radar_presence(0);
-    g_radar_dbg.st       = (r != 0) ? (uint32_t)r->target_state : 0U;
-    g_radar_dbg.mv_dist  = (r != 0) ? (uint32_t)r->moving_distance_cm : 0U;
-    g_radar_dbg.mv_eng   = (r != 0) ? (uint32_t)r->moving_energy : 0U;
-    g_radar_dbg.st_dist  = (r != 0) ? (uint32_t)r->still_distance_cm : 0U;
-    g_radar_dbg.st_eng   = (r != 0) ? (uint32_t)r->still_energy : 0U;
-    g_radar_dbg.dd       = (r != 0) ? (uint32_t)r->detect_distance_cm : 0U;
-}
-
-void radar_dbg_poll(void)
-{
-    if (radar_get_baud() != s_dbg_baud_last)
-    {
-        s_dbg_baud_last = radar_get_baud();
-        s_dbg_head_n    = 0U;           /* 换档: 头部字节重新抓 */
-    }
-
-    if ((m_u32Tickms - s_dbg_upd_ms) >= RADAR_DBG_PERIOD_MS)
-    {
-        s_dbg_upd_ms = m_u32Tickms;
-        dbg_update_snap();
-    }
-}
-
-#else   /* RADAR_DBG_EN == 0: 关闭调试, 保留空实现, 调用方不必加 #if */
-
-void radar_dbg_poll(void)
-{
-}
-
-#endif  /* RADAR_DBG_EN */
-/* ============================== 调试段结束 ============================== */

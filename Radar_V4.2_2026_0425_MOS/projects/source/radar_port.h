@@ -17,13 +17,6 @@ uint8_t radar_port_tx_busy(void);
 /* 发送完成中断没来时的兜底: 主循环调用; 超过 RADAR_TX_TIMEOUT_MS 未完成 -> 复位 TX 通路并放行 */
 void radar_port_tx_watchdog(uint32_t now_ms);
 
-/* 诊断计数(Keil Watch 里直接看这几个名字):
- *   g_radar_tx_dma_tc_cnt : TX DMA 传输完成次数    (0 = DMA 根本没跑/没触发)
- *   g_radar_tx_tci_cnt    : USART1 发送完成中断次数(0 = 上面有数但 TCI 没来 -> 中断映射问题)
- *   g_radar_tx_timeout_cnt: 兜底复位次数           (>0 说明完成中断一直没来, 已由看门狗放行) */
-extern volatile uint32_t g_radar_tx_dma_tc_cnt;
-extern volatile uint32_t g_radar_tx_tci_cnt;
-extern volatile uint32_t g_radar_tx_timeout_cnt;
 
 /* 修改波特率(用于自适应探测); 内部会先丢弃接收缓冲里旧波特率的残留字节 */
 void radar_port_set_baud(uint32_t baud);

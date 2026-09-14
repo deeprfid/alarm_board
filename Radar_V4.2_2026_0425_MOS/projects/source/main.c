@@ -34,7 +34,6 @@ int32_t main(void)
         Check_Uart_Pdu();
         Check_alarm_state();
         radar_poll();            /* 雷达字节->分帧->解析(非阻塞) */
-        radar_dbg_poll();        /* 雷达调试输出(临时, RADAR_DBG_EN=0 时为空实现) */
         Check_UidKey();
 
     }

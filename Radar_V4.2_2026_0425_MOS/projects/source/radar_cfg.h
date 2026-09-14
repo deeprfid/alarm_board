@@ -174,15 +174,4 @@
 /* C. 上电读回一次只读信息(读参数/分辨率/辅助控制/固件版本/MAC)到 s_dump, 供 Keil Watch 查看。
  * 只读不写, 无害; 出厂可置 0。 */
 #define RADAR_DUMP_ONCE                 (0U)        /* 0 = 上电不读回(不发任何命令); 需要读时手动调 radar_read_all() */
-
-/* ============================ 调试输出(上板验证用, 事后删除) ============================
- * RADAR_DBG_EN : 1 = 打开(临时, 见 docs/hc32_radar_bringup.md), 0 = 关闭(空实现/不占空间)
- *               验证通过后置 0, 或整体删除 radar_dbg.c/.h 并去掉 main.c 里的调用
- * 输出方式: 只有结构体 g_radar_dbg(Keil Watch 展开看, 纯数值)。
- *           本板没有连电脑的串口, 因此不做串口/printf/文本输出。
- */
-#define RADAR_DBG_EN                    (0U)      /* 调试已关闭: 只剩空实现, 不占 Flash */
-#define RADAR_DBG_PERIOD_MS             (500U)      /* 状态行刷新周期 */
-#define RADAR_DBG_RX_STALL_MS           (3000U)     /* 收字节停滞多久报一次事件 */
-
 #endif /* __RADAR_CFG_H__ */
