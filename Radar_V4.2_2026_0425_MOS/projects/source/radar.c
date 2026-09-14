@@ -132,6 +132,8 @@ int32_t radar_init(void)
 }
 
 /* ---------- 候选波特率表 ---------- */
+static void radar_switch_baud(uint32_t baud);   /* 定义见本文件探测段 */
+
 static uint32_t radar_probe_baud(uint8_t idx)
 {
     static const uint32_t baud_tab[] = RADAR_BAUD_TABLE;
@@ -150,20 +152,14 @@ static void radar_probe_next(void)
 
     if (s_probe_idx >= (uint8_t)RADAR_BAUD_TABLE_CNT)
     {
-        radar_port_set_baud(RADAR_BAUD_FALLBACK);
+        radar_switch_baud(RADAR_BAUD_FALLBACK);
         s_probe_rx0 = radar_port_rx_bytes();
-        radar_frame_init(&s_rx);
-        s_rep_frames = 0U;
-        s_ack_frames = 0U;
         s_probe_st   = 9U;
         return;
     }
 
-    radar_port_set_baud(radar_probe_baud(s_probe_idx));
+    radar_switch_baud(radar_probe_baud(s_probe_idx));
     s_probe_rx0 = radar_port_rx_bytes();
-    radar_frame_init(&s_rx);
-    s_rep_frames = 0U;
-    s_ack_frames = 0U;
     s_probe_t0   = m_u32Tickms;
     s_probe_st   = 1U;
 }
@@ -196,6 +192,19 @@ static void radar_probe_accept(void)
  *   现场已经踩过这个坑, 明确要求探测阶段**绝不发这两个包**。
  * 参数读写等命令仍按协议包"使能配置->命令->结束配置", 但那是**显式调用**时才发生,
  * 上电自动流程一条命令都不发。 */
+/* 统一换档入口: 换波特率必须和『复位分帧器 + 清接收计数』一起做 ——
+ * 换档瞬间线上那一帧会被拆开(前半截在旧档、后半截在新档或直接丢失),
+ * 若不复位分帧器/不清计数, 就可能把两段拼成一帧或让旧档的帧计入新档。
+ * radar_port_set_baud() 内部已完成: 关收发 -> 停TX DMA -> USART_DeInit -> 重新初始化
+ *   -> BRR 回读校验 -> 清环形缓冲; 这里补齐上层状态。
+ * 前置条件: 必须在 TX 空闲时调用(换档会复位 USART, 发送到一半会被打断)。 */
+static void radar_switch_baud(uint32_t baud)
+{
+    radar_port_set_baud(baud);
+    radar_frame_init(&s_rx);      /* 分帧器状态清零: 不跨波特率拼接 */
+    s_rep_frames = 0U;
+    s_ack_frames = 0U;
+}
 static void radar_probe_tick(void)
 {
     if (s_probe_st >= 9U) { return; }        /* 已结束 */
@@ -206,11 +215,8 @@ static void radar_probe_tick(void)
             if ((m_u32Tickms - s_probe_t0) >= RADAR_PROBE_BOOT_MS)
             {
                 s_probe_idx  = 0U;
-                s_rep_frames = 0U;
-                s_ack_frames = 0U;
-                radar_port_set_baud(radar_probe_baud(0U));
+                radar_switch_baud(radar_probe_baud(0U));
                 s_probe_rx0 = radar_port_rx_bytes();
-                radar_frame_init(&s_rx);
                 s_probe_t0 = m_u32Tickms;
                 s_probe_st = 1U;
             }
