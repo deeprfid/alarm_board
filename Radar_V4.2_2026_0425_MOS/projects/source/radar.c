@@ -109,8 +109,8 @@ int32_t radar_init(void)
     s_reports = 0U;
     s_baud_locked = 0U;
 
-    radar_port_init();
-    radar_port_set_rx_handler(radar_on_bytes);
+    radar_port_init(0U);
+    radar_port_set_rx_handler(0U, radar_on_bytes);
 
 #if (RADAR_BAUD_INIT_FIXED != 0UL)
     /* 调试: 上电即固定波特率 -> 跳过自适应, 也不写模块波特率 */
@@ -152,21 +152,21 @@ static uint32_t radar_probe_baud(uint8_t idx)
 /* 本档不收: 换下一档; 全试完 -> 回落默认波特率(locked=0) */
 static void radar_probe_next(void)
 {
-    if (radar_port_rx_bytes() != s_probe_rx0) { s_comm_map |= (1UL << s_probe_idx); }
+    if (radar_port_rx_bytes(0U) != s_probe_rx0) { s_comm_map |= (1UL << s_probe_idx); }
     s_ack_ready  = 0U;
     s_probe_idx++;
 
     if (s_probe_idx >= (uint8_t)RADAR_BAUD_TABLE_CNT)
     {
         radar_switch_baud(RADAR_BAUD_FALLBACK);
-        s_probe_rx0 = radar_port_rx_bytes();
+        s_probe_rx0 = radar_port_rx_bytes(0U);
         s_probe_t0   = m_u32Tickms;   /* 重扫计时起点 */
         s_probe_st   = 9U;
         return;
     }
 
     radar_switch_baud(radar_probe_baud(s_probe_idx));
-    s_probe_rx0 = radar_port_rx_bytes();
+    s_probe_rx0 = radar_port_rx_bytes(0U);
     s_probe_t0   = m_u32Tickms;
     s_probe_st   = 1U;
 }
@@ -174,7 +174,7 @@ static void radar_probe_next(void)
 /* 认定本档为模块真实波特率 */
 static void radar_probe_accept(void)
 {
-    if (radar_port_rx_bytes() != s_probe_rx0) { s_comm_map |= (1UL << s_probe_idx); }
+    if (radar_port_rx_bytes(0U) != s_probe_rx0) { s_comm_map |= (1UL << s_probe_idx); }
     s_baud_locked = 1U;
     s_probe_st    = 9U;
 }
@@ -202,12 +202,12 @@ static void radar_probe_accept(void)
 /* 统一换档入口: 换波特率必须和『复位分帧器 + 清接收计数』一起做 ——
  * 换档瞬间线上那一帧会被拆开(前半截在旧档、后半截在新档或直接丢失),
  * 若不复位分帧器/不清计数, 就可能把两段拼成一帧或让旧档的帧计入新档。
- * radar_port_set_baud() 内部已完成: 关收发 -> 停TX DMA -> USART_DeInit -> 重新初始化
+ * radar_port_set_baud(0U, ) 内部已完成: 关收发 -> 停TX DMA -> USART_DeInit -> 重新初始化
  *   -> BRR 回读校验 -> 清环形缓冲; 这里补齐上层状态。
  * 前置条件: 必须在 TX 空闲时调用(换档会复位 USART, 发送到一半会被打断)。 */
 static void radar_switch_baud(uint32_t baud)
 {
-    radar_port_set_baud(baud);
+    radar_port_set_baud(0U, baud);
     radar_frame_init(&s_rx);      /* 分帧器状态清零: 不跨波特率拼接 */
     s_rep_frames = 0U;
     s_ack_frames = 0U;
@@ -234,7 +234,7 @@ static void radar_probe_tick(void)
             {
                 s_probe_idx  = 0U;
                 radar_switch_baud(radar_probe_baud(0U));   /* 从头按候选表扫(第0档=256000) */
-                s_probe_rx0 = radar_port_rx_bytes();
+                s_probe_rx0 = radar_port_rx_bytes(0U);
                 s_probe_t0 = m_u32Tickms;
                 s_probe_st = 1U;
             }
@@ -704,8 +704,8 @@ uint8_t radar_provision_state(void)
 static void radar_pump(void)
 {
     radar_frame_tick(&s_rx, m_u32Tickms);
-    radar_port_poll();
-    radar_port_tx_watchdog(m_u32Tickms);     /* 发送完成中断没来时的兜底 */
+    radar_port_poll(0U);
+    radar_port_tx_watchdog(0U, m_u32Tickms);     /* 发送完成中断没来时的兜底 */
 }
 
 void radar_poll(void)
@@ -726,14 +726,14 @@ void radar_poll(void)
 
     /* 现场只看这 3 个单值(定义见文件头) */
     g_radar_lock = (uint32_t)s_baud_locked;
-    g_radar_baud = radar_port_baud_actual();   /* 只信硬件实际值 */
+    g_radar_baud = radar_port_baud_actual(0U);   /* 只信硬件实际值 */
     /* 现场只看这 3 个单值(定义与读法见文件头) */
     g_radar_lock = (uint32_t)s_baud_locked;
-    g_radar_baud = radar_port_baud_actual();   /* 只信硬件实际值 */
+    g_radar_baud = radar_port_baud_actual(0U);   /* 只信硬件实际值 */
     g_radar_comm = s_comm_map;
     if (s_reports != 0U)                        { g_radar_comm |= 0x100UL; }
     if ((m_u32Tickms - s_rep_last_ms) <= 1000U) { g_radar_comm |= 0x200UL; }
-    if (radar_port_baud_ok() != 0U)             { g_radar_comm |= 0x400UL; }
+    if (radar_port_baud_ok(0U) != 0U)             { g_radar_comm |= 0x400UL; }
     /* 链路监控: 有字节进来却一个合法帧都解不出 => 波特率被改了(乱码), 立刻重扫。
      * 不用发任何命令, 纯监听。判据(现场定): 最近 1 秒 字节增量 >= 32 且 合法帧(上报+ACK) == 0。
      * 注意两点:
@@ -744,7 +744,7 @@ void radar_poll(void)
      *             此时字节增量为 0, 本判据不触发 -> 需断电重启(若要覆盖需另加低频兜底扫)。 */
     if ((m_u32Tickms - s_link_ms) >= 1000U)
     {
-        uint32_t dBytes = radar_port_rx_bytes() - s_link_bytes0;
+        uint32_t dBytes = radar_port_rx_bytes(0U) - s_link_bytes0;
         uint32_t dFrames = s_fps_cnt + s_win_ack_cnt;     /* 本窗口合法帧(上报+ACK); 注意用 s_fps_cnt 而非上一秒的 s_fps */
 
         if ((s_baud_locked != 0U) && (dBytes >= 32U) && (dFrames == 0U))
@@ -770,7 +770,7 @@ void radar_poll(void)
             s_probe_idx   = 0U;
             s_link_sweep_ms = m_u32Tickms;
         }
-        s_link_bytes0 = radar_port_rx_bytes();
+        s_link_bytes0 = radar_port_rx_bytes(0U);
         s_win_ack_cnt = 0U;
         s_link_ms     = m_u32Tickms;
     }
@@ -780,7 +780,7 @@ void radar_poll(void)
         s_fps_cnt = 0U;
         s_fps_ms  = m_u32Tickms;
     }
-    g_radar_comm |= ((radar_port_brr() >> 8) & 0xFFUL) << 16;   /* BRR 整数分频指纹 */
+    g_radar_comm |= ((radar_port_brr(0U) >> 8) & 0xFFUL) << 16;   /* BRR 整数分频指纹 */
     g_radar_comm |= (s_fps & 0xFFUL) << 24;                     /* 最近 1 秒的合法帧数 = 帧率 */
 }
 
@@ -847,7 +847,7 @@ uint8_t radar_baud_locked(void)
 
 uint32_t radar_get_baud(void)
 {
-    return radar_port_get_baud();
+    return radar_port_get_baud(0U);
 }
 
 uint32_t radar_frames_ok(void)
@@ -867,12 +867,12 @@ uint32_t radar_reports(void)
 
 uint32_t radar_rx_bytes(void)
 {
-    return radar_port_rx_bytes();
+    return radar_port_rx_bytes(0U);
 }
 
 uint32_t radar_rx_drop(void)
 {
-    return radar_port_rx_drop();
+    return radar_port_rx_drop(0U);
 }
 
 /* ------------------------------ 命令 ------------------------------ */
@@ -889,14 +889,14 @@ int32_t radar_cmd(uint16_t cmd, const uint8_t *val, uint8_t val_len,
 
     /* 等上一条发完(最多 50ms) */
     t0 = m_u32Tickms;
-    while (radar_port_tx_busy() != 0U)
+    while (radar_port_tx_busy(0U) != 0U)
     {
         radar_pump();
         if ((m_u32Tickms - t0) > 50U) { return LL_ERR_BUSY; }
     }
 
     s_ack_ready = 0U;
-    if (radar_port_write(frame, flen) != LL_OK) { return LL_ERR; }
+    if (radar_port_write(0U, frame, flen) != LL_OK) { return LL_ERR; }
 
     t0 = m_u32Tickms;
     while ((m_u32Tickms - t0) < timeout_ms)

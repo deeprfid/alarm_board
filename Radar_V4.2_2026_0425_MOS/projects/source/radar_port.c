@@ -1,321 +1,255 @@
 /*******************************************************************************
- * radar_port.c -- 雷达串口硬件层实现
+ * radar_port.c -- 雷达串口硬件层实现(三口参数化版)
  *
- * 硬件通路: USART1 接收中断(RI) -> 软件环形缓冲 -> radar_port_poll() 交给上层
- *           DMA2 CH0 -> USART1_TI 发送(命令帧)
- *
- * 2026-09-14 两处大改(针对『460800 能通、9600/115200 不通』):
- *  1) 接收不再用 DMA: 原实现是『256B DMA 窗口 + AOS/LLP 重装 + 靠空闲超时中断上抛』,
- *     实测空闲超时上抛从来没工作过; 高波特率下窗口 20ms 就填满所以看不出问题,
- *     低波特率下窗口要一秒以上才填满, 于是帧永远到不了解析层。
- *     改为逐字节中断接收(SDK usart_uart_int 例程同款做法): 对波特率零依赖,
- *     换档也不需要动 DMA —— 自适应探测因此才可靠。
- *  2) 时钟分频改为**按波特率自动选**(见 radar_pick_clk_div): 原来写死 DIV4,
- *     8 倍过采样下 9600 需要分频比 324 > 255, USART_SetBaudrate() 会返回错误**且不写 BRR**,
- *     端口静默停在旧波特率 —— 写死一个分频值本身就是错的。
+ * 每个口: USART 初始化/换档(整套 DeInit+Init+BRR回读校验) + 逐字节 RI 中断接收
+ *         + 发送(轮询 TXE 逐字节写, 不用 DMA) + 软件环形缓冲
+ * 口与硬件对应见 radar_cfg.h 的 RADARn_UART_* 宏; 帧间隔用全局 m_u32Tickms, 不需要定时器。
  ******************************************************************************/
 #include "radar_port.h"
-#include "ring_buf.h"          /* BUF_* 环形缓冲 */
-#include <string.h>           /* memset */
+#include "ring_buf.h"
+#include <string.h>
 
-/* 1ms 计数(定义在 bsp_exint.c) */
 extern uint32_t m_u32Tickms;
 
-/* ------------------------------ 静态数据 ------------------------------ */
-static uint8_t             s_rx_ring_buf[RADAR_RX_RING_SIZE];
-static stc_ring_buf_t      s_rx_ring;
-static uint8_t             s_tx_dummy[RADAR_TX_MAX];   /* TX DMA 初值占位, 每次发送由 DMA_SetSrcAddr 覆盖 */
+/* ------------------------------ 端口硬件描述 ------------------------------ */
+typedef struct {
+    CM_USART_TypeDef *unit;
+    void (*fcg)(void);
+    uint16_t tx_port, tx_pin, tx_func;
+    uint16_t rx_port, rx_pin, rx_func;
+    IRQn_Type ri_irqn, ei_irqn;
+    en_int_src_t ri_src, ei_src;
+} radar_hw_t;
 
-static volatile uint8_t    s_tx_busy;
-static volatile uint32_t   s_tx_ms;          /* 本次发送开始时刻 */
+static void radar_fcg0(void) { RADAR_UART_FCG_ENABLE(); }
+static void radar_fcg1(void) { RADAR2_UART_FCG_ENABLE(); }
+static void radar_fcg2(void) { RADAR3_UART_FCG_ENABLE(); }
+static const radar_hw_t s_hw[RADAR_PORT_CNT] = {
+    { RADAR_UART_UNIT,  radar_fcg0,  RADAR_UART_TX_PORT,  RADAR_UART_TX_PIN,  RADAR_UART_TX_FUNC,
+      RADAR_UART_RX_PORT,  RADAR_UART_RX_PIN,  RADAR_UART_RX_FUNC,
+      RADAR_UART_RX_IRQn,  RADAR_UART_RX_ERR_IRQn,  RADAR_UART_RX_INT_SRC,  RADAR_UART_RX_ERR_INT_SRC },
+    { RADAR2_UART_UNIT, radar_fcg1, RADAR2_UART_TX_PORT, RADAR2_UART_TX_PIN, RADAR2_UART_TX_FUNC,
+      RADAR2_UART_RX_PORT, RADAR2_UART_RX_PIN, RADAR2_UART_RX_FUNC,
+      RADAR2_UART_RX_IRQn, RADAR2_UART_RX_ERR_IRQn, RADAR2_UART_RX_INT_SRC, RADAR2_UART_RX_ERR_INT_SRC },
+    { RADAR3_UART_UNIT, radar_fcg2, RADAR3_UART_TX_PORT, RADAR3_UART_TX_PIN, RADAR3_UART_TX_FUNC,
+      RADAR3_UART_RX_PORT, RADAR3_UART_RX_PIN, RADAR3_UART_RX_FUNC,
+      RADAR3_UART_RX_IRQn, RADAR3_UART_RX_ERR_IRQn, RADAR3_UART_RX_INT_SRC, RADAR3_UART_RX_ERR_INT_SRC },
+};
 
-static volatile uint32_t   s_rx_bytes;
-static volatile uint32_t   s_rx_drop;
-static uint32_t            s_baud;
-static volatile uint8_t    s_baud_ok;        /* 0 = 该波特率本档分频表示不出来(换档失败) */
-static void (*s_rx_cb)(const uint8_t *data, uint16_t len) = 0;
+/* ------------------------------ 每口上下文 ------------------------------ */
+static uint8_t             s_rx_buf[RADAR_PORT_CNT][RADAR_RX_RING_SIZE];
+static stc_ring_buf_t      s_rx_ring[RADAR_PORT_CNT];
+static uint8_t             s_tx_buf[RADAR_PORT_CNT][RADAR_TX_MAX];
+static volatile uint16_t   s_tx_len[RADAR_PORT_CNT];
+static volatile uint16_t   s_tx_idx[RADAR_PORT_CNT];
+static volatile uint8_t    s_tx_busy[RADAR_PORT_CNT];
+static volatile uint32_t   s_tx_ms[RADAR_PORT_CNT];
+static volatile uint32_t   s_rx_bytes[RADAR_PORT_CNT];
+static volatile uint32_t   s_rx_drop[RADAR_PORT_CNT];
+static uint32_t            s_baud[RADAR_PORT_CNT];
+static volatile uint8_t    s_baud_ok[RADAR_PORT_CNT];
+static void (*s_rx_cb[RADAR_PORT_CNT])(const uint8_t *data, uint16_t len);
 
-/* --------------------- 时钟分频: 随波特率自动选(不是定死的) ---------------------
- * 取值规则直接照抄**扫描台主板(同款 HC32F460)量产在用的 UART 初始化**:
- *     (baud < 115200) ? UsartClkDiv_64 : UsartClkDiv_1
- * 换算到本工程(C = PCLK1 = RADAR_UART_PCLK_HZ = 100MHz / 分频, 8 倍过采样):
- *     B <  115200 -> DIV64, C = 1.5625MHz   9600 时整数分频 20, 误差 +0.13%
- *     B >= 115200 -> DIV1 , C = 100MHz      460800 时整数分频 27, 误差 +0.08%
- * 约束依据(DDL 的 BRR 整数分频只有 8 位):
- *     DIV_Integer = C/(B*8*(2-OVER8)) - 1 必须 <= 255   =>  C <= B*8*(2-OVER8)*256
- *     且 C/(B*8*(2-OVER8)) >= 1                         =>  C >= B*8*(2-OVER8)
- * 写死一个分频值一定会踩线: 例如写死 DIV4 + 8 倍过采样时, 9600 需要分频比 324 > 255,
- * USART_SetBaudrate() 会返回错误, **且一个字节都不写 BRR**, 端口静默停在旧波特率 ——
- * 这就是现场『460800 能通、改到 9600 不行』的直接原因之一。
- * 所以: 波特率高用小分频、波特率低用大分频, 按波特率现算。 */
+/* --------------------- 时钟分频: 随波特率自动选 ---------------------
+ * 规则照抄扫描台主板(同款 HC32F460)量产写法: baud < 115200 -> DIV64, 否则 DIV1。
+ * 依据: BRR 整数分频只有 8 位, DIV_Integer = C/(B*8*(2-OVER8)) - 1 必须 <= 255。 */
 static uint32_t radar_pick_clk_div(uint32_t baud)
 {
     return (baud < 115200UL) ? USART_CLK_DIV64 : USART_CLK_DIV1;
 }
-/* ------------------------------ 中断回调 ------------------------------ */
-/* 接收中断: 一字节进一字节出。 */
-static void radar_rx_ri_cb(void)
-{
-    uint8_t b = (uint8_t)USART_ReadData(RADAR_UART_UNIT);   /* 读 RDR 同时清 RI 标志 */
 
-    s_rx_bytes++;
-    if (BUF_Write(&s_rx_ring, &b, 1U) != 1U) { s_rx_drop++; }
+/* ------------------------------ 中断处理 ------------------------------ */
+static void radar_rx_isr(uint8_t port)
+{
+    uint8_t b = (uint8_t)USART_ReadData(s_hw[port].unit);   /* 读 RDR 同时清 RI */
+
+    s_rx_bytes[port]++;
+    if (BUF_Write(&s_rx_ring[port], &b, 1U) != 1U) { s_rx_drop[port]++; }
 }
 
-/* 接收错误中断(SDK 例程同款): 必须读 RDR + 清 PE/FE/ORE, 否则标志一直挂着会堵住后续接收 */
-static void radar_rx_err_cb(void)
+static void radar_err_isr(uint8_t port)
 {
-    (void)USART_ReadData(RADAR_UART_UNIT);
-    USART_ClearStatus(RADAR_UART_UNIT,
-                      (USART_FLAG_PARITY_ERR | USART_FLAG_FRAME_ERR | USART_FLAG_OVERRUN));
+    (void)USART_ReadData(s_hw[port].unit);
+    USART_ClearStatus(s_hw[port].unit, (USART_FLAG_PARITY_ERR | USART_FLAG_FRAME_ERR | USART_FLAG_OVERRUN));
 }
 
-/* 发送完成: DMA TC -> 使能 USART TCI -> 清 s_tx_busy */
-static void radar_tx_complete_cb(void)
+static void radar0_rx_isr(void) { radar_rx_isr(0U); }
+static void radar0_err_isr(void) { radar_err_isr(0U); }
+static void radar1_rx_isr(void) { radar_rx_isr(1U); }
+static void radar1_err_isr(void) { radar_err_isr(1U); }
+static void radar2_rx_isr(void) { radar_rx_isr(2U); }
+static void radar2_err_isr(void) { radar_err_isr(2U); }
+
+/* ------------------------------ 内部: USART 完整初始化 ------------------------------ */
+static void radar_usart_init(uint8_t port)
 {
-    USART_FuncCmd(RADAR_UART_UNIT, (USART_TX | USART_INT_TX_CPLT), DISABLE);
-    USART_ClearStatus(RADAR_UART_UNIT, USART_FLAG_TX_CPLT);
+    stc_usart_uart_init_t stcInit;
+    float32_t f32Err = 0.0F;
+    uint32_t  psc, c, exp_int, got_int;
+    const radar_hw_t *hw = &s_hw[port];
 
-    s_tx_busy = 0U;                                     /* 发送真正完成, 允许下一帧 */
-}
+    (void)USART_UART_StructInit(&stcInit);
+    stcInit.u32ClockDiv      = radar_pick_clk_div(s_baud[port]);
+    stcInit.u32CKOutput      = USART_CK_OUTPUT_DISABLE;
+    stcInit.u32Baudrate      = s_baud[port];
+    stcInit.u32OverSampleBit = USART_OVER_SAMPLE_8BIT;
 
-static void radar_tx_dma_tc_cb(void)
-{
-    USART_FuncCmd(RADAR_UART_UNIT, USART_INT_TX_CPLT, ENABLE);
-    DMA_ClearTransCompleteStatus(RADAR_TX_DMA_UNIT, RADAR_TX_DMA_TC_FLAG);
-}
+    s_baud_ok[port] = (LL_OK == USART_UART_Init(hw->unit, &stcInit, &f32Err)) ? 1U : 0U;
 
-/* ------------------------------ TX DMA ------------------------------ */
-static int32_t radar_tx_dma_config(void)
-{
-    stc_dma_init_t stcDmaInit;
-    stc_irq_signin_config_t stcIrqSignConfig;
-    int32_t i32Ret;
-
-    RADAR_TX_DMA_FCG_ENABLE();
-    FCG_Fcg0PeriphClockCmd(FCG0_PERIPH_AOS, ENABLE);
-
-    (void)DMA_StructInit(&stcDmaInit);
-    stcDmaInit.u32IntEn       = DMA_INT_ENABLE;
-    stcDmaInit.u32BlockSize   = 1UL;
-    stcDmaInit.u32TransCount  = 1UL;
-    stcDmaInit.u32DataWidth   = DMA_DATAWIDTH_8BIT;
-    stcDmaInit.u32DestAddr    = (uint32_t)(&RADAR_UART_UNIT->TDR);
-    stcDmaInit.u32SrcAddr     = (uint32_t)s_tx_dummy;
-    stcDmaInit.u32SrcAddrInc  = DMA_SRC_ADDR_INC;
-    stcDmaInit.u32DestAddrInc = DMA_DEST_ADDR_FIX;
-    i32Ret = DMA_Init(RADAR_TX_DMA_UNIT, RADAR_TX_DMA_CH, &stcDmaInit);
-    if (LL_OK != i32Ret) { return i32Ret; }
-
-    stcIrqSignConfig.enIntSrc    = RADAR_TX_DMA_TC_INT_SRC;
-    stcIrqSignConfig.enIRQn      = RADAR_TX_DMA_TC_IRQn;
-    stcIrqSignConfig.pfnCallback = &radar_tx_dma_tc_cb;
-    (void)INTC_IrqSignIn(&stcIrqSignConfig);
-    NVIC_ClearPendingIRQ(stcIrqSignConfig.enIRQn);
-    NVIC_SetPriority(stcIrqSignConfig.enIRQn, DDL_IRQ_PRIO_DEFAULT);
-    NVIC_EnableIRQ(stcIrqSignConfig.enIRQn);
-
-    AOS_SetTriggerEventSrc(RADAR_TX_DMA_TRIG_SEL, RADAR_TX_DMA_TRIG_EVT_SRC);
-
-    DMA_Cmd(RADAR_TX_DMA_UNIT, ENABLE);
-    DMA_TransCompleteIntCmd(RADAR_TX_DMA_UNIT, RADAR_TX_DMA_TC_INT, ENABLE);
-
-    return LL_OK;
+    /* 回读校验: 防止返回 OK 却没写进 BRR(现场踩过) */
+    psc     = READ_REG32_BIT(hw->unit->PR, USART_PR_PSC);
+    c       = RADAR_UART_PCLK_HZ >> (psc * 2UL);
+    exp_int = (c / (s_baud[port] * 8UL)) - 1UL;
+    got_int = (hw->unit->BRR >> 8) & 0xFFUL;
+    if (got_int != exp_int) { s_baud_ok[port] = 0U; }
 }
 
 /* ------------------------------ 对外接口 ------------------------------ */
-void radar_port_init(void)
+int32_t radar_port_init(uint8_t port)
 {
-    stc_usart_uart_init_t stcUartInit;
-    stc_irq_signin_config_t stcIrqSigninConfig;
+    stc_irq_signin_config_t cfg;
+    const radar_hw_t *hw;
+    void (*rx_isr)(void);
+    void (*err_isr)(void);
 
-    s_tx_busy = 0U;
-    s_rx_bytes = 0U;
-    s_rx_drop = 0U;
+    if (port >= (uint8_t)RADAR_PORT_CNT) { return LL_ERR_INVD_PARAM; }
+    hw = &s_hw[port];
+
+    s_tx_busy[port] = 0U; s_tx_len[port] = 0U; s_tx_idx[port] = 0U;
+    s_rx_bytes[port] = 0U; s_rx_drop[port] = 0U; s_rx_cb[port] = 0;
 #if (RADAR_BAUD_INIT_FIXED != 0UL)
-    s_baud = RADAR_BAUD_INIT_FIXED;      /* 指定上电波特率(单档定位用) */
+    s_baud[port] = RADAR_BAUD_INIT_FIXED;
 #else
-    s_baud = RADAR_BAUD_FALLBACK;        /* 先按这一档收, 随后由探测逐档试出模块真实波特率 */
+    s_baud[port] = RADAR_BAUD_FALLBACK;
 #endif
 
-    (void)BUF_Init(&s_rx_ring, s_rx_ring_buf, sizeof(s_rx_ring_buf));
-    memset(s_rx_ring_buf, 0, sizeof(s_rx_ring_buf));
+    (void)BUF_Init(&s_rx_ring[port], s_rx_buf[port], sizeof(s_rx_buf[port]));
+    memset(s_rx_buf[port], 0, sizeof(s_rx_buf[port]));
 
-    GPIO_SetFunc(RADAR_UART_RX_PORT, RADAR_UART_RX_PIN, RADAR_UART_RX_FUNC);
-    GPIO_SetFunc(RADAR_UART_TX_PORT, RADAR_UART_TX_PIN, RADAR_UART_TX_FUNC);
+    GPIO_SetFunc((uint8_t)hw->rx_port, (uint16_t)hw->rx_pin, (uint16_t)hw->rx_func);
+    GPIO_SetFunc((uint8_t)hw->tx_port, (uint16_t)hw->tx_pin, (uint16_t)hw->tx_func);
 
-    RADAR_UART_FCG_ENABLE();
+    hw->fcg();
+    USART_DeInit(hw->unit);                    /* 幂等: 先清成确定状态 */
+    radar_usart_init(port);
 
-    /* 先复位到确定状态: 使初始化幂等, 不受上电前残留配置/引导程序影响 */
-    USART_DeInit(RADAR_UART_UNIT);
+    rx_isr  = (port == 0U) ? &radar0_rx_isr  : ((port == 1U) ? &radar1_rx_isr  : &radar2_rx_isr);
+    err_isr = (port == 0U) ? &radar0_err_isr : ((port == 1U) ? &radar1_err_isr : &radar2_err_isr);
 
-    (void)USART_UART_StructInit(&stcUartInit);
-    stcUartInit.u32ClockDiv      = radar_pick_clk_div(s_baud);   /* 分频随波特率走 */
-    stcUartInit.u32CKOutput      = USART_CK_OUTPUT_DISABLE;   /* 同扫描台参考实现: 时钟不输出 */
-    stcUartInit.u32Baudrate      = s_baud;
-    stcUartInit.u32OverSampleBit = USART_OVER_SAMPLE_8BIT;       /* 与 SDK 例程/已验证配置一致 */
-    s_baud_ok = (LL_OK == USART_UART_Init(RADAR_UART_UNIT, &stcUartInit, NULL)) ? 1U : 0U;
+    cfg.enIRQn      = hw->ri_irqn;  cfg.enIntSrc = hw->ri_src;  cfg.pfnCallback = rx_isr;
+    (void)INTC_IrqSignIn(&cfg);
+    NVIC_ClearPendingIRQ(cfg.enIRQn); NVIC_SetPriority(cfg.enIRQn, DDL_IRQ_PRIO_DEFAULT); NVIC_EnableIRQ(cfg.enIRQn);
 
-    (void)radar_tx_dma_config();
+    cfg.enIRQn      = hw->ei_irqn;  cfg.enIntSrc = hw->ei_src;  cfg.pfnCallback = err_isr;
+    (void)INTC_IrqSignIn(&cfg);
+    NVIC_ClearPendingIRQ(cfg.enIRQn); NVIC_SetPriority(cfg.enIRQn, DDL_IRQ_PRIO_DEFAULT); NVIC_EnableIRQ(cfg.enIRQn);
 
-    /* 接收中断(逐字节) —— SDK 例程 usart_uart_int 同款: 先 signin, 再统一 FuncCmd 使能 */
-    stcIrqSigninConfig.enIRQn      = RADAR_UART_RX_IRQn;
-    stcIrqSigninConfig.enIntSrc    = RADAR_UART_RX_INT_SRC;
-    stcIrqSigninConfig.pfnCallback = &radar_rx_ri_cb;
-    (void)INTC_IrqSignIn(&stcIrqSigninConfig);
-    NVIC_ClearPendingIRQ(stcIrqSigninConfig.enIRQn);
-    NVIC_SetPriority(stcIrqSigninConfig.enIRQn, DDL_IRQ_PRIO_DEFAULT);
-    NVIC_EnableIRQ(stcIrqSigninConfig.enIRQn);
-
-    /* 接收错误中断 */
-    stcIrqSigninConfig.enIRQn      = RADAR_UART_RX_ERR_IRQn;
-    stcIrqSigninConfig.enIntSrc    = RADAR_UART_RX_ERR_INT_SRC;
-    stcIrqSigninConfig.pfnCallback = &radar_rx_err_cb;
-    (void)INTC_IrqSignIn(&stcIrqSigninConfig);
-    NVIC_ClearPendingIRQ(stcIrqSigninConfig.enIRQn);
-    NVIC_SetPriority(stcIrqSigninConfig.enIRQn, DDL_IRQ_PRIO_DEFAULT);
-    NVIC_EnableIRQ(stcIrqSigninConfig.enIRQn);
-
-    /* 发送完成 */
-    stcIrqSigninConfig.enIRQn      = RADAR_UART_TX_CPLT_IRQn;
-    stcIrqSigninConfig.enIntSrc    = RADAR_UART_TX_CPLT_INT_SRC;
-    stcIrqSigninConfig.pfnCallback = &radar_tx_complete_cb;
-    (void)INTC_IrqSignIn(&stcIrqSigninConfig);
-    NVIC_ClearPendingIRQ(stcIrqSigninConfig.enIRQn);
-    NVIC_SetPriority(stcIrqSigninConfig.enIRQn, DDL_IRQ_PRIO_DEFAULT);
-    NVIC_EnableIRQ(stcIrqSigninConfig.enIRQn);
-
-    USART_FuncCmd(RADAR_UART_UNIT, (USART_RX | USART_TX | USART_INT_RX), ENABLE);
-}
-
-int32_t radar_port_write(const uint8_t *buf, uint16_t len)
-{
-    if ((buf == 0) || (len == 0U) || (len > RADAR_TX_MAX)) { return LL_ERR_INVD_PARAM; }
-    if (s_tx_busy != 0U) { return LL_ERR_BUSY; }
-
-    s_tx_busy = 1U;
-    s_tx_ms   = m_u32Tickms;
-
-    (void)DMA_SetSrcAddr(RADAR_TX_DMA_UNIT, RADAR_TX_DMA_CH, (uint32_t)buf);
-    (void)DMA_SetTransCount(RADAR_TX_DMA_UNIT, RADAR_TX_DMA_CH, len);
-    (void)DMA_ChCmd(RADAR_TX_DMA_UNIT, RADAR_TX_DMA_CH, ENABLE);
-    USART_FuncCmd(RADAR_UART_UNIT, USART_TX, ENABLE);
+    USART_FuncCmd(hw->unit, (USART_RX | USART_TX | USART_INT_RX), ENABLE);
 
     return LL_OK;
 }
 
-uint8_t radar_port_tx_busy(void)
+int32_t radar_port_write(uint8_t port, const uint8_t *buf, uint16_t len)
 {
-    return s_tx_busy;
+    uint16_t i;
+
+    if ((port >= (uint8_t)RADAR_PORT_CNT) || (buf == 0) || (len == 0U) || (len > RADAR_TX_MAX)) { return LL_ERR_INVD_PARAM; }
+    if (s_tx_busy[port] != 0U) { return LL_ERR_BUSY; }
+
+    for (i = 0U; i < len; i++) { s_tx_buf[port][i] = buf[i]; }
+    s_tx_len[port]  = len;
+    s_tx_idx[port]  = 0U;
+    s_tx_busy[port] = 1U;
+    s_tx_ms[port]   = m_u32Tickms;
+
+    return LL_OK;
 }
 
-/* 兜底: 发送完成后 DMA TC -> 使能 USART TCI -> 清 s_tx_busy。
- * 若这条链任何一环没来, s_tx_busy 会一直为 1, 之后所有命令都发不出去(返回 LL_ERR_BUSY)。
- * 这里按时间兜底: 超过 RADAR_TX_TIMEOUT_MS 仍未完成 -> 复位 TX 通路并放行。 */
-void radar_port_tx_watchdog(uint32_t now_ms)
+uint8_t radar_port_tx_busy(uint8_t port)
 {
-    if (s_tx_busy == 0U) { return; }
-    if ((now_ms - s_tx_ms) < RADAR_TX_TIMEOUT_MS) { return; }
-
-    (void)DMA_ChCmd(RADAR_TX_DMA_UNIT, RADAR_TX_DMA_CH, DISABLE);
-    USART_FuncCmd(RADAR_UART_UNIT, (USART_TX | USART_INT_TX_CPLT), DISABLE);
-    DMA_ClearTransCompleteStatus(RADAR_TX_DMA_UNIT, RADAR_TX_DMA_TC_FLAG);
-    USART_ClearStatus(RADAR_UART_UNIT, USART_FLAG_TX_CPLT);
-
-    s_tx_busy = 0U;
+    return (port < (uint8_t)RADAR_PORT_CNT) ? s_tx_busy[port] : 0U;
 }
 
-/* 丢弃接收缓冲里『上一个波特率』的残留字节。换档时调用, 避免用旧档的字节误判。
- * 逐字节中断方案下只剩清缓冲, 不再需要动 DMA/AOS。 */
-void radar_port_rx_flush(void)
+/* 发送泵: 轮询 TXE 逐字节写(不用 DMA/中断)。调用频率足够高即可, 字节间偶有空隙无害。 */
+static void radar_tx_pump(uint8_t port)
 {
-    uint32_t primask = __get_PRIMASK();
+    CM_USART_TypeDef *u = s_hw[port].unit;
 
+    if (s_tx_busy[port] == 0U) { return; }
+
+    if (s_tx_idx[port] < s_tx_len[port])
+    {
+        if (SET == USART_GetStatus(u, USART_FLAG_TX_EMPTY))
+        {
+            USART_WriteData(u, (uint16_t)s_tx_buf[port][s_tx_idx[port]]);
+            s_tx_idx[port]++;
+        }
+    }
+    else if (SET == USART_GetStatus(u, USART_FLAG_TX_CPLT))
+    {
+        s_tx_busy[port] = 0U;                  /* 全部发完 */
+    }
+}
+
+void radar_port_tx_watchdog(uint8_t port, uint32_t now_ms)
+{
+    if (port >= (uint8_t)RADAR_PORT_CNT) { return; }
+    if (s_tx_busy[port] == 0U) { return; }
+    if ((now_ms - s_tx_ms[port]) < RADAR_TX_TIMEOUT_MS) { return; }
+
+    s_tx_busy[port] = 0U;                      /* 兜底放行 */
+    USART_ClearStatus(s_hw[port].unit, USART_FLAG_TX_CPLT);
+}
+
+void radar_port_rx_flush(uint8_t port)
+{
+    uint32_t primask;
+
+    if (port >= (uint8_t)RADAR_PORT_CNT) { return; }
+
+    primask = __get_PRIMASK();
     __disable_irq();
-    (void)BUF_Init(&s_rx_ring, s_rx_ring_buf, sizeof(s_rx_ring_buf));
+    (void)BUF_Init(&s_rx_ring[port], s_rx_buf[port], sizeof(s_rx_buf[port]));
     __set_PRIMASK(primask);
 }
 
-/* 换波特率: 分频按新波特率重选, 再算 BRR; 失败置 s_baud_ok=0 供上层跳过该档。
- * 不再需要停/重挂 DMA —— 这是逐字节中断方案带来的最大好处。 */
-/* 换波特率: **走初始化路径**(USART_UART_Init), 不再用运行时 USART_SetBaudrate()。
- * 原因(2026-09-14 现场用 BRR 指纹查出): 运行时 SetClockDiv+SetBaudrate 即使返回 LL_OK,
- * BRR 也可能没真正改变 —— 现象是 g_radar_baud 显示 460800, 而 BRR 整数分频仍是 256000 的值(47),
- * 于是自适应在 460800 档收到的是模块 256000 的帧, 被误判成已锁定。
- * 初始化路径已被现场证明能正确写入(INIT_FIXED=460800 那版就是靠它通的), 所以换档也用它。
- * 逐字节中断方案下换档不需要碰 DMA, 重新 Init 之后把 RX/TX 再使能一次即可。 */
-/* 换波特率: **只动 PR + BRR**(最小改动), 并且**写完回读确认**, 不信任返回值。
- * 1) 先按新波特率选分频并写 PR, 再算 BRR(DIV_Integer = C/(B*8*(2-OVER8)) - 1) 写进去;
- * 2) 回读 BRR 的整数分频, 与我们的期望值比对:
- *      - 一致 -> 生效(正常路径, 不动其它寄存器, RX/TX 保持使能);
- *      - 不一致 -> 说明这条最小写路径在当前状态下没写进去, 退回**完整初始化**兜底
- *        (USART_UART_Init 重写 CR1/CR2/CR3/PR/BRR, 之后必须重新使能 RX/TX)。
- * 之所以要回读: 现场曾出现 USART_SetBaudrate() 返回 LL_OK 但 BRR 没变的静默失败,
- *           软件记录值(460800)与硬件真值(256000)不一致, 直接把自适应带偏。 */
-/* 换波特率: **整套重来一遍, 不留任何痕迹** ——
- *   关收发 -> USART_DeInit(把 CR1/CR2/CR3/PR/BRR 全部清回默认) -> 重新 StructInit + Init
- *   -> 清状态标志与 NVIC 挂起 -> 重新使能收发 -> 清环形缓冲。
- * 不再用只改 PR+BRR 的最小写法: 换档本来就极少发生(自适应探测每档一次),
- * 一次干净的重初始化比省几个寄存器写更可靠、更好推理。
- * 仍保留一道**回读校验**: Init 之后按 PR 反推 C, 核对 BRR 整数分频是否等于
- *   DIV_Integer = C/(B*8*(2-OVER8)) - 1
- * 因为现场出现过返回 LL_OK 但没写进 BRR 的静默失败, 结果记入 s_baud_ok / g_radar_comm 的 0x400 位。 */
-void radar_port_set_baud(uint32_t baud)
+/* 换波特率: 整套重来一遍, 不留任何痕迹(关收发 -> DeInit -> 重新初始化 -> 清状态 -> 重开收发) */
+void radar_port_set_baud(uint8_t port, uint32_t baud)
 {
-    stc_usart_uart_init_t stcUartInit;
-    float32_t f32Err = 0.0F;
-    uint32_t  psc;
-    uint32_t  c;
-    uint32_t  exp_int;
-    uint32_t  got_int;
+    if (port >= (uint8_t)RADAR_PORT_CNT) { return; }
 
-    /* 1) 先停收发, 再整片复位 */
-    /* TX DMA 的残留传输也要一起停: USART 侧已被 DeInit 清掉, DMA 若还挂着会留下『半截发送』 */
-    (void)DMA_ChCmd(RADAR_TX_DMA_UNIT, RADAR_TX_DMA_CH, DISABLE);
-    DMA_ClearTransCompleteStatus(RADAR_TX_DMA_UNIT, RADAR_TX_DMA_TC_FLAG);
-    USART_FuncCmd(RADAR_UART_UNIT, (USART_RX | USART_TX | USART_INT_RX), DISABLE);
-    USART_DeInit(RADAR_UART_UNIT);
+    USART_FuncCmd(s_hw[port].unit, (USART_RX | USART_TX | USART_INT_RX), DISABLE);
+    USART_DeInit(s_hw[port].unit);
 
-    /* 2) 完整(重新)初始化 */
-    (void)USART_UART_StructInit(&stcUartInit);
-    stcUartInit.u32ClockDiv      = radar_pick_clk_div(baud);   /* 分频随波特率走 */
-    stcUartInit.u32CKOutput      = USART_CK_OUTPUT_DISABLE;
-    stcUartInit.u32Baudrate      = baud;
-    stcUartInit.u32OverSampleBit = USART_OVER_SAMPLE_8BIT;
+    s_baud[port]    = baud;
+    s_tx_busy[port] = 0U;
+    radar_usart_init(port);
 
-    s_baud    = baud;
-    s_baud_ok = (LL_OK == USART_UART_Init(RADAR_UART_UNIT, &stcUartInit, &f32Err)) ? 1U : 0U;
-
-    /* 3) 回读校验: 防止返回 OK 却没写进 BRR(现场踩过) */
-    psc     = READ_REG32_BIT(RADAR_UART_UNIT->PR, USART_PR_PSC);
-    c       = RADAR_UART_PCLK_HZ >> (psc * 2UL);
-    exp_int = (c / (baud * 8UL)) - 1UL;
-    got_int = (RADAR_UART_UNIT->BRR >> 8) & 0xFFUL;
-    if (got_int != exp_int) { s_baud_ok = 0U; }
-
-    /* 4) 不留痕迹: 清状态标志 / NVIC 挂起 / 发送忙标志, 再开收发并清缓冲 */
-    USART_ClearStatus(RADAR_UART_UNIT, (USART_FLAG_PARITY_ERR | USART_FLAG_FRAME_ERR |
+    USART_ClearStatus(s_hw[port].unit, (USART_FLAG_PARITY_ERR | USART_FLAG_FRAME_ERR |
                                        USART_FLAG_OVERRUN | USART_FLAG_TX_CPLT));
-    NVIC_ClearPendingIRQ(RADAR_UART_RX_IRQn);
-    NVIC_ClearPendingIRQ(RADAR_UART_TX_CPLT_IRQn);
-    s_tx_busy = 0U;
+    NVIC_ClearPendingIRQ(s_hw[port].ri_irqn);
+    NVIC_ClearPendingIRQ(s_hw[port].ei_irqn);
 
-    USART_FuncCmd(RADAR_UART_UNIT, (USART_RX | USART_TX | USART_INT_RX), ENABLE);
-    radar_port_rx_flush();
+    USART_FuncCmd(s_hw[port].unit, (USART_RX | USART_TX | USART_INT_RX), ENABLE);
+    radar_port_rx_flush(port);
 }
 
-uint32_t radar_port_baud_actual(void)
+uint32_t radar_port_get_baud(uint8_t port)   { return s_baud[port]; }
+uint8_t  radar_port_baud_ok(uint8_t port)    { return s_baud_ok[port]; }
+uint32_t radar_port_brr(uint8_t port)        { return s_hw[port].unit->BRR; }
+uint32_t radar_port_rx_bytes(uint8_t port)   { return s_rx_bytes[port]; }
+uint32_t radar_port_rx_drop(uint8_t port)    { return s_rx_drop[port]; }
+
+/* 硬件实际在跑的波特率(PR 分频 + BRR 整数分频反推, 就近取协议表档位) */
+uint32_t radar_port_baud_actual(uint8_t port)
 {
     static const uint32_t tab[] = RADAR_BAUD_TABLE;
-    uint32_t psc = READ_REG32_BIT(RADAR_UART_UNIT->PR, USART_PR_PSC);
-    uint32_t c   = RADAR_UART_PCLK_HZ >> (psc * 2UL);
-    uint32_t k   = ((RADAR_UART_UNIT->BRR >> 8) & 0xFFUL) + 1UL;
-    uint32_t approx;
-    uint32_t best = 0UL;
-    uint32_t diff;
-    uint32_t bestdiff = 0xFFFFFFFFUL;
+    uint32_t psc, c, k, approx, best = 0UL, diff, bestdiff = 0xFFFFFFFFUL;
     uint8_t  i;
 
+    psc = READ_REG32_BIT(s_hw[port].unit->PR, USART_PR_PSC);
+    c   = RADAR_UART_PCLK_HZ >> (psc * 2UL);
+    k   = ((s_hw[port].unit->BRR >> 8) & 0xFFUL) + 1UL;
     if (k == 0UL) { return 0UL; }
     approx = c / (8UL * k);
 
@@ -324,47 +258,25 @@ uint32_t radar_port_baud_actual(void)
         diff = (approx > tab[i]) ? (approx - tab[i]) : (tab[i] - approx);
         if (diff < bestdiff) { bestdiff = diff; best = tab[i]; }
     }
-
     return best;
 }
-uint32_t radar_port_get_baud(void)
+
+void radar_port_set_rx_handler(uint8_t port, void (*handler)(const uint8_t *data, uint16_t len))
 {
-    return s_baud;
+    if (port < (uint8_t)RADAR_PORT_CNT) { s_rx_cb[port] = handler; }
 }
 
-uint8_t radar_port_baud_ok(void)
-{
-    return s_baud_ok;
-}
-
-/* 当前 BRR 寄存器值(回读): 高字节 = 整数分频, 用来反查硬件真正生效的波特率 */
-uint32_t radar_port_brr(void)
-{
-    return RADAR_UART_UNIT->BRR;
-}
-
-void radar_port_set_rx_handler(void (*handler)(const uint8_t *data, uint16_t len))
-{
-    s_rx_cb = handler;
-}
-
-void radar_port_poll(void)
+void radar_port_poll(uint8_t port)
 {
     uint8_t b;
 
-    while (BUF_UsedSize(&s_rx_ring) > 0U)
+    if (port >= (uint8_t)RADAR_PORT_CNT) { return; }
+
+    radar_tx_pump(port);
+
+    while (BUF_UsedSize(&s_rx_ring[port]) > 0U)
     {
-        if (BUF_Read(&s_rx_ring, &b, 1U) != 1U) { break; }
-        if (s_rx_cb != 0) { s_rx_cb(&b, 1U); }
+        if (BUF_Read(&s_rx_ring[port], &b, 1U) != 1U) { break; }
+        if (s_rx_cb[port] != 0) { s_rx_cb[port](&b, 1U); }
     }
-}
-
-uint32_t radar_port_rx_drop(void)
-{
-    return s_rx_drop;
-}
-
-uint32_t radar_port_rx_bytes(void)
-{
-    return s_rx_bytes;
 }

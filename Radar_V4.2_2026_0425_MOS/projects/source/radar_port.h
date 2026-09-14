@@ -1,42 +1,26 @@
 /*******************************************************************************
- * radar_port.h -- 雷达串口硬件层(USART1 + DMA2 + TMR0 空闲超时)
- * 只负责"搬运字节", 不含任何协议语义。
+ * radar_port.h -- 雷达串口硬件层(多口: 每口一个 USART + 逐字节中断接收 + 轮询发送)
  ******************************************************************************/
 #ifndef __RADAR_PORT_H__
 #define __RADAR_PORT_H__
 
 #include "radar_cfg.h"
 
-/* 初始化: 引脚/时钟/USART/DMA/TMR0/中断/缓冲 */
-void radar_port_init(void);
+#define RADAR_PORT_CNT                  (3U)      /* 雷达口数量(与 RADARn_UART_* 对应) */
 
-/* 非阻塞发送: 0 = 已启动, <0 = 忙或参数错误 */
-int32_t radar_port_write(const uint8_t *buf, uint16_t len);
-uint8_t radar_port_tx_busy(void);
-
-/* 发送完成中断没来时的兜底: 主循环调用; 超过 RADAR_TX_TIMEOUT_MS 未完成 -> 复位 TX 通路并放行 */
-void radar_port_tx_watchdog(uint32_t now_ms);
-
-
-/* 修改波特率(用于自适应探测); 内部会先丢弃接收缓冲里旧波特率的残留字节 */
-void radar_port_set_baud(uint32_t baud);
-
-/* 丢弃接收缓冲与 DMA 窗口里的残留字节 */
-void radar_port_rx_flush(void);
-uint32_t radar_port_get_baud(void);
-/* 当前波特率是否表示得出来(0 = 分频/BRR 设不下, 探测时应跳过该档) */
-uint8_t radar_port_baud_ok(void);
-uint32_t radar_port_brr(void);
-uint32_t radar_port_baud_actual(void);   /* 硬件实际波特率(反推), 用于识别换档没生效 */
-
-/* 收到字节时的回调(data 可能是 1 字节) */
-void radar_port_set_rx_handler(void (*handler)(const uint8_t *data, uint16_t len));
-
-/* 主循环调用: 把中断收到的字节交给上层回调 */
-void radar_port_poll(void);
-
-/* 统计: 接收缓冲丢弃字节数 / 接收到的总字节数 */
-uint32_t radar_port_rx_drop(void);
-uint32_t radar_port_rx_bytes(void);
+int32_t  radar_port_init(uint8_t port);
+int32_t  radar_port_write(uint8_t port, const uint8_t *buf, uint16_t len);
+uint8_t  radar_port_tx_busy(uint8_t port);
+void     radar_port_tx_watchdog(uint8_t port, uint32_t now_ms);
+void     radar_port_set_baud(uint8_t port, uint32_t baud);
+void     radar_port_rx_flush(uint8_t port);
+uint32_t radar_port_get_baud(uint8_t port);
+uint8_t  radar_port_baud_ok(uint8_t port);   /* 0 = 该档分频/BRR 没设下(换档失败) */
+uint32_t radar_port_brr(uint8_t port);       /* BRR 回读: 高字节=整数分频 */
+uint32_t radar_port_baud_actual(uint8_t port);   /* 硬件实际波特率(反推) */
+void     radar_port_set_rx_handler(uint8_t port, void (*handler)(const uint8_t *data, uint16_t len));
+void     radar_port_poll(uint8_t port);      /* 主循环调用: 发送泵 + 环形缓冲交给上层 */
+uint32_t radar_port_rx_drop(uint8_t port);
+uint32_t radar_port_rx_bytes(uint8_t port);
 
 #endif /* __RADAR_PORT_H__ */
