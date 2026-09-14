@@ -15,6 +15,9 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 
 ## [Unreleased]
 
+- `[hc32f460]` **fix**: 运行中重初始化 USART（换波特率）时，**TX DMA 的残留传输一并停掉**（`DMA_ChCmd(DISABLE)` + 清 TC 标志），放在关收发之后、`USART_DeInit()` 之前。
+  说明：RX 侧已无 DMA（逐字节 RI 中断方案），不需要处理；TX 侧的 **DMA 通道配置与 AOS 触发映射都在 DMA/AOS 外设里，不受 USART 重初始化影响，无需重新初始化**，但**在途传输的状态必须清**——否则 USART 被 DeInit 后 DMA 还挂着半截发送，会留下脏状态。
+
 - `[hc32f460]` **fix（按现场口径）**：**换波特率一律整套重来、不留任何痕迹** —— `radar_port_set_baud()` 现在固定执行：关收发 → `USART_DeInit()`（CR1/CR2/CR3/PR/BRR 全部清回默认）→ `StructInit` + `USART_UART_Init()`（分频随波特率选、`CKOutput` 不输出、8 倍过采样）→ 清 PE/FE/ORE/TX_CPLT 状态 → 清 RX/TX 的 NVIC 挂起 → 复位 `s_tx_busy` → 重新使能 `RX|TX|INT_RX` → 清环形缓冲。删除了上一版『只改 PR+BRR』的最小写法。
   保留一道**回读校验**（Init 后按 PR 反推 C，核对 BRR 整数分频 = `C/(B*8*(2-OVER8))-1`），失败即置 `s_baud_ok=0` —— 这是针对现场『返回 LL_OK 却没写进 BRR』那次静默失败的保险。`USART_DeInit()` 同时保留在**初始化路径**（FCG 使能之后），使初始化幂等。Code 26488，构建 0 Error / 0 Warning。
 

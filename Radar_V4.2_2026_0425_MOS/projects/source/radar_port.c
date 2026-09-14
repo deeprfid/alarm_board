@@ -270,6 +270,9 @@ void radar_port_set_baud(uint32_t baud)
     uint32_t  got_int;
 
     /* 1) 先停收发, 再整片复位 */
+    /* TX DMA 的残留传输也要一起停: USART 侧已被 DeInit 清掉, DMA 若还挂着会留下『半截发送』 */
+    (void)DMA_ChCmd(RADAR_TX_DMA_UNIT, RADAR_TX_DMA_CH, DISABLE);
+    DMA_ClearTransCompleteStatus(RADAR_TX_DMA_UNIT, RADAR_TX_DMA_TC_FLAG);
     USART_FuncCmd(RADAR_UART_UNIT, (USART_RX | USART_TX | USART_INT_RX), DISABLE);
     USART_DeInit(RADAR_UART_UNIT);
 
