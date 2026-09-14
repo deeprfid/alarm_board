@@ -41,6 +41,51 @@
 #define RADAR_UART_RX_PIN               (GPIO_PIN_03)
 #define RADAR_UART_RX_FUNC              (GPIO_FUNC_33)
 
+
+
+#define RADAR2_UART_UNIT                 (CM_USART2)
+#define RADAR2_UART_FCG_ENABLE()         (FCG_Fcg1PeriphClockCmd(FCG1_PERIPH_USART2, ENABLE))
+
+#define RADAR2_UART_TX_PORT              (GPIO_PORT_A)   /* PA0 */
+#define RADAR2_UART_TX_PIN               (GPIO_PIN_00)
+#define RADAR2_UART_TX_FUNC              (GPIO_FUNC_36)
+
+#define RADAR2_UART_RX_PORT              (GPIO_PORT_A)   /* PA1 */
+#define RADAR2_UART_RX_PIN               (GPIO_PIN_01)
+#define RADAR2_UART_RX_FUNC              (GPIO_FUNC_37)
+
+
+#define RADAR3_UART_UNIT                 (CM_USART3)
+#define RADAR3_UART_FCG_ENABLE()         (FCG_Fcg1PeriphClockCmd(FCG1_PERIPH_USART3, ENABLE))
+
+#define RADAR3_UART_TX_PORT              (GPIO_PORT_B)   /* PB14 */
+#define RADAR3_UART_TX_PIN               (GPIO_PIN_14)
+#define RADAR3_UART_TX_FUNC              (GPIO_FUNC_32)
+
+#define RADAR3_UART_RX_PORT              (GPIO_PORT_B)   /* PB15 */
+#define RADAR3_UART_RX_PIN               (GPIO_PIN_15)
+#define RADAR3_UART_RX_FUNC              (GPIO_FUNC_33)
+
+/* ============================ 雷达2/雷达3 中断线(三口各自独立) ============================
+ * 雷达1 用 INT012(RI) / INT008(EI) / INT007(TCI); 这里给雷达2/雷达3 分配 INT013~INT018。
+ * 每口 3 条: RI(收满) / EI(帧错等) / TCI(发送完成)。定时器不需要 —— 帧间隔用全局 m_u32Tickms。 */
+#define RADAR2_UART_RX_IRQn             (INT013_IRQn)
+#define RADAR2_UART_RX_INT_SRC          (INT_SRC_USART2_RI)
+#define RADAR2_UART_RX_ERR_IRQn         (INT014_IRQn)
+#define RADAR2_UART_RX_ERR_INT_SRC      (INT_SRC_USART2_EI)
+#define RADAR2_UART_TX_CPLT_IRQn        (INT015_IRQn)
+#define RADAR2_UART_TX_CPLT_INT_SRC     (INT_SRC_USART2_TCI)
+
+#define RADAR3_UART_RX_IRQn             (INT016_IRQn)
+#define RADAR3_UART_RX_INT_SRC          (INT_SRC_USART3_RI)
+#define RADAR3_UART_RX_ERR_IRQn         (INT017_IRQn)
+#define RADAR3_UART_RX_ERR_INT_SRC      (INT_SRC_USART3_EI)
+#define RADAR3_UART_TX_CPLT_IRQn        (INT018_IRQn)
+#define RADAR3_UART_TX_CPLT_INT_SRC     (INT_SRC_USART3_TCI)
+
+
+
+
 /* USART 挂的 PCLK1 频率(本工程 HCLK=200MHz、PCLK1=DIV2 -> 100MHz); 用于按波特率选分频 */
 #define RADAR_UART_PCLK_HZ              (100000000UL)
 /* ============================ 模块波特率目标值(产线配置, 可选) ============================
