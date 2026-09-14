@@ -30,6 +30,7 @@ volatile uint32_t          g_radar_brr;   /* 波特率寄存器实际值(16倍过采样: 9600
 volatile uint32_t          g_radar_rx_bytes;
 volatile uint32_t          g_radar_pin_low;
 volatile uint32_t          g_radar_dma_left;
+volatile uint32_t          g_radar_rx_err;   /* RX 错误中断(帧错/校验错/溢出)次数 */
 static void (*s_rx_cb)(const uint8_t *data, uint16_t len) = 0;
 
 /* ------------------------------ 中断回调 ------------------------------ */
@@ -74,6 +75,7 @@ static void radar_tx_complete_cb(void)
 
 static void radar_rx_error_cb(void)
 {
+    g_radar_rx_err++;
     (void)USART_ReadData(RADAR_UART_UNIT);
     USART_ClearStatus(RADAR_UART_UNIT,
                       (USART_FLAG_PARITY_ERR | USART_FLAG_FRAME_ERR | USART_FLAG_OVERRUN));

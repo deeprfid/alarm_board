@@ -88,8 +88,12 @@
  * 结论: 只要 460800 一档 -> DIV4 + 8 倍(现场确认可用的组合);
  *       要 9600~460800 全档 -> DIV4 + 16 倍 或 DIV16 + 8 倍(两者误差都在 0.22% 以内)。
  */
-#define RADAR_BAUD_CLK_DIV              (USART_CLK_DIV16)
+#define RADAR_BAUD_CLK_DIV              (USART_CLK_DIV64)
 #define RADAR_BAUD_OVER_SAMPLE          (USART_OVER_SAMPLE_8BIT)
+/* ↑ 当前试验档: DIV64 + 8 倍 = SDK 例程同款(例程里 115200 / 9600 都用 DIV64), C = 1.5625MHz;
+ *   9600 用 int=19 + frac=124 表示(BRR=0x137C, 回读应为 0x13FC), 误差 +0.13%。
+ *   注意: 这一档 **>=230400 三档全部算不出来**, 只用于本次 9600 试验;
+ *   量产仍按 DIV4 + 8 倍(460800 单档, 现场确认可用)。 */
 /* 波特率 -> 协议表 6 索引(0x00A1 用), 索引 = 位置 + 1 */
 #define RADAR_BAUD_IDX_TABLE            { 9600UL, 19200UL, 38400UL, 57600UL, 115200UL, 230400UL, 256000UL, 460800UL }
 #define RADAR_BAUD_IDX_TABLE_CNT        (8U)
