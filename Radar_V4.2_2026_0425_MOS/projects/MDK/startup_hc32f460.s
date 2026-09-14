@@ -224,7 +224,7 @@ Reset_Handler   PROC
                 IMPORT  SystemInit
                 IMPORT  __main
 SET_SRAM3_WAIT
-                LDR     R0, =0x40050804
+                 LDR     R0, =0x40050804
                 MOV     R1, #0x77
                 STR     R1, [R0]
 

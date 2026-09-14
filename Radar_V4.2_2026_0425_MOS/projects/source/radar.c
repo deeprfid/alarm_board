@@ -25,6 +25,7 @@ static uint8_t          s_baud_locked;
  *                  bit0..bit7 = 各候选档是否收到过字节, 顺序同 RADAR_BAUD_TABLE:
  *                     bit0=256000 bit1=460800 bit2=115200 bit3=9600
  *                     bit4=19200  bit5=38400  bit6=57600  bit7=230400
+ *                  bit24..bit31 = **最近 1 秒收到的合法上报帧数**(即帧率, 单位 Hz)
  *                  0x100 = 曾解出过合法上报帧(乱码凑不出来)
  *                  0x200 = 最近 1 秒内仍有合法帧(正在正常通信)
  *                  0x400 = 锁定档位的 SetBaudrate/Init 返回 LL_OK(波特率真的写进硬件了)
@@ -41,6 +42,9 @@ volatile uint32_t          g_radar_comm;
 static uint32_t            s_rep_last_ms;   /* 最近一次解出合法上报帧的时刻 */
 static uint32_t            s_probe_rx0;     /* 进入当前候选档时的累计接收字节数 */
 static uint32_t            s_comm_map;      /* 各候选档是否收到过字节 -> g_radar_comm 的 bit0..7 */
+static uint32_t            s_fps_ms;        /* 帧率统计窗口起点 */
+static uint32_t            s_fps_cnt;       /* 本窗口内收到的合法上报帧数 */
+static uint32_t            s_fps;           /* 上一秒的帧率(Hz) */
 static uint8_t          s_presence_src = RADAR_SRC_OUT;
 static uint8_t          s_probe_st = 0U;      /* 0=待启动 1=已切波特率待发 2=等 ACK 3=收尾 9=结束 */
 static uint8_t          s_probe_idx;
@@ -79,6 +83,7 @@ static void radar_on_bytes(const uint8_t *data, uint16_t len)
                     s_rep_frames++;
                     s_dev[0].last_rx_ms = m_u32Tickms;
                     s_rep_last_ms = m_u32Tickms;
+                    s_fps_cnt++;
                     s_reports++;
                 }
             }
@@ -705,7 +710,14 @@ void radar_poll(void)
     if (s_reports != 0U)                        { g_radar_comm |= 0x100UL; }
     if ((m_u32Tickms - s_rep_last_ms) <= 1000U) { g_radar_comm |= 0x200UL; }
     if (radar_port_baud_ok() != 0U)             { g_radar_comm |= 0x400UL; }
+    if ((m_u32Tickms - s_fps_ms) >= 1000U)                      /* 每秒结算一次帧率 */
+    {
+        s_fps     = s_fps_cnt;
+        s_fps_cnt = 0U;
+        s_fps_ms  = m_u32Tickms;
+    }
     g_radar_comm |= ((radar_port_brr() >> 8) & 0xFFUL) << 16;   /* BRR 整数分频指纹 */
+    g_radar_comm |= (s_fps & 0xFFUL) << 24;                     /* 最近 1 秒的合法帧数 = 帧率 */
 }
 
 /* ------------------------------ 状态查询 ------------------------------ */
