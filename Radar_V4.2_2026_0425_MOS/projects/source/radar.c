@@ -23,7 +23,7 @@ static uint8_t          s_baud_locked;
  *   g_radar_baud : 当前波特率(软件记录的档位; 是否真写进硬件见 g_radar_comm 的 0x400)
  *   g_radar_comm : 位图 + 标志位 + **BRR 整数分频指纹**, 一个数即可定位:
  *                  bit0..bit7 = 各候选档是否收到过字节, 顺序同 RADAR_BAUD_TABLE:
- *                     bit0=460800 bit1=256000 bit2=115200 bit3=9600
+ *                     bit0=256000 bit1=460800 bit2=115200 bit3=9600
  *                     bit4=19200  bit5=38400  bit6=57600  bit7=230400
  *                  0x100 = 曾解出过合法上报帧(乱码凑不出来)
  *                  0x200 = 最近 1 秒内仍有合法帧(正在正常通信)
