@@ -255,6 +255,12 @@ uint8_t radar_port_baud_ok(void)
     return s_baud_ok;
 }
 
+/* 当前 BRR 寄存器值(回读): 高字节 = 整数分频, 用来反查硬件真正生效的波特率 */
+uint32_t radar_port_brr(void)
+{
+    return RADAR_UART_UNIT->BRR;
+}
+
 void radar_port_set_rx_handler(void (*handler)(const uint8_t *data, uint16_t len))
 {
     s_rx_cb = handler;
