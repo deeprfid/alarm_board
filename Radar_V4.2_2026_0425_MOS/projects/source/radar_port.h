@@ -28,6 +28,12 @@ extern volatile uint32_t g_radar_rx_bytes;
 extern volatile uint32_t g_radar_pin_low;
 extern volatile uint32_t g_radar_dma_left;
 extern volatile uint32_t g_radar_rx_err;
+extern volatile uint32_t g_radar_low_pct;
+extern volatile uint32_t g_radar_bps;
+extern volatile uint32_t g_radar_dma_fill;
+extern volatile uint32_t g_radar_poll_hz;
+extern volatile uint32_t g_radar_to_hz;
+extern volatile uint32_t g_radar_win_hz;
 
 /* 诊断计数(Keil Watch 里直接看这几个名字):
  *   g_radar_tx_dma_tc_cnt : TX DMA 传输完成次数    (0 = DMA 根本没跑/没触发)
