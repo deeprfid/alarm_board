@@ -26,6 +26,7 @@ volatile uint32_t          g_radar_tx_timeout_cnt;
 static volatile uint32_t   s_rx_bytes;
 static volatile uint32_t   s_rx_drop;
 static uint32_t            s_baud;
+volatile uint32_t          g_radar_brr;   /* 波特率寄存器实际值(16倍过采样: 9600->0xA17F=41471, 460800->0x0262=610) */
 static void (*s_rx_cb)(const uint8_t *data, uint16_t len) = 0;
 
 /* ------------------------------ 中断回调 ------------------------------ */
@@ -227,11 +228,16 @@ void radar_port_init(void)
     stcUartInit.u32ClockDiv      = USART_CLK_DIV4;
     stcUartInit.u32CKOutput      = USART_CK_OUTPUT_ENABLE;
     stcUartInit.u32Baudrate      = s_baud;
-    stcUartInit.u32OverSampleBit = USART_OVER_SAMPLE_8BIT;
+    /* 16 倍过采样(不是 8 倍): DDL 的整数分频只有 8 位(<=255), 25MHz 时钟下 8 倍过采样的
+     * 最低波特率是 12207 -> **9600 算不出来**, USART_SetBaudrate 会失败且**不写 BRR**。
+     * 16 倍下最低 6103, 协议表 6 的 8 档(9600~460800)全部可精确表示。 */
+    stcUartInit.u32OverSampleBit = USART_OVER_SAMPLE_16BIT;
     (void)USART_UART_Init(RADAR_UART_UNIT, &stcUartInit, NULL);
 
     (void)radar_dma_config();
     radar_tmr0_config(RADAR_RX_TIMEOUT_BITS);
+
+    g_radar_brr = RADAR_UART_UNIT->BRR;      /* 回读: 确认初始化时波特率真的写进去了 */
 
     /* TX 完成 */
     stcIrqSigninConfig.enIRQn      = RADAR_UART_TX_CPLT_IRQn;
@@ -330,6 +336,7 @@ void radar_port_set_baud(uint32_t baud)
 
     s_baud = baud;
     (void)USART_SetBaudrate(RADAR_UART_UNIT, baud, &f32Err);
+    g_radar_brr = RADAR_UART_UNIT->BRR;
     radar_port_rx_flush();          /* 换波特率后, 旧波特率的残留字节全部作废 */
 }
 

@@ -73,7 +73,7 @@
  * 现场实测: 模块在 460800、驱动在初始化时就设 460800 -> 通信正常;
  *           而"先按 256000 初始化、运行时再切到 460800" -> 不通(见 docs 里的调试记录)。
  * 因此本产品按"固定 460800"使用; 填 0 才回到(未验证通过的)自适应模式。 */
-#define RADAR_BAUD_INIT_FIXED           (460800UL)
+#define RADAR_BAUD_INIT_FIXED           (9600UL)    /* 本次验证: 上电即 9600(模块也用 APP 设成 9600) */
 /* 波特率 -> 协议表 6 索引(0x00A1 用), 索引 = 位置 + 1 */
 #define RADAR_BAUD_IDX_TABLE            { 9600UL, 19200UL, 38400UL, 57600UL, 115200UL, 230400UL, 256000UL, 460800UL }
 #define RADAR_BAUD_IDX_TABLE_CNT        (8U)
@@ -109,7 +109,11 @@
 #define RADAR_TMR0_UNIT                 (CM_TMR0_1)
 #define RADAR_TMR0_CH                   (TMR0_CH_A)
 #define RADAR_TMR0_FCG_ENABLE()         (FCG_Fcg2PeriphClockCmd(FCG2_PERIPH_TMR0_1, ENABLE))
-#define RADAR_RX_TIMEOUT_BITS           (100U)      /* 约 100 bit 时间的空闲判定 */
+/* 接收空闲超时: 必须大于"最长帧在最慢波特率下的传输时间", 否则窗口会在帧中途到点
+ * (半截帧被刷出 + RX DMA 重挂, 低波特率下可能丢字节)。
+ * 最长帧 = 工程模式 45 字节; 9600 下 = 45*10bit/9600 = 47ms。
+ * 实际超时 = (compare + 3) * 8 / 32768 秒, compare = (该值 + 7)/8 - 3; 2300 -> 约 70ms */
+#define RADAR_RX_TIMEOUT_BITS           (2300U)
 
 /* ============================ USART 中断 ============================ */
 #define RADAR_UART_TX_CPLT_IRQn         (INT007_IRQn)
