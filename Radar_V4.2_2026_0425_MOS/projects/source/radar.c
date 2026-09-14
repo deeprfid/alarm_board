@@ -46,6 +46,8 @@ static uint32_t            s_link_ms;       /* 链路监控窗口起点 */
 static uint32_t            s_link_bytes0;   /* 窗口起点的累计接收字节数 */
 static uint32_t            s_win_ack_cnt;   /* 本窗口解出的 ACK 帧数(与上报帧一起算合法帧) */
 static uint32_t            s_first_baud;    /* 重扫时先试的档(上次锁定的真实波特率), 0=直接按表扫 */
+static uint32_t            s_link_last_rx_ms;   /* 最近一次收到字节的时刻 */
+static uint32_t            s_link_sweep_ms;     /* 上次兜底重扫的时刻 */
 static uint32_t            s_fps_ms;        /* 帧率统计窗口起点 */
 static uint32_t            s_fps_cnt;       /* 本窗口内收到的合法上报帧数 */
 static uint32_t            s_fps;           /* 上一秒的帧率(Hz) */
@@ -748,7 +750,7 @@ void radar_poll(void)
     if ((m_u32Tickms - s_link_ms) >= 1000U)
     {
         uint32_t dBytes = radar_port_rx_bytes() - s_link_bytes0;
-        uint32_t dFrames = s_fps + s_win_ack_cnt;         /* 本窗口解出的合法帧(上报+ACK) */
+        uint32_t dFrames = s_fps_cnt + s_win_ack_cnt;     /* 本窗口合法帧(上报+ACK); 注意用 s_fps_cnt 而非上一秒的 s_fps */
 
         if ((s_baud_locked != 0U) && (dBytes >= 32U) && (dFrames == 0U))
         {
@@ -759,6 +761,22 @@ void radar_poll(void)
             s_probe_idx   = 0U;
         }
 
+        if (dBytes != 0U)
+        {
+            s_link_last_rx_ms = m_u32Tickms;              /* 线上还有字节: 记下最近活动时刻 */
+        }
+        else if ((s_baud_locked != 0U) &&
+                 ((m_u32Tickms - s_link_last_rx_ms) >= RADAR_LINK_SILENT_MS) &&
+                 ((m_u32Tickms - s_link_sweep_ms) >= RADAR_LINK_SWEEP_MIN_MS))
+        {
+            /* 兜底: 锁定着却长时间一个字节都没有(模块被换到连乱码都收不到的档/长时间静默) */
+            s_first_baud  = radar_port_baud_actual();
+            s_baud_locked = 0U;
+            s_probe_st    = 0U;
+            s_probe_t0    = m_u32Tickms;
+            s_probe_idx   = 0U;
+            s_link_sweep_ms = m_u32Tickms;
+        }
         s_link_bytes0 = radar_port_rx_bytes();
         s_win_ack_cnt = 0U;
         s_link_ms     = m_u32Tickms;

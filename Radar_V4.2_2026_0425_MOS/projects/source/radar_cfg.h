@@ -57,7 +57,13 @@
 #define RADAR_PROBE_LISTEN_MS           (300U)
 
 /* 一整轮 8 档都没锁定时, 隔多久重扫一轮(避免'偶尔没锁上就永久失败', 需断电重启) */
-#define RADAR_PROBE_RETRY_MS            (5000U)     /* 每档只听多久(不发任何命令) */
+#define RADAR_PROBE_RETRY_MS            (5000U)
+
+/* 链路失联兜底: 锁定后连续多久一个字节都收不到 -> 做一轮兜底重扫(覆盖'模块被换到连乱码
+ * 都收不到的跨档'的情形: 实测模块38400/我们在460800听 -> 全静默, 字节增量恒 0)。 */
+#define RADAR_LINK_SILENT_MS            (3000U)
+/* 兜底重扫的最小间隔(避免长时间失联/APP配置期间反复白扫; 只改我们自己的波特率, 不发命令) */
+#define RADAR_LINK_SWEEP_MIN_MS         (10000U)     /* 每档只听多久(不发任何命令) */
 #define RADAR_RX_TIMEOUT_BITS_HINT      (0U)        /* 占位: 见下方 RADAR_RX_TIMEOUT_BITS 说明 */
 
 /* 上电自适应波特率探测顺序: 覆盖协议表 6 的全部 8 档。
