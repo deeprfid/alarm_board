@@ -36,24 +36,22 @@ static volatile uint8_t    s_baud_ok;        /* 0 = ¸Ã²¨ÌØÂÊ±¾µµ·ÖÆµ±íÊ¾²»³öÀ´(»
 static void (*s_rx_cb)(const uint8_t *data, uint16_t len) = 0;
 
 /* --------------------- Ê±ÖÓ·ÖÆµ: Ëæ²¨ÌØÂÊ×Ô¶¯Ñ¡(²»ÊÇ¶¨ËÀµÄ) ---------------------
- * C = PCLK1(±¾¹¤³Ì 100MHz) / ·ÖÆµ;  DDL µÄ BRR ÕûÊý·ÖÆµÖ»ÓÐ 8 Î»:
- *     DIV_Integer = C/(B*8*(2-OVER8)) - 1 ±ØÐë <= 255   =>   C <= B*8*(2-OVER8)*256
- * È¡¡ºÂú×ãÔ¼ÊøµÄ×îÐ¡Ð¡·ÖÆµ¡»(C Ô½´ó, Ð¡Êý·Ö±æÂÊÔ½¸ß¡¢Îó²îÔ½Ð¡):
- *   B >= 12207  -> DIV4  (C = 25MHz)    19200 ¼°ÒÔÉÏ¶¼×ßÕâÒ»µµ
- *   B >= 3052   -> DIV16 (C = 6.25MHz)  **9600 ±ØÐëÓÃÕâÒ»µµ**
- *   B >= 763    -> DIV64 (C = 1.5625MHz)
- * ¼´: ²¨ÌØÂÊ¸ßÓÃÐ¡·ÖÆµ, ²¨ÌØÂÊµÍÓÃ´ó·ÖÆµ¡£
- * ±¸×¢: 57600 ÒÔÉÏÀíÂÛÉÏ»¹ÄÜÓÃ DIV1(C = 100MHz)ÄÃ¸ü¸ß·Ö±æÂÊ, µ«±¾¹¤³ÌËùÓÐÒÑÑéÖ¤ÅäÖÃ
- *       ¶¼ÊÇ DIV4, Î´¾­ÑéÖ¤²»ÒýÈë; ½«À´ÐèÒªÊ±¿É°Ñ DIV1 ¼Óµ½Õâ¸öºòÑ¡Á´µÄ×îÇ°Ãæ¡£ */
+ * È¡Öµ¹æÔòÖ±½ÓÕÕ³­**É¨ÃèÌ¨Ö÷°å(Í¬¿î HC32F460)Á¿²úÔÚÓÃµÄ UART ³õÊ¼»¯**:
+ *     (baud < 115200) ? UsartClkDiv_64 : UsartClkDiv_1
+ * »»Ëãµ½±¾¹¤³Ì(C = PCLK1 = RADAR_UART_PCLK_HZ = 100MHz / ·ÖÆµ, 8 ±¶¹ý²ÉÑù):
+ *     B <  115200 -> DIV64, C = 1.5625MHz   9600 Ê±ÕûÊý·ÖÆµ 20, Îó²î +0.13%
+ *     B >= 115200 -> DIV1 , C = 100MHz      460800 Ê±ÕûÊý·ÖÆµ 27, Îó²î +0.08%
+ * Ô¼ÊøÒÀ¾Ý(DDL µÄ BRR ÕûÊý·ÖÆµÖ»ÓÐ 8 Î»):
+ *     DIV_Integer = C/(B*8*(2-OVER8)) - 1 ±ØÐë <= 255   =>  C <= B*8*(2-OVER8)*256
+ *     ÇÒ C/(B*8*(2-OVER8)) >= 1                         =>  C >= B*8*(2-OVER8)
+ * Ð´ËÀÒ»¸ö·ÖÆµÖµÒ»¶¨»á²ÈÏß: ÀýÈçÐ´ËÀ DIV4 + 8 ±¶¹ý²ÉÑùÊ±, 9600 ÐèÒª·ÖÆµ±È 324 > 255,
+ * USART_SetBaudrate() »á·µ»Ø´íÎó, **ÇÒÒ»¸ö×Ö½Ú¶¼²»Ð´ BRR**, ¶Ë¿Ú¾²Ä¬Í£ÔÚ¾É²¨ÌØÂÊ ¡ª¡ª
+ * Õâ¾ÍÊÇÏÖ³¡¡º460800 ÄÜÍ¨¡¢¸Äµ½ 9600 ²»ÐÐ¡»µÄÖ±½ÓÔ­ÒòÖ®Ò»¡£
+ * ËùÒÔ: ²¨ÌØÂÊ¸ßÓÃÐ¡·ÖÆµ¡¢²¨ÌØÂÊµÍÓÃ´ó·ÖÆµ, °´²¨ÌØÂÊÏÖËã¡£ */
 static uint32_t radar_pick_clk_div(uint32_t baud)
 {
-    uint32_t c_max = (baud * 8UL) * 256UL;              /* 8 ±¶¹ý²ÉÑùÏÂÔÊÐíµÄ×î´ó C */
-
-    if (RADAR_UART_PCLK_HZ <= c_max)         { return USART_CLK_DIV4; }
-    if ((RADAR_UART_PCLK_HZ / 4UL) <= c_max) { return USART_CLK_DIV16; }
-    return USART_CLK_DIV64;
+    return (baud < 115200UL) ? USART_CLK_DIV64 : USART_CLK_DIV1;
 }
-
 /* ------------------------------ ÖÐ¶Ï»Øµ÷ ------------------------------ */
 /* ½ÓÊÕÖÐ¶Ï: Ò»×Ö½Ú½øÒ»×Ö½Ú³ö¡£ */
 static void radar_rx_ri_cb(void)
@@ -150,7 +148,7 @@ void radar_port_init(void)
 
     (void)USART_UART_StructInit(&stcUartInit);
     stcUartInit.u32ClockDiv      = radar_pick_clk_div(s_baud);   /* ·ÖÆµËæ²¨ÌØÂÊ×ß */
-    stcUartInit.u32CKOutput      = USART_CK_OUTPUT_ENABLE;
+    stcUartInit.u32CKOutput      = USART_CK_OUTPUT_DISABLE;   /* Í¬É¨ÃèÌ¨²Î¿¼ÊµÏÖ: Ê±ÖÓ²»Êä³ö */
     stcUartInit.u32Baudrate      = s_baud;
     stcUartInit.u32OverSampleBit = USART_OVER_SAMPLE_8BIT;       /* Óë SDK Àý³Ì/ÒÑÑéÖ¤ÅäÖÃÒ»ÖÂ */
     s_baud_ok = (LL_OK == USART_UART_Init(RADAR_UART_UNIT, &stcUartInit, NULL)) ? 1U : 0U;
