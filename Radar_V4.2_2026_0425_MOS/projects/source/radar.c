@@ -80,10 +80,9 @@ static uint32_t            s_prov_t0[RADAR_PORT_CNT];
 static uint8_t             s_prov_busy[RADAR_PORT_CNT];     /* 1 = 正在执行阻塞式命令(防重入兜底) */
 #endif
 
-/* 各口 OUT 脚(与串口同模块, 供串口/OUT 双路判定)。
- * 口 0 沿用 radar_cfg.h 的 RADAR_UART_DEV_OUT_PORT/PIN(= RADAR_PORT0/PIN0, 与旧单口行为逐位一致);
- * 口 1/口 2 用 RADAR_PORT1/PIN1、RADAR_PORT2/PIN2 —— 与 bsp_report.c / common.c / bsp_gpio.c
- * 里读三路 OUT(PC14/PC13/PH2)的写法一致。 */
+/* 各口 OUT 脚(与串口同模块, 供串口/OUT 双路判定)。下标 = 口号:
+ *   口0 -> RADAR_PORT0/PIN0 (PC14)   口1 -> RADAR_PORT1/PIN1 (PC13)   口2 -> RADAR_PORT2/PIN2 (PH2)
+ * 与 bsp_report.c / common.c / bsp_gpio.c 读三路 OUT 的写法一致。 */
 static const uint8_t  s_out_port[RADAR_PORT_CNT] = { RADAR_PORT0, RADAR_PORT1, RADAR_PORT2 };
 static const uint16_t s_out_pin[RADAR_PORT_CNT]  = { RADAR_PIN0,  RADAR_PIN1,  RADAR_PIN2  };
 

@@ -25,11 +25,6 @@
 #define RADAR_SRC_OUT_OR_UART       (2U)    /* 二者取或 */
 #define RADAR_SRC_UART_FALLBACK_OUT (3U)    /* 串口在线用串口, 掉线回落 OUT */
 
-/* 事件(可选回调) */
-#define RADAR_EVT_REPORT            (1U)    /* 收到上报帧 */
-#define RADAR_EVT_ACK               (2U)    /* 收到 ACK */
-#define RADAR_EVT_FRAME_ERR         (3U)    /* 帧错误(长度/帧尾非法) */
-
 typedef struct {
     uint8_t  out_present;                   /* 模块 OUT 脚电平 */
     uint8_t  uart_online;                   /* 串口数据是否新鲜 */

@@ -36,7 +36,9 @@
 #define RADAR_REPORT_TYPE_BASIC     (0x02U)     /* 目标基本信息 */
 #define RADAR_REPORT_TYPE_ENGINEER  (0x01U)     /* 工程模式(含 9 门能量/光感) */
 
-/* 目标状态 */
+/* 目标状态: 上报帧 data[2] 的取值域, 由 radar_proto_parse_report() 原样填入
+ * radar_report_t.target_state。代码内只判断 RADAR_STATE_NONE(见 radar.c 的 radar_presence);
+ * 其余取值是**协议定义**, 供判读 target_state 时对照, 不是未使用的死宏。 */
 #define RADAR_STATE_NONE            (0x00U)     /* 无目标 */
 #define RADAR_STATE_MOVING          (0x01U)     /* 运动目标 */
 #define RADAR_STATE_STILL           (0x02U)     /* 静止目标 */
