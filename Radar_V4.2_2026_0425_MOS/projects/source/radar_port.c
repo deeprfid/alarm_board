@@ -228,13 +228,13 @@ void radar_port_init(void)
     RADAR_UART_FCG_ENABLE();
 
     (void)USART_UART_StructInit(&stcUartInit);
-    stcUartInit.u32ClockDiv      = USART_CLK_DIV4;
+    stcUartInit.u32ClockDiv      = RADAR_BAUD_CLK_DIV;
     stcUartInit.u32CKOutput      = USART_CK_OUTPUT_ENABLE;
     stcUartInit.u32Baudrate      = s_baud;
-    /* 16 倍过采样(不是 8 倍): DDL 的整数分频只有 8 位(<=255), 25MHz 时钟下 8 倍过采样的
-     * 最低波特率是 12207 -> **9600 算不出来**, USART_SetBaudrate 会失败且**不写 BRR**。
-     * 16 倍下最低 6103, 协议表 6 的 8 档(9600~460800)全部可精确表示。 */
-    stcUartInit.u32OverSampleBit = USART_OVER_SAMPLE_16BIT;
+    /* 时钟分频/过采样: 取值说明见 radar_cfg.h 的 RADAR_BAUD_CLK_DIV。
+     * DDL 的 BRR 整数分频只有 8 位(<=255), 8 倍过采样下 C 必须 <= 2048*最低波特率;
+     * 本档 C = 100MHz/16 = 6.25MHz + 8 倍过采样 -> 9600~460800 全部可表示。 */
+    stcUartInit.u32OverSampleBit = RADAR_BAUD_OVER_SAMPLE;
     (void)USART_UART_Init(RADAR_UART_UNIT, &stcUartInit, NULL);
 
     (void)radar_dma_config();
