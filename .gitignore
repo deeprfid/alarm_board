@@ -12,10 +12,6 @@ Desktop.ini
 *.orig
 *.swp
 
-# ---------- 本仓库只读分析用临时产物（不入库，随时可删） ----------
-_src_utf8/
-_mirror.ps1
-
 # ---------- Keil MDK：用户态文件 ----------
 *.uvguix.*
 *.uvoptx
@@ -41,11 +37,6 @@ Radar_V4.2_2026_0425_MOS/projects/GCC/.settings/
 *.lnp
 *.iex
 *.build_log.htm
-# ---------- 老版本参照工程备份（只读参考，不入库） ----------
-docs/Radar_backup/
-docs/Radar_V3.2_2025-0430.rar
-_cosmetic.ps1
-_mvp_edits.ps1
-_mirror3.ps1
+
 # ---------- 外部生成的完整工程副本（编译产物，不入库） ----------
 stm32f300cct6/
