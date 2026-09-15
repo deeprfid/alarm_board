@@ -54,6 +54,7 @@ uint32_t radar_frames_err(void);
 /* ---------------- C. 只读 / 维护 ---------------- */
 int32_t radar_read_resolution(uint8_t *idx);                 /* 0x00AB: 0=0.75m/门 1=0.2m/门 */
 int32_t radar_read_aux_control(radar_aux_t *out);            /* 0x00AE */
+int32_t radar_read_aux_control_port(uint8_t port, radar_aux_t *out);   /* 0x00AE, 指定口 */
 int32_t radar_read_fw_version(radar_fw_t *out);              /* 0x00A0 */
 int32_t radar_read_mac(uint8_t *mac, uint8_t *len);          /* 0x00A5 */
 int32_t radar_factory_reset(void);                           /* 0x00A2(重启后生效) */
@@ -79,9 +80,18 @@ typedef struct {
 const radar_dump_t *radar_dump(void);
 
 /* ---------------- A 参数自动配置(幂等) ---------------- */
-uint8_t radar_param_state(void);    /* 0 待做 / 1 读回中 / 2 写入中 / 3 复检中 / 4 成功或本来就一致 / 5 失败 */
+uint8_t radar_param_state(void);        /* 口 0 兼容入口; 逐口状态请看 g_radar_comm 的 bit11..15 */
+uint8_t radar_param_state_port(uint8_t port);   /* 指定口的自动配置状态 */
 
 uint32_t radar_reports(void);
+
+/* ---------------- 报警下行下发雷达灵敏度 ----------------
+ * 入参 = 报警下行包 alarm_pdu 的 Alarm_Duration[1]:
+ *   0 = 不设置(保持模块现状) / 1~10 -> 动态(运动)灵敏度 10~100, 静态灵敏度恒 100。
+ * **非阻塞**: 只登记目标值, 真正的"先读回、只写不一致的门"由 radar_poll() 逐拍幂等推进;
+ * 重复值一条命令都不发。返回 LL_OK / LL_ERR_INVD_PARAM(值 > 10)。
+ * 取值与状态码说明见 radar_cfg.h 的 RADAR_DL_SENS_*。 */
+int32_t radar_set_downlink_range(uint8_t range);
 
 /* 现场 Watch 只看这 3 个。
  * 第 3 步起每口一份: 仍是 3 个变量, 但各自是 [RADAR_PORT_CNT] 数组, 下标 0/1/2 = 雷达口 0/1/2。
@@ -114,5 +124,15 @@ int32_t radar_eng_mode(uint8_t on);                                 /* 0x0062 / 
 int32_t radar_noise_start(uint16_t sec);                            /* 0x000B */
 int32_t radar_noise_status(uint16_t *status);                       /* 0x001B: 0 未执行 1 执行中 2 完成 */
 int32_t radar_set_aux_control(uint8_t mode, uint8_t threshold, uint8_t out_level);  /* 0x00AD */
+
+/* 语义化封装的**按口**版本(参数逐口配置用); 不带口号的同名函数等价于 port = 0。
+ * 注意: 分辨率(0x00AA/0x00AB)、固件版本、MAC、恢复出厂、工程模式、底噪检测目前**只有口 0 版本**。 */
+int32_t radar_read_params_port(uint8_t port, radar_params_t *out);                  /* 0x0061 */
+int32_t radar_set_max_gate_port(uint8_t port, uint16_t move_gate,
+                                uint16_t still_gate, uint16_t no_body_sec);         /* 0x0060 */
+int32_t radar_set_sensitivity_port(uint8_t port, uint16_t gate,
+                                   uint16_t move_sens, uint16_t still_sens);        /* 0x0064 */
+int32_t radar_set_aux_control_port(uint8_t port, uint8_t mode,
+                                   uint8_t threshold, uint8_t out_level);           /* 0x00AD */
 
 #endif /* __RADAR_H__ */

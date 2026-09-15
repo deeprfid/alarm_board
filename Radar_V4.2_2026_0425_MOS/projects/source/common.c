@@ -198,6 +198,11 @@ int8_t Get_pdu_data(uint8_t *pdubuff)
         alarm_duration = getpdupack->Alarm_Duration[3];
         EAS_switch     = getpdupack->Alarm_Duration[4];
 
+        /* 雷达灵敏度: 按 Alarm_Duration[1] 下发(0=不设置; 1~10 -> 动态灵敏度 10~100, 静态恒 100)。
+         * 只登记目标值, 真正的命令由 radar_poll() 幂等推进(值没变则一条命令都不发)——
+         * 这里在 RS485 收包上下文里, 绝不能做阻塞式串口事务。 */
+        (void)radar_set_downlink_range((uint8_t)radar_range);
+
 
 
         if(alarm_duration == 0)
