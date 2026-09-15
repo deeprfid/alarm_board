@@ -356,13 +356,18 @@ static void radarQueryAll(void)
 
 /* pump one port's FIFO through the var-frame state machine */
 /* ===== 雷达触发输出: 轮询到某口有人(radarVal=1) -> Host_IRQ 输出 1 + 对应口 LED, 保持 radarTrigHoldMs ===== */
-#define radarTrigHoldMs     (100u)   /* 触发信号与点灯的保持时间(ms) */
+#define radarTrigHoldMs     (5u)   /* 触发信号与点灯的保持时间(ms) */
 #define radarTrigLedOn      (10u)     /* LED_Start 参数: 亮 10*10ms */
 #define radarTrigLedOff     (10u)     /* LED_Start 参数: 灭 10*10ms */
 #define radarStaleMs        (200u)    /* 该口有效应答过期时间(ms), 超时按"无人"处理 */
 
+#define radarTrigLedRefreshMs (50u)  /* LED 补刷节拍: LED_Start(on,off,cycle=1) 会在 100ms 后自动灭,
+                                      * 所以每 50ms 补刷一次; 刚点亮那一拍(ucEnalbe==0)立刻刷,
+                                      * 保证"有人"到"灯亮"不引入额外延迟 */
 static uint8_t  sTrigOn[stmPortCnt];      /* 1 = 该口处于触发保持窗口内 */
 static uint32_t sTrigMs[stmPortCnt];      /* 该口最近一次收到"有人"的时刻 */
+static uint32_t sTrigLedMs[stmPortCnt];   /* 该口上次补刷 LED 的时刻 */
+static uint8_t  sHostIrqOn;               /* Host_IRQ 当前输出电平(只在变化时写 GPIO) */
 static LED_T *const sTrigLed[stmPortCnt] = { &Port_1_LED, &Port_2_LED, &Port_3_LED, &Port_4_LED, &Port_5_LED };
 static const uint8_t sTrigLedNo[stmPortCnt] = { PORTLED_1, PORTLED_2, PORTLED_3, PORTLED_4, PORTLED_5 };
 
@@ -398,16 +403,28 @@ static void radarTriggerOut(uint32_t now)
 
         if (sTrigOn[i] != 0u)
         {
-            /* 窗口内每拍刷新一次, LED 保持点亮; 窗口结束后由 LED_Pro 收尾熄灭 */
-            LED_Start(sTrigLed[i], sTrigLedNo[i], radarTrigLedOn, radarTrigLedOff, 1u);
+            /* 本函数现在**每轮主循环都跑**(为的是"回包一到就点灯"), 所以不能每次都 LED_Start:
+             *   刚点亮那一拍(ucEnalbe==0)立刻刷 -> 有人到灯亮没有额外延迟;
+             *   之后每 radarTrigLedRefreshMs 补刷一次, 抵消 LED_Start(on,off,cycle=1) 100ms 的自动熄灭。
+             * 窗口结束后由 Led_Stop() + LED_Pro() 收尾熄灭。 */
+            if ((sTrigLed[i]->ucEnalbe == 0u) || ((now - sTrigLedMs[i]) >= radarTrigLedRefreshMs))
+            {
+                LED_Start(sTrigLed[i], sTrigLedNo[i], radarTrigLedOn, radarTrigLedOff, 1u);
+                sTrigLedMs[i] = now;
+            }
 					//  BEEP_Start(10, 10, 1);
             active = 1u;
         }
     }
 
-    /* 任一口在窗口内 -> 触发信号输出 1; 全部结束 -> 输出 0 */
-    HAL_GPIO_WritePin(Host_IRQ_GPIO_Port, Host_IRQ_Pin,
-                      (active != 0u) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    /* 任一口在窗口内 -> 触发信号输出 1; 全部结束 -> 输出 0
+     * 只在电平变化时写: 本函数现在每轮都跑, 不必每次都动 GPIO */
+    if (active != sHostIrqOn)
+    {
+        sHostIrqOn = active;
+        HAL_GPIO_WritePin(Host_IRQ_GPIO_Port, Host_IRQ_Pin,
+                          (active != 0u) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    }
 }
 
 static void radarPumpPort(uint8_t i, uint32_t now)
@@ -445,20 +462,24 @@ void Radar_thread(void)
         sPumpInit = 1u;
     }
 
-    if ((now - lastBeat) < radarPollMs) { return; }
-    lastBeat = now;
-
-    /* 1) pump incoming bytes per port */
+    /* ---- 每轮主循环都做: 收包解析 + 有人判定/点灯 ----
+     * 不关在 20ms 闸门里: 回包(~3ms 就到)进接收缓冲后立刻被解析, LED 立刻响应,
+     * 省掉"回包躺在缓冲里等下一拍"的那段时间。查询节拍与线上流量**一个字节都不变** ——
+     * 这里改的只是"STM32 什么时候去读自己的接收缓冲"。 */
     for (i = 0u; i < stmPortCnt; i++)
     {
         radarPumpPort(i, now);
     }
 
-    /* 2) broadcast Cmd 0x10 query */
-    radarQueryAll();
-
     /* 3) 有人触发输出: Host_IRQ=1 + 对应口 LED 点亮, 保持 radarTrigHoldMs */
     radarTriggerOut(now);
+
+    /* ---- 只有"发查询"和"上报 Linux"留在 20ms 节拍上 ---- */
+    if ((now - lastBeat) < radarPollMs) { return; }
+    lastBeat = now;
+
+    /* 2) broadcast Cmd 0x10 query */
+    radarQueryAll();
 
     /* 2b) report port/channel status to Linux (PDUHEAD gpio_pdu 32B, on change) */
     ipcReportStatus(now);
