@@ -21,7 +21,9 @@ IWDG_HandleTypeDef hiwdg;
 
 static void MX_GPIO_Init(void);
 static void SystemClock_Config(void);
-static void MX_IWDG_Init(void);
+#if STM32F0_IWDG_ENABLE
+static void MX_IWDG_Init(void);      /* 定义也在这个条件里(见文件下部): 关狗时不留未引用告警 */
+#endif
 
 /*
 *********************************************************************************************************
@@ -181,31 +183,34 @@ static void SystemClock_Config(void)
 *********************************************************************************************************
 */
 
+/* 独立看门狗(IWDG)初始化。
+ *
+ * **只在 STM32F0_IWDG_ENABLE != 0(量产固件)时编译**: 调试期关掉是因为 STM32F0 的 IWDG 走内部 LSI,
+ * **一旦启动就停不下来**, 调试器 halt 时它照样在数 -> 单步会被它复位, 所以只能用编译期宏区分。
+ *
+ * 超时 = (Reload + 1) x Prescaler / LSI(约 40kHz) = (624+1) x 64 / 40000 = **约 1.0 秒**
+ *   (LSI 有容差, 30~50kHz 对应 0.8~1.33 秒)。
+ * 主循环最长合法耗时实测约 **30ms**: radarQueryAll() 5 口 x UartTxWait(5ms) + ipcReportStatus()
+ *   的 UartTxWait(COM1,5ms), 而且只在 TX 忙时才真的等 -> 1 秒留了 25 倍以上余量。
+ *   (原来的 Prescaler=4 / Reload=4095 只有 0.41 秒, 对 30ms 只有 13 倍, 偏紧。)
+ * Window = 4095 = **关闭窗口功能**(不限最早喂狗时刻), 否则喂早了也会复位。
+ *
+ * 喂狗点: main() 的 while(1) 末尾 —— **必须在主循环最外层**, 不能放定时器/中断里,
+ *   否则主循环卡死而中断还在喂, 狗形同虚设。量产前务必做一次"故意卡死"验证。 */
+#if STM32F0_IWDG_ENABLE
 static void MX_IWDG_Init(void)
 {
-
-    /* USER CODE BEGIN IWDG_Init 0 */
-
-    /* USER CODE END IWDG_Init 0 */
-
-    /* USER CODE BEGIN IWDG_Init 1 */
-
-    /* USER CODE END IWDG_Init 1 */
     hiwdg.Instance = IWDG;
-    hiwdg.Init.Prescaler = IWDG_PRESCALER_4;
-    hiwdg.Init.Window = 4095;
-    hiwdg.Init.Reload = 4095;
+    hiwdg.Init.Prescaler = IWDG_PRESCALER_64;   /* 40kHz / 64 = 625Hz */
+    hiwdg.Init.Window    = 4095;                /* 关窗口 */
+    hiwdg.Init.Reload    = 624;                 /* (624+1)/625 = 1.0s */
 
     if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
     {
         Error_Handler();
     }
-
-    /* USER CODE BEGIN IWDG_Init 2 */
-
-    /* USER CODE END IWDG_Init 2 */
-
 }
+#endif
 
 /**
   * @brief GPIO Initialization Function

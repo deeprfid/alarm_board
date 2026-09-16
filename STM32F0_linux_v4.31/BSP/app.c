@@ -62,6 +62,67 @@ unsigned short ipcCrc(unsigned char *msgbuf, int msglen)
 }
 
 
+/* ==================== 下行转发"待发槽" + 发送泵 ====================
+ * 【为什么不能直接 comSendBuf】COM4/COM6 的发送走 DMA, 而 uart4/6_dma_tx_start() 在 TX 忙时是
+ *   **直接 return 把整帧丢掉**; COM2/COM3/COM5 走 FIFO 会排队(不丢)。
+ *   偏偏 20ms 一次的 0x10 查询和 Linux 转下来的下行包走**同一根 TX** ——
+ *   撞上就把**下行包**吞掉(Linux 侧还以为发出去了), 概率约 1/140(查询 7B@460800 占 0.15ms / 20ms)。
+ *   现场症状就是"下发参数/命令偶尔不生效, 而且查不出来"。
+ *   注: stmVarSend() 发查询前有 UartTxWait(), 所以被丢的总是下行包, 不是查询。
+ *
+ * 【做法】收包上下文里**只登记**(不阻塞), 由发送泵在"TX 空闲"时才真正发出去:
+ *   登记后立刻泵一次(常见情况 TX 就是空闲的, 延迟 0), 忙则留到下一轮主循环(延迟 ≤1 拍)。
+ *   => 既不丢帧, 也不用在收包上下文里死等。 */
+#define ipcTxSlotCnt   (5u)                        /* 5 条雷达链路: COM6/COM2/COM3/COM4/COM5 */
+#define ipcTxSlotLen   (APP_FRAME_LEN_MAX)         /* 下行 PDU 定长 32B */
+
+static const COM_PORT_E sTxPort[ipcTxSlotCnt] = { COM6, COM2, COM3, COM4, COM5 };
+static uint8_t sTxPend[ipcTxSlotCnt];              /* 1 = 该口有待发帧 */
+static uint8_t sTxLen[ipcTxSlotCnt];
+static uint8_t sTxBuf[ipcTxSlotCnt][ipcTxSlotLen];
+static uint8_t sTxDrop;                            /* 被新帧顶掉/丢弃的帧数(诊断: 正常恒为 0) */
+
+static uint8_t ipcTxIdx(COM_PORT_E port)
+{
+    uint8_t i;
+
+    for (i = 0u; i < ipcTxSlotCnt; i++)
+    {
+        if (sTxPort[i] == port) { return i; }
+    }
+    return 0xFFu;
+}
+
+/* 登记一帧待发(非阻塞)。该口已有待发帧时**用新的顶掉旧的**(控制类协议最新值优先)并计数。 */
+static void ipcTxPost(COM_PORT_E port, const uint8_t *buf, uint16_t len)
+{
+    uint8_t  i = ipcTxIdx(port);
+    uint16_t k;
+
+    if ((i == 0xFFu) || (buf == 0) || (len == 0u) || (len > (uint16_t)ipcTxSlotLen)) { return; }
+
+    if (sTxPend[i] != 0u) { if (sTxDrop < 255u) { sTxDrop++; } }
+
+    for (k = 0u; k < len; k++) { sTxBuf[i][k] = buf[k]; }
+    sTxLen[i]  = (uint8_t)len;
+    sTxPend[i] = 1u;
+}
+
+/* 发送泵: 只在"该口 TX 空闲"时把待发帧发出去; 忙就留到下一轮(不丢)。 */
+static void ipcTxPump(void)
+{
+    uint8_t i;
+
+    for (i = 0u; i < ipcTxSlotCnt; i++)
+    {
+        if (sTxPend[i] == 0u) { continue; }
+        if (UartTxEmpty(sTxPort[i]) == 0u) { continue; }   /* TX 还忙(查询在发/上一帧没发完) */
+
+        comSendBuf(sTxPort[i], sTxBuf[i], sTxLen[i]);
+        sTxPend[i] = 0u;
+    }
+}
+
 #define ipcReportOnQuery  (1u)   /* 1 = Linux 0xFF PDUHEAD(AntID!=0) 查询到达时立即应答一帧 32B gpio_pdu */
 
 #if (GET_RADAR_ENABLE && frameAaEn && ipcReportOnQuery)
@@ -89,9 +150,9 @@ void ipc_hpm_message(uint8_t *upload, uint8_t dlen, uint8_t antid)
         case 	0x1:
 
         {
-            comSendBuf(COM6, upload, dlen);     //mainboard CH1
+            ipcTxPost(COM6, upload, dlen);     //mainboard CH1
 					  LED_Start(&Port_1_LED, PORTLED_1, 10, 15, 3);
-           // comSendBuf(COM4, upload, dlen);   //mainboard CH4
+           // ipcTxPost(COM4, upload, dlen);   //mainboard CH4
 					 
             break;
         }
@@ -99,8 +160,8 @@ void ipc_hpm_message(uint8_t *upload, uint8_t dlen, uint8_t antid)
 
         case 	0x2:
         {
-            comSendBuf(COM2, upload, dlen);		  //mainboard CH2
-            //comSendBuf(COM4, upload, dlen);	  //mainboard CH4
+            ipcTxPost(COM2, upload, dlen);		  //mainboard CH2
+            //ipcTxPost(COM4, upload, dlen);	  //mainboard CH4
 					  LED_Start(&Port_2_LED, PORTLED_2, 10, 15, 3);
 
             break;
@@ -109,9 +170,9 @@ void ipc_hpm_message(uint8_t *upload, uint8_t dlen, uint8_t antid)
 
         case 	0x3:
         {
-            comSendBuf(COM2, upload, dlen);		  //mainboard CH2
+            ipcTxPost(COM2, upload, dlen);		  //mainboard CH2
 					  LED_Start(&Port_2_LED, PORTLED_2, 10, 15, 3);
-           // comSendBuf(COM5, upload, dlen);		 //mainboard CH5
+           // ipcTxPost(COM5, upload, dlen);		 //mainboard CH5
             break;
 
         }
@@ -119,22 +180,22 @@ void ipc_hpm_message(uint8_t *upload, uint8_t dlen, uint8_t antid)
 
         case 	0x4:
         {
-            comSendBuf(COM3, upload, dlen);    //mainboard CH3
+            ipcTxPost(COM3, upload, dlen);    //mainboard CH3
 					  LED_Start(&Port_3_LED, PORTLED_3, 10, 15, 3);
-           // comSendBuf(COM5, upload, dlen);	 //mainboard CH5
+           // ipcTxPost(COM5, upload, dlen);	 //mainboard CH5
             break;
         }
 
         case 	0x5:
         {
-            comSendBuf(COM3, upload, dlen); //mainboard CH3
+            ipcTxPost(COM3, upload, dlen); //mainboard CH3
 					  LED_Start(&Port_3_LED, PORTLED_3, 10, 15, 3);
             break;
         }
 
         case 	0x6:
         {
-            comSendBuf(COM4, upload, dlen);	 //mainboard CH4
+            ipcTxPost(COM4, upload, dlen);	 //mainboard CH4
 					  LED_Start(&Port_4_LED, PORTLED_4, 10, 15, 3);
             break;
         }
@@ -142,7 +203,7 @@ void ipc_hpm_message(uint8_t *upload, uint8_t dlen, uint8_t antid)
         case 	0x7:
         {
 
-            comSendBuf(COM4, upload, dlen);	 //mainboard CH4
+            ipcTxPost(COM4, upload, dlen);	 //mainboard CH4
 					  LED_Start(&Port_4_LED, PORTLED_4, 10, 15, 3);
             break;
         }
@@ -151,7 +212,7 @@ void ipc_hpm_message(uint8_t *upload, uint8_t dlen, uint8_t antid)
 
         {
 
-            comSendBuf(COM5, upload, dlen);		//mainboard CH5
+            ipcTxPost(COM5, upload, dlen);		//mainboard CH5
 					  LED_Start(&Port_5_LED, PORTLED_5, 10, 15, 3);
             break;
         }
@@ -159,11 +220,11 @@ void ipc_hpm_message(uint8_t *upload, uint8_t dlen, uint8_t antid)
         case  0x0:// network offline--GPIO LED TEST
 
         {
-            comSendBuf(COM6, upload, dlen); //mainboard CH1
-            comSendBuf(COM2, upload, dlen); //mainboard CH2
-            comSendBuf(COM3, upload, dlen);	//mainboard CH3
-            comSendBuf(COM4, upload, dlen); //mainboard CH4
-            comSendBuf(COM5, upload, dlen);	//mainboard CH5
+            ipcTxPost(COM6, upload, dlen); //mainboard CH1
+            ipcTxPost(COM2, upload, dlen); //mainboard CH2
+            ipcTxPost(COM3, upload, dlen);	//mainboard CH3
+            ipcTxPost(COM4, upload, dlen); //mainboard CH4
+            ipcTxPost(COM5, upload, dlen);	//mainboard CH5
 //					  LED_Start(&Port_1_LED, PORTLED_1, 10, 10, 1);
 //					  LED_Start(&Port_2_LED, PORTLED_2, 10, 10, 1);
 //					  LED_Start(&Port_3_LED, PORTLED_3, 10, 10, 1);
@@ -181,7 +242,9 @@ void ipc_hpm_message(uint8_t *upload, uint8_t dlen, uint8_t antid)
 
     }
 
-
+    /* 登记完立刻尝试发一次: TX 空闲(绝大多数情况)就当场出去, 延迟为 0;
+     * 只有撞上 20ms 查询包正在发时才留到下一轮主循环 —— 那一帧**不会丢**。 */
+    ipcTxPump();
 }
 
 
@@ -475,6 +538,9 @@ void Radar_thread(void)
     radarTriggerOut(now);
 
     /* ---- 只有"发查询"和"上报 Linux"留在 20ms 节拍上 ---- */
+    /* 每轮主循环都泵一次下行待发槽(主循环远快于 20ms, 所以排队的帧几乎立刻出去) */
+    ipcTxPump();
+
     if ((now - lastBeat) < radarPollMs) { return; }
     lastBeat = now;
 
@@ -540,7 +606,11 @@ static uint8_t ipcReportBuild(uint32_t now)
             changed = 1u;
         }
     }
-    /* GPIO[10]: Linux 侧字段语义待确认, 暂填 0 */
+    /* GPIO[0]: 下行转发"待发槽被顶掉"的帧数 —— **诊断用, 正常应恒为 0**。
+     *   (原来 GPIO[10] 全填 0 且 Linux 侧语义待确认, 这里只借用 GPIO[0], 其余仍为 0。)
+     * 发现它不为 0 说明有下行帧在"待发槽未排空"时被新帧顶掉 —— 需要把 L 侧下发节奏放慢或加深队列。 */
+    sIpcGpioPdu.GPIO[0] = sTxDrop;
+    /* GPIO[1..9]: Linux 侧字段语义待确认, 暂填 0 */
 
     sIpcGpioPdu.crc = ipcCrc((uint8_t *)&sIpcGpioPdu, sizeof(sIpcGpioPdu) - 2);
     return changed;

@@ -85,7 +85,12 @@
 #define Host_IRQ_Pin            GPIO_PIN_12
 #define Host_IRQ_GPIO_Port      GPIOA
 
-#define STM32F0_IWDG_ENABLE   (0U)
+/* 独立看门狗: 0 = 关闭(调试期) / 1 = 使能(**量产固件必须为 1**)。
+ * 调试期关掉的原因: STM32F0 的 IWDG 走内部 LSI, 一旦启动就停不下来, 调试器 halt 时它照样计数,
+ *   单步会被它复位 —— 所以只能用编译期宏区分, 别指望运行期关。
+ * 超时约 1 秒(见 bsp.c 的 MX_IWDG_Init); 喂狗点在 main() 的 while(1) 末尾。
+ * **量产前必须做一次"故意卡死"验证**: 在 while(1) 里插死循环, 确认板子自己重启且 RS485 恢复。 */
+#define STM32F0_IWDG_ENABLE   (1U)
 #define GET_RADAR_ENABLE      (1U)
 
 #ifndef TRUE
