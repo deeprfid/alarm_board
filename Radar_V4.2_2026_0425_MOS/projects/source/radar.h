@@ -51,14 +51,10 @@ uint8_t radar_presence_src(void);
 /* ---------------- 统计 ---------------- */
 uint32_t radar_frames_ok(void);
 uint32_t radar_frames_err(void);
-/* ---------------- C. 只读 / 维护 ---------------- */
-int32_t radar_read_resolution(uint8_t *idx);                 /* 0x00AB: 0=0.75m/门 1=0.2m/门 */
-int32_t radar_read_aux_control(radar_aux_t *out);            /* 0x00AE */
-int32_t radar_read_aux_control_port(uint8_t port, radar_aux_t *out);   /* 0x00AE, 指定口 */
-int32_t radar_read_fw_version(radar_fw_t *out);              /* 0x00A0 */
-int32_t radar_read_mac(uint8_t *mac, uint8_t *len);          /* 0x00A5 */
-int32_t radar_factory_reset(void);                           /* 0x00A2(重启后生效) */
-int32_t radar_read_all(void);                                /* 依次读回全部只读信息到 s_dump */
+/* ---------------- C. 只读 / 维护 ----------------
+ * 读回全部只读信息: 调 radar_dump_start() 发起(非阻塞), 由 radar_poll() 逐拍把 5 项依次读完,
+ * 结果看 radar_dump() / s_dump(ok = 5 表示全部成功)。单项读见下面命令区的 *_begin/_poll。 */
+void radar_dump_start(void);
 
 /* 只读信息汇总: Keil Watch 里加 s_dump, 或看 radar_dump() */
 typedef struct {
@@ -102,37 +98,54 @@ extern volatile uint32_t g_radar_comm[RADAR_PORT_CNT];
 uint32_t radar_rx_bytes(void);                         /* 串口累计收到字节数(诊断, 口 0) */
 uint32_t radar_rx_drop(void);                          /* 接收缓冲丢弃字节数(诊断, 口 0) */
 
-/* ---------------- 命令 ---------------- */
-/* 通用命令(自动等待 ACK); 返回 LL_OK / LL_ERR / LL_ERR_TIMEOUT / LL_ERR_INVD_PARAM */
-int32_t radar_cmd(uint16_t cmd, const uint8_t *val, uint8_t val_len,
-                  radar_ack_t *ack, uint32_t timeout_ms);
+/* ---------------- 命令(全部**非阻塞**: begin 发起 / poll 取结果) ----------------
+ * 统一形状:
+ *   xxx_begin(...)  发起一笔命令事务(立即返回; 该口已有在跑的事务 -> LL_ERR_BUSY);
+ *   xxx_poll(...)   取结果: LL_ERR_BUSY = 还没做完(下一拍再来) / LL_OK = 成功 / 其它 = 失败码。
+ * 事务由 radar_poll() 逐拍推进, **每拍每口最多"发一帧"或"查一次 ACK"**, 绝不阻塞主循环。
+ * (改造前是"发一帧然后 while 死等 ACK": 单帧最坏 200ms、配置事务最坏 600ms, 会把 RS485 应答、
+ *  下行命令和声光报警一起饿死; 而且恰恰在模块不正常时才吃满超时, 平时看不出来。)
+ * 所以: **必须在主循环里持续调用 radar_poll()**, 否则事务永远推不完。
+ * 所有口都有独立事务, 三个口可并行推进; 一个口同一时刻只允许一笔。 */
 
-/* 按口通用命令: 命令/ACK 事务只落在该口。radar_cmd() 等价于本函数 port=0。 */
-int32_t radar_cmd_port(uint8_t port, uint16_t cmd, const uint8_t *val, uint8_t val_len,
-                       radar_ack_t *ack, uint32_t timeout_ms);
+/* 裸命令(单帧, 不套"使能/结束配置"); ack 出参拿到的是该命令的 ACK */
+int32_t radar_cmd_begin(uint8_t port, uint16_t cmd, const uint8_t *val, uint8_t val_len);
+int32_t radar_cmd_poll(uint8_t port, radar_ack_t *ack);
+uint8_t radar_cmd_busy(uint8_t port);                                  /* 1 = 该口还有事务在跑 */
 
 /* 语义化封装(内部自动"使能配置 -> 命令 -> 结束配置") */
-int32_t radar_read_params(radar_params_t *out);                     /* 0x0061 */
-int32_t radar_set_sensitivity(uint16_t gate, uint16_t move_sens, uint16_t still_sens); /* 0x0064 */
-int32_t radar_set_max_gate(uint16_t move_gate, uint16_t still_gate, uint16_t no_body_sec); /* 0x0060 */
-int32_t radar_set_resolution(uint8_t idx);                          /* 0x00AA */
-int32_t radar_set_uart_baud_index(uint8_t idx);                     /* 0x00A1 */
-int32_t radar_set_uart_baud_index_port(uint8_t port, uint8_t idx);  /* 0x00A1, 指定口 */
-int32_t radar_restart(void);                                        /* 0x00A3: 应答后模块自动重启 */
-int32_t radar_restart_port(uint8_t port);                           /* 0x00A3, 指定口 */
-int32_t radar_eng_mode(uint8_t on);                                 /* 0x0062 / 0x0063 */
-int32_t radar_noise_start(uint16_t sec);                            /* 0x000B */
-int32_t radar_noise_status(uint16_t *status);                       /* 0x001B: 0 未执行 1 执行中 2 完成 */
-int32_t radar_set_aux_control(uint8_t mode, uint8_t threshold, uint8_t out_level);  /* 0x00AD */
-
-/* 语义化封装的**按口**版本(参数逐口配置用); 不带口号的同名函数等价于 port = 0。
- * 注意: 分辨率(0x00AA/0x00AB)、固件版本、MAC、恢复出厂、工程模式、底噪检测目前**只有口 0 版本**。 */
-int32_t radar_read_params_port(uint8_t port, radar_params_t *out);                  /* 0x0061 */
-int32_t radar_set_max_gate_port(uint8_t port, uint16_t move_gate,
-                                uint16_t still_gate, uint16_t no_body_sec);         /* 0x0060 */
-int32_t radar_set_sensitivity_port(uint8_t port, uint16_t gate,
-                                   uint16_t move_sens, uint16_t still_sens);        /* 0x0064 */
-int32_t radar_set_aux_control_port(uint8_t port, uint8_t mode,
-                                   uint8_t threshold, uint8_t out_level);           /* 0x00AD */
+int32_t radar_read_params_begin(uint8_t port);                         /* 0x0061 */
+int32_t radar_read_params_poll(uint8_t port, radar_params_t *out);
+int32_t radar_set_sensitivity_begin(uint8_t port, uint16_t gate,
+                                    uint16_t move_sens, uint16_t still_sens);   /* 0x0064 */
+int32_t radar_set_sensitivity_poll(uint8_t port);
+int32_t radar_set_max_gate_begin(uint8_t port, uint16_t move_gate,
+                                 uint16_t still_gate, uint16_t no_body_sec);    /* 0x0060 */
+int32_t radar_set_max_gate_poll(uint8_t port);
+int32_t radar_set_aux_control_begin(uint8_t port, uint8_t mode,
+                                    uint8_t threshold, uint8_t out_level);      /* 0x00AD */
+int32_t radar_set_aux_control_poll(uint8_t port);
+int32_t radar_read_aux_control_begin(uint8_t port);                    /* 0x00AE */
+int32_t radar_read_aux_control_poll(uint8_t port, radar_aux_t *out);
+int32_t radar_read_resolution_begin(uint8_t port);                     /* 0x00AB: 0=0.75m/门 1=0.2m/门 */
+int32_t radar_read_resolution_poll(uint8_t port, uint8_t *idx);
+int32_t radar_set_resolution_begin(uint8_t port, uint8_t idx);         /* 0x00AA(重启后生效) */
+int32_t radar_set_resolution_poll(uint8_t port);
+int32_t radar_read_fw_version_begin(uint8_t port);                     /* 0x00A0 */
+int32_t radar_read_fw_version_poll(uint8_t port, radar_fw_t *out);
+int32_t radar_read_mac_begin(uint8_t port);                            /* 0x00A5 */
+int32_t radar_read_mac_poll(uint8_t port, uint8_t *mac, uint8_t *len);
+int32_t radar_set_uart_baud_index_begin(uint8_t port, uint8_t idx);    /* 0x00A1(重启后生效) */
+int32_t radar_set_uart_baud_index_poll(uint8_t port);
+int32_t radar_restart_begin(uint8_t port);                             /* 0x00A3: 应答后模块自动重启 */
+int32_t radar_restart_poll(uint8_t port);
+int32_t radar_factory_reset_begin(uint8_t port);                       /* 0x00A2(重启后生效) */
+int32_t radar_factory_reset_poll(uint8_t port);
+int32_t radar_eng_mode_begin(uint8_t port, uint8_t on);                /* 0x0062 / 0x0063 */
+int32_t radar_eng_mode_poll(uint8_t port);
+int32_t radar_noise_start_begin(uint8_t port, uint16_t sec);           /* 0x000B */
+int32_t radar_noise_start_poll(uint8_t port);
+int32_t radar_noise_status_begin(uint8_t port);                        /* 0x001B: 0 未执行 1 执行中 2 完成 */
+int32_t radar_noise_status_poll(uint8_t port, uint16_t *status);
 
 #endif /* __RADAR_H__ */
