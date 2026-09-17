@@ -49,7 +49,6 @@
 #define TMRA_PWM_CH                     (TMRA_CH1)
 
 #define TMRA_PERIOD_VAL                 (4000U - 1U)
-#define TMRA_PWM_CMP_VAL                (2000U  - 1U)
 #define TMRA_PWM_PORT                   (GPIO_PORT_A)
 #define TMRA_PWM_PIN                    (GPIO_PIN_08)
 #define TMRA_PWM_PIN_FUNC               (GPIO_FUNC_4)

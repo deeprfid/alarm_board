@@ -25,9 +25,9 @@ LED_T R_tLED;
 LED_T G_tLED;
 LED_T B_tLED;
 LED_T OPA_BeepLED;
-LED_T Radar_LED;
-LED_T Board_LED_1;
-LED_T Board_LED_2;
+LED_T Board_LED_Red;
+LED_T Board_LED_Blue;
+LED_T Board_LED_Green;
 LED_T Relay_GPO;
 
 
@@ -68,19 +68,17 @@ void LED_GPIO_Init(void)
     (void)GPIO_Init(LED_R_PORT, LED_R_PIN, &stcGpioInit);
     (void)GPIO_Init(LED_G_PORT, LED_G_PIN, &stcGpioInit);
     (void)GPIO_Init(LED_B_PORT, LED_B_PIN, &stcGpioInit);
-
-    GPIO_SetDebugPort(GPIO_PIN_SWO, DISABLE);
-    (void)GPIO_Init(BOARD_LED_PORT, BOARD_LED_PIN, &stcGpioInit);
-
-
-    R_tLED.ucMute = 0;
+ 
+    OPA_BeepLED.ucMute = 0;
+	  Relay_GPO.ucMute = 0;
+	  R_tLED.ucMute = 0;
     G_tLED.ucMute = 0;
     B_tLED.ucMute = 0;
-    OPA_BeepLED.ucMute = 0;
-    Radar_LED.ucMute = 0;
-    Relay_GPO.ucMute = 0;
-    Board_LED_1.ucMute = 0;
-    Board_LED_2.ucMute = 0;
+	
+    Board_LED_Red.ucMute   = 0;
+    Board_LED_Green.ucMute = 0;	
+    Board_LED_Blue.ucMute  = 0;
+
 
 }
 
@@ -104,9 +102,13 @@ void Board_LED_Init(void)
     stcGpioInit.u16PinDrv   = PIN_MID_DRV;
     GPIO_SetDebugPort(GPIO_PIN_SWO, DISABLE);
 
-    (void)GPIO_Init(RADAR_BOARD_LED_G_PORT, RADAR_BOARD_LED_G_PIN, &stcGpioInit);
-    (void)GPIO_Init(BOARD_LED_1_PORT, BOARD_LED_1_PIN, &stcGpioInit);
-    (void)GPIO_Init(BOARD_LED_1_PORT, BOARD_LED_2_PIN, &stcGpioInit);
+    (void)GPIO_Init(BOARD_LED_RED_PORT  , BOARD_LED_RED_PIN  , &stcGpioInit);
+    (void)GPIO_Init(BOARD_LED_GREEN_PORT, BOARD_LED_GREEN_PIN, &stcGpioInit);
+    (void)GPIO_Init(BOARD_LED_BLUE_PORT , BOARD_LED_BLUE_PIN , &stcGpioInit);
+	
+	  (void)GPIO_SetPins(BOARD_LED_RED_PORT  , BOARD_LED_RED_PIN);
+	  (void)GPIO_ResetPins(BOARD_LED_GREEN_PORT, BOARD_LED_GREEN_PIN);
+	  (void)GPIO_SetPins(BOARD_LED_BLUE_PORT , BOARD_LED_BLUE_PIN);
 }
 
 /*
@@ -148,21 +150,21 @@ void bsp_LedOn(uint8_t _no)
         gpo_set(GPO2, 1);
         gpo_set(GPO3, 1);
     }
-    else if (_no == RADARLED)
+    else if (_no == BOARDLED_RED)
     {
-        gpo_set(BOARD_GLED, 1);
+       GPIO_ResetPins(BOARD_LED_RED_PORT, BOARD_LED_RED_PIN);
     }
     else if (_no == RELAYGPO)
     {
         gpo_set(GPO1, 1);
     }
-    else if (_no == BOARDLED1)
+    else if (_no == BOARDLED_BLUE)
     {
-        GPIO_ResetPins(BOARD_LED_1_PORT, BOARD_LED_1_PIN); //GPIO_SetPins
+        GPIO_ResetPins(BOARD_LED_BLUE_PORT, BOARD_LED_BLUE_PIN); //GPIO_SetPins
     }
-    else if (_no == BOARDLED2)
+    else if (_no == BOARDLED_GREEN)
     {
-        GPIO_ResetPins(BOARD_LED_1_PORT, BOARD_LED_2_PIN);
+        GPIO_SetPins(BOARD_LED_GREEN_PORT, BOARD_LED_GREEN_PIN);
     }
 
 
@@ -196,21 +198,21 @@ void bsp_LedOff(uint8_t _no)
         gpo_set(GPO2, 0);
         gpo_set(GPO3, 0);
     }
-    else if (_no == RADARLED)
+    else if (_no == BOARDLED_RED)
     {
-        gpo_set(BOARD_GLED, 0);
+			 GPIO_SetPins(BOARD_LED_RED_PORT, BOARD_LED_RED_PIN);
     }
     else if (_no == RELAYGPO)
     {
         gpo_set(GPO1, 0);
     }
-    else if (_no == BOARDLED1)
+    else if (_no == BOARDLED_BLUE)
     {
-        GPIO_SetPins(BOARD_LED_1_PORT, BOARD_LED_1_PIN); //GPIO_SetPins
+        GPIO_SetPins(BOARD_LED_BLUE_PORT, BOARD_LED_BLUE_PIN); //GPIO_SetPins
     }
-    else if (_no == BOARDLED2)
+    else if (_no == BOARDLED_GREEN)
     {
-        GPIO_SetPins(BOARD_LED_1_PORT, BOARD_LED_2_PIN);
+        GPIO_ResetPins(BOARD_LED_GREEN_PORT, BOARD_LED_GREEN_PIN);
     }
 }
 
@@ -332,10 +334,10 @@ void Led_status_update(void)
     LED_Pro(&G_tLED, LED_GLED);
     LED_Pro(&B_tLED, LED_BLED);
     LED_Pro(&OPA_BeepLED, OPA_BUZZLED);
-    LED_Pro(&Radar_LED, RADARLED);
+    LED_Pro(&Board_LED_Red, BOARDLED_RED);
     LED_Pro(&Relay_GPO, RELAYGPO);
-	  LED_Pro(&Board_LED_1, BOARDLED1);
-	  LED_Pro(&Board_LED_2, BOARDLED2);
+	  LED_Pro(&Board_LED_Blue, BOARDLED_BLUE);
+	  LED_Pro(&Board_LED_Green, BOARDLED_GREEN);
 }
 
 
@@ -396,7 +398,7 @@ void  Alarm_BeeP_LED_Mode(uint8_t beepmode, uint8_t syncmode)
         {
             BEEP_Start(21, 12, alarm_duration * 3);
             LED_Start(&R_tLED, LED_RLED, 21, 12, alarm_duration * 3);
-					  LED_Start(&Board_LED_2, BOARDLED2, 21, 12, alarm_duration * 3);
+					  LED_Start(&Board_LED_Red, BOARDLED_RED, 21, 12, alarm_duration * 3);
             LED_Start(&OPA_BeepLED, OPA_BUZZLED, alarm_duration * 100, 1, 1);
             LED_Start(&Relay_GPO, RELAYGPO, alarm_duration * 100, 1, 1);
         }
@@ -404,7 +406,7 @@ void  Alarm_BeeP_LED_Mode(uint8_t beepmode, uint8_t syncmode)
         {
             BEEP_Start(15, 10, alarm_duration);
             LED_Start(&R_tLED, LED_RLED, alarm_duration * 25, 1, 1);
-					  LED_Start(&Board_LED_2, BOARDLED2,alarm_duration * 25, 1, 1);
+					  LED_Start(&Board_LED_Red, BOARDLED_RED,alarm_duration * 25, 1, 1);
             LED_Start(&OPA_BeepLED, OPA_BUZZLED, alarm_duration * 25, 1, 1);
             LED_Start(&Relay_GPO, RELAYGPO, alarm_duration * 25, 1, 1);
         }
@@ -422,11 +424,11 @@ void GPIO_LED_test(void)
     Led_Stop(&B_tLED, LED_BLED);
 
     LED_Start(&G_tLED, LED_GLED, 15, 15, 2);
-    DDL_DelayMS(300);
+    DDL_DelayMS(600);
     LED_Start(&B_tLED, LED_BLED, 15, 15, 2);
-    DDL_DelayMS(300);
+    DDL_DelayMS(600);
     LED_Start(&R_tLED, LED_RLED, 15, 15, 2);
-    DDL_DelayMS(300);
+    DDL_DelayMS(600);
 
 }
 
@@ -441,10 +443,12 @@ void Green_pass_Tag(void)
     if(p_Syncmode)
     {
         LED_Start(&G_tLED, LED_GLED, alarm_duration * 100, 1, 1);
+			  LED_Start(&Board_LED_Green, BOARDLED_GREEN, alarm_duration * 100, 1, 1);
     }
     else
     {
         LED_Start(&G_tLED, LED_GLED, alarm_duration * 25, 1, 1);
+			  LED_Start(&Board_LED_Green, BOARDLED_GREEN,alarm_duration * 25, 1, 1);
     }
 
     BEEP_Stop();
@@ -492,17 +496,17 @@ void system_power_on(void)
     if(idkey)
     {
 
-        LED_Start(&Radar_LED , RADARLED  , 15, 10, 2);
-			  LED_Start(&Board_LED_1, BOARDLED1, 15, 10, 2);
-			  LED_Start(&Board_LED_2, BOARDLED2, 15, 10, 2);
+        LED_Start(&Board_LED_Red  , BOARDLED_RED  , 15, 10, 2);
+			  LED_Start(&Board_LED_Blue , BOARDLED_BLUE , 15, 10, 2);
+			  LED_Start(&Board_LED_Green, BOARDLED_GREEN, 15, 10, 2);
         BEEP_Start(15, 10, 2);
         GPIO_LED_test();
     }
     else
     {
-        LED_Start(&Radar_LED  , RADARLED , 15, 10, 3);
-			  LED_Start(&Board_LED_1, BOARDLED1, 15, 10, 3);
-			  LED_Start(&Board_LED_2, BOARDLED2, 15, 10, 3);
+        LED_Start(&Board_LED_Red  , BOARDLED_RED  , 15, 10, 3);
+			  LED_Start(&Board_LED_Blue, BOARDLED_BLUE  , 15, 10, 3);
+			  LED_Start(&Board_LED_Green, BOARDLED_GREEN, 15, 10, 3);
         BEEP_Start(15, 10, 3);
     }
    

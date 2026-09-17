@@ -23,11 +23,8 @@
 /*******************************************************************************
  * Include files
  ******************************************************************************/
-#define	MSG_NONE               (0)
 #define	MSG_485_TAG_RTU        (1)    /* 接收到RS485 MODBUS RTU数据包*/
-#define	MSG_485_TAG_CRC_FAULT  (2)    /* 接收到RS485数据包，CRC未过 */
 #define	MSG_NETWORK_OFFLINE    (3)		/* Receive from bridge pdu*/
-#define	MSG_BRIDGE_TX          (4)    /* send bridge pdu to alarm board without sound-light output*/
 #define	MSG_Relay_RX           (5)    /* Receive from relay input GPI*/
 #define MSG_Alarm_OFF          (6)
 #define	MSG_LEDTEST            (7)

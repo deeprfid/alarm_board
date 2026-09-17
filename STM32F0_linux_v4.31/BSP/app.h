@@ -15,9 +15,6 @@
 #include "stdint.h"
 
 #define PDUHEAD            (0xFF)   /* Linux 链路唯一帧头: 下行命令与上行响应(gpio_pdu)均用它 */
-#define ALARM_G_CODE       (0xA5)
-#define ALARM_R_CODE       (0x5A)
-#define ALARM_RELAY_CODE   (0x55)
 #define APP_FRAME_LEN_MAX  (32U)
 
 typedef struct

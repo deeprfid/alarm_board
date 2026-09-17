@@ -124,7 +124,6 @@
 #define UART8_TX_PIN                    GPIO_PIN_8
 #define UART8_TX_AF                     GPIO_AF8_UART8
 
-#define UART8_RX_GPIO_CLK_ENABLE()      __HAL_RCC_GPIOJ_CLK_ENABLE()
 #define UART8_RX_GPIO_PORT              GPIOJ
 #define UART8_RX_PIN                    GPIO_PIN_9
 #define UART8_RX_AF                     GPIO_AF8_UART8

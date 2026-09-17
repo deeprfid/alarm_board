@@ -32,15 +32,21 @@ typedef struct _LED_T
 #define LED_GLED     (2UL)
 #define LED_BLED     (3UL)
 /* 板载指示灯(用于上电自检/状态) */
-#define BOARD_LED_1_PORT   (GPIO_PORT_A)
-#define BOARD_LED_1_PIN    (GPIO_PIN_11)
-#define BOARD_LED_2_PIN    (GPIO_PIN_12)
 
-#define OPA_BUZZLED  (4UL)
-#define RADARLED     (5UL)
-#define RELAYGPO     (6UL)
-#define BOARDLED1   (7UL)
-#define BOARDLED2   (8UL)
+#define BOARD_LED_GREEN_PORT   (GPIO_PORT_B)
+#define BOARD_LED_GREEN_PIN    (GPIO_PIN_03)
+
+#define BOARD_LED_RED_PORT     (GPIO_PORT_A)
+#define BOARD_LED_RED_PIN      (GPIO_PIN_12)
+
+#define BOARD_LED_BLUE_PORT   (GPIO_PORT_A)
+#define BOARD_LED_BLUE_PIN    (GPIO_PIN_11)
+
+#define OPA_BUZZLED    (4UL)
+#define BOARDLED_RED   (5UL)
+#define RELAYGPO       (6UL)
+#define BOARDLED_BLUE  (7UL)
+#define BOARDLED_GREEN (8UL)
 
 
 

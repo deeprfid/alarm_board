@@ -229,15 +229,15 @@ void ipc_hpm_message(uint8_t *upload, uint8_t dlen, uint8_t antid)
         {
             ipcTxPost(COM6, upload, dlen); //mainboard CH1
             ipcTxPost(COM2, upload, dlen); //mainboard CH2
-            ipcTxPost(COM3, upload, dlen);	//mainboard CH3
+            ipcTxPost(COM3, upload, dlen); //mainboard CH3
             ipcTxPost(COM4, upload, dlen); //mainboard CH4
-            ipcTxPost(COM5, upload, dlen);	//mainboard CH5
-//					  LED_Start(&Port_1_LED, PORTLED_1, 10, 10, 1);
-//					  LED_Start(&Port_2_LED, PORTLED_2, 10, 10, 1);
-//					  LED_Start(&Port_3_LED, PORTLED_3, 10, 10, 1);
-//					  LED_Start(&Port_4_LED, PORTLED_4, 10, 10, 1);
-//					  LED_Start(&Port_5_LED, PORTLED_5, 10, 10, 1);
-//					  BEEP_Start(10, 10, 1);
+            ipcTxPost(COM5, upload, dlen); //mainboard CH5
+					  LED_Start(&Port_1_LED, PORTLED_1, 10, 10, 1);
+					  LED_Start(&Port_2_LED, PORTLED_2, 10, 10, 1);
+					  LED_Start(&Port_3_LED, PORTLED_3, 10, 10, 1);
+					  LED_Start(&Port_4_LED, PORTLED_4, 10, 10, 1);
+					  LED_Start(&Port_5_LED, PORTLED_5, 10, 10, 1);
+					  //BEEP_Start(10, 10, 1);
             break;
         }
 

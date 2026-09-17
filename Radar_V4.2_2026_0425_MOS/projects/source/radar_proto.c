@@ -3,7 +3,6 @@
  ******************************************************************************/
 #include "radar_proto.h"
 
-#define RP_HDR_LEN      (6U)    /* FD FC FB FA + len(2) */
 
 static uint16_t rp_u16_le(const uint8_t *p)
 {

@@ -38,7 +38,6 @@ extern stc_ring_buf_t g_AlarmRing;
 #define AICAM_CH1                (EXTINT_CH00)
 #define AICAM_SRC1               (INT_SRC_PORT_EIRQ0)
 #define AICAM_IRQn1              (INT011_IRQn)
-#define AICAM_EXINT_PRIO         (DDL_IRQ_PRIO_DEFAULT)
 
 //#define ALARM_PORT               (GPIO_PORT_B)    //报警输入中断信号
 //#define ALARM_PIN2               (GPIO_PIN_01)

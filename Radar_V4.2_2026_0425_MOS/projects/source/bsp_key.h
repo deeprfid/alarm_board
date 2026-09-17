@@ -20,11 +20,9 @@
 #define KEY_LONG_K1		KEY_1_LONG
 
 #define KEY_DOWN_K2		KEY_2_DOWN
-#define KEY_UP_K2		  KEY_2_UP
 #define KEY_LONG_K2		KEY_2_LONG
 
 #define KEY_DOWN_K3		KEY_3_DOWN
-#define KEY_UP_K3		  KEY_3_UP
 #define KEY_LONG_K3		KEY_3_LONG
 
 

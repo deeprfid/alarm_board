@@ -49,21 +49,15 @@
 #define INput_RELAY        (12)
 
 #define Custom_By_SZBMA             (0x00)
-#define SYNC_WITH_LINUX_MAINBOARD   (0x00)
 #define PDUHEAD                     (0xFF)
 #define ALARM_G_CODE                (0xA5)
 #define ALARM_R_CODE                (0x5A)
-#define NONE_EAS_CODE               (0x64)
-#define AUX_EAS_CODE                (0x32)
 #define ALARM_RELAY_CODE            (0x55)
 #define HASH_MSG_DIGEST_SIZE        (0x20)
 #define HASH_TIMEOUT_VAL            (0x0A)
 
 #define RING_BUF_SIZE                   (2048UL)
 
-
-
-#define HASH_TIMEOUT_VAL            (0x0A)
 
 
 #define MEM_ZERO_STRUCT(x)              do {                                   \

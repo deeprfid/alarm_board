@@ -28,7 +28,7 @@ __align(64) uint8_t m_au8DataBuf[RING_BUF_SIZE];
  */
 static void RX_DMA_TC_IrqCallback(void)
 {
-    /* variable-length support: push full 32B chunk, re-arm DMA immediately */
+    /* variable-length support: push the whole RS485_RX_WIN block, re-arm DMA immediately */
     BUF_Write(&m_stcRingBuf, m_au8RxBuf, RS485_RX_WIN);
     AOS_SW_Trigger();
     DMA_ClearTransCompleteStatus(RX_DMA_UNIT, RX_DMA_TC_FLAG);
@@ -222,8 +222,8 @@ void Uart4_int(void)
     memset(m_au8DataBuf, 0, sizeof(m_au8DataBuf));
     memset(AlarmRingBuf, 0, sizeof(AlarmRingBuf));
     /* Configure USART RX/TX pin. */
-    GPIO_SetFunc(USART_RX_PORT, USART_RX_PIN, USART_RX_GPIO_FUNC);
-    GPIO_SetFunc(USART_TX_PORT, USART_TX_PIN, USART_TX_GPIO_FUNC);
+    GPIO_SetFunc(RS485_RX_PORT, RS485_RX_PIN, RS485_RX_GPIO_FUNC);
+    GPIO_SetFunc(RS485_TX_PORT, RS485_TX_PIN, RS485_TX_GPIO_FUNC);
 
     /* Enable peripheral clock */
     USART_FCG_ENABLE();

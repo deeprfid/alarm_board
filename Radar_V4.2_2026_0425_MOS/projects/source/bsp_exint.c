@@ -17,9 +17,8 @@ static void AICAM_INT_IrqCallback(void);
 extern LED_T R_tLED;
 extern LED_T G_tLED;
 extern LED_T B_tLED;
-extern LED_T Radar_LED;
-extern LED_T Board_LED_1;
-extern LED_T Board_LED_2;
+extern LED_T Board_LED_Blue;
+
 
 #if 0 /* old timer-blink helper, kept with disabled legacy logic */
 static void led_blink_update(LED_T *led, uint8_t id, uint8_t active, uint16_t cadence)
@@ -38,10 +37,10 @@ void Radar_Led_update(void)
 
 #if 0 /* ---- OLD: software-timer blink via LED_Start/Led_Stop (kept, disabled) ---- */
 
-    /* Alarm active (R/G LED running): reflect presence on Radar_LED */
+    /* Alarm active (R/G LED running): reflect presence on Board_LED_Red */
     if ((R_tLED.ucEnalbe == 1) || (G_tLED.ucEnalbe == 1))
     {
-        if (presence) { LED_Start(&Radar_LED, RADARLED, 100, 1, 1); }
+        if (presence) { LED_Start(&Board_LED_Red, BOARDLED_RED, 100, 1, 1); }
         return ;
     }
 
@@ -54,21 +53,21 @@ void Radar_Led_update(void)
 
         if ((p_Aicammode == PIN_RESET) && (p_Radarmode == PIN_RESET))
         {
-            led_blink_update(&Radar_LED, RADARLED, presence, 100);
+            led_blink_update(&Board_LED_Red, BOARDLED_RED, presence, 100);
             led_blink_update(&B_tLED, LED_BLED, presence, 100);
             return ;
         }
 
         if ((p_Aicammode == PIN_RESET) && (p_Radarmode == PIN_SET))
         {
-            led_blink_update(&Radar_LED, RADARLED, aicam_on, 100);
+            led_blink_update(&Board_LED_Red, BOARDLED_RED, aicam_on, 100);
             led_blink_update(&B_tLED, LED_BLED, aicam_on, 100);
             return ;
         }
 
         if ((p_Radarmode == PIN_RESET) && (p_Aicammode == PIN_SET))
         {
-            led_blink_update(&Radar_LED, RADARLED, radar_on, 300);
+            led_blink_update(&Board_LED_Red, BOARDLED_RED, radar_on, 300);
             led_blink_update(&B_tLED, LED_BLED, radar_on, 300);
             return ;
         }
@@ -78,7 +77,7 @@ void Radar_Led_update(void)
             LED_Start(&B_tLED, LED_BLED, 100, 1, 1);
             if (presence)
             {
-                LED_Start(&Radar_LED, RADARLED, 100, 1, 1);
+                LED_Start(&Board_LED_Red, BOARDLED_RED, 100, 1, 1);
                 LED_Start(&B_tLED, LED_BLED, 100, 1, 1);
             }
             return ;
@@ -89,7 +88,7 @@ void Radar_Led_update(void)
             LED_Start(&B_tLED, LED_BLED, 100, 1, 1);
             if (presence)
             {
-                LED_Start(&Radar_LED, RADARLED, 100, 1, 1);
+                LED_Start(&Board_LED_Red, BOARDLED_RED, 100, 1, 1);
                 LED_Start(&B_tLED, LED_BLED, 100, 1, 1);
             }
             return ;
@@ -108,7 +107,7 @@ void Radar_Led_update(void)
 
     /* stop any leftover software blink on the two indicator LEDs so LED_Pro cannot fight us */
     
-    if (Radar_LED.ucEnalbe != 0u)  { Led_Stop(&Radar_LED, RADARLED); }
+    if (Board_LED_Blue.ucEnalbe != 0u)  { Led_Stop(&Board_LED_Blue, BOARDLED_BLUE); }
 
     /* presence hold: radar OUT refreshes every ~100ms, hold "someone" for HOLD_MS
        so the LED does not flicker during the low gaps between radar pulses */
@@ -119,9 +118,9 @@ void Radar_Led_update(void)
         uint32_t nowms = m_u32Tickms;
         uint8_t  presence_hold;
 			
-			 /* Board small Radar_LED: real-time presence, no hold */
-        if (presence) { bsp_LedOn(RADARLED); }
-        else          { bsp_LedOff(RADARLED); }
+			 /* Board small Board_LED_Red: real-time presence, no hold */
+        if (presence) { bsp_LedOn(BOARDLED_BLUE); }
+        else          { bsp_LedOff(BOARDLED_BLUE); }
 
         if (presence)
         {

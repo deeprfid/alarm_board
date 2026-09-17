@@ -29,7 +29,6 @@ static void bsp_InitKeyVar(void);
 static void bsp_InitKeyHard(void);
 static void bsp_DetectKey(uint8_t i);
 
-#define KEY_PIN_ACTIVE(id)	
 
 /*
 *********************************************************************************************************

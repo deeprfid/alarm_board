@@ -25,7 +25,7 @@ int32_t main(void)
     (void)Alarm_Off();
     (void)switch_decoder_init();
     (void)SysTick_Init(1000U);
-    system_power_on();
+    (void)system_power_on();
     (void)radar_init();          /* 雷达三口(USART1/2/3, 逐字节RI中断收+轮询TXE发); 自适应由 radar_poll 推进 */
     (void)WDT_Config();
 	  LL_PERIPH_WP(LL_PERIPH_SEL);

@@ -5,8 +5,8 @@
 #include "main.h"
 #include "bsp_report.h"
 
-extern LED_T Board_LED_1;
-extern LED_T Board_LED_2;
+extern LED_T Board_LED_Blue;
+extern LED_T Board_LED_Green;
 
 
 uint8_t rgb_led_status = 0, EAS_switch = 0, offline_flag = 0;
@@ -325,7 +325,7 @@ static void hc32_handle_legacy_frame(void)
 
     if (pduflag >= 0)
     {
-        LED_Start(&Board_LED_1, BOARDLED1, 2, 1, 1);
+        LED_Start(&Board_LED_Green, BOARDLED_GREEN, 2, 1, 1);
     }
 
     if ((LL_OK == pduflag) && ((p_Easmode == PIN_RESET) || (radar_range == 0)))

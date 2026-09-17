@@ -64,9 +64,9 @@ void gpo_set(uint8_t gpoid, uint8_t state)
     if(gpoid == BOARD_GLED)
     {
         if (state == 1)
-            GPIO_SetPins(RADAR_BOARD_LED_G_PORT, RADAR_BOARD_LED_G_PIN);
+            GPIO_SetPins(BOARD_LED_RED_PORT , BOARD_LED_RED_PIN);
         else
-            GPIO_ResetPins(RADAR_BOARD_LED_G_PORT, RADAR_BOARD_LED_G_PIN);
+            GPIO_ResetPins(BOARD_LED_RED_PORT, BOARD_LED_RED_PIN);
     }
 }
 

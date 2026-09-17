@@ -80,13 +80,13 @@
 #define TMR0_FCG_ENABLE()               (FCG_Fcg2PeriphClockCmd(FCG2_PERIPH_TMR0_2, ENABLE))
 
 /* USART RX/TX pin definition */
-#define USART_RX_PORT                   (GPIO_PORT_B)   /* PB6: USART4_RX */
-#define USART_RX_PIN                    (GPIO_PIN_06)
-#define USART_RX_GPIO_FUNC              (GPIO_FUNC_37)
+#define RS485_RX_PORT                   (GPIO_PORT_B)   /* PB6: USART4_RX */
+#define RS485_RX_PIN                    (GPIO_PIN_06)
+#define RS485_RX_GPIO_FUNC              (GPIO_FUNC_37)
 
-#define USART_TX_PORT                   (GPIO_PORT_B)   /* PB7: USART4_TX */
-#define USART_TX_PIN                    (GPIO_PIN_07)
-#define USART_TX_GPIO_FUNC              (GPIO_FUNC_36)
+#define RS485_TX_PORT                   (GPIO_PORT_B)   /* PB7: USART4_TX */
+#define RS485_TX_PIN                    (GPIO_PIN_07)
+#define RS485_TX_GPIO_FUNC              (GPIO_FUNC_36)
 
 /* USART unit definition */
 #define USART_UNIT                      (CM_USART4)
@@ -110,9 +110,6 @@
 
 /* Application frame length max definition */
 #define APP_FRAME_LEN_MAX               (32U)
-#define MAXANTCNT 16
-#define MAXEMBDATALEN 128
-#define MAXEPCBYTESCNT 62
 
 
 #define MSG_CRC_INIT                    (0xFFFF)
