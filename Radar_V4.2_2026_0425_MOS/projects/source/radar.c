@@ -6,6 +6,8 @@
  *   - 每个雷达口一个接收跳板 radar_rx_cb0/1/2 -> radar_on_bytes(port, ...);
  *   - radar_poll() 里 for (p = 0; p < RADAR_PORT_CNT; p++) 逐口推进;
  *   - 现场 Watch 仍是 3 个变量, 但变成 [RADAR_PORT_CNT] 数组(一口一个下标)。
+ * 命令层(后续步骤): 所有命令走**非阻塞事务引擎**(见文件后部「命令层」一节):
+ *   begin/poll 两段式, 由 radar_poll() 每拍推进一步, 主循环单次占用有界(不再 while 死等 ACK)。
  * 硬约束: 设备号 == 口号(s_dev[]/radar_dev()/radar_report() 用设备号, 内部用口号)。
  ******************************************************************************/
 #include "radar.h"
@@ -132,7 +134,6 @@ static uint8_t             s_prov_op[RADAR_PORT_CNT];       /* 正在跑哪笔事务: 0
  * **必须定义在这个无条件编译的位置**: 用它的 *_poll 函数不受 RADAR_PARAM_EN 控制,
  * 放到参数块里会导致 PARAM_EN=0(出货配置) 直接编不过。 */
 #define RADAR_ERR_PARSE      (RADAR_TXN_ERR_BASE + 0)
-#define RADAR_TXN_VAL_MAX    (18U)          /* 0x0064 的载荷最长 18B */
 
 #define RADAR_TXN_IDLE       (0U)           /* 空闲 */
 #define RADAR_TXN_WAIT_TX    (1U)           /* 等上一帧发完 */
@@ -400,7 +401,9 @@ static void radar_probe_accept(uint8_t port)
  * 为什么绝不发"使能配置 0x00FF": 它会让模块**进入配置态并停止上报**, 只要 0x00FE 晚发/丢失/被拒,
  *   模块就"哑"了 —— 现场已经踩过这个坑。探测阶段永远不发 0x00FF。
  * 唯一的例外是**重扫急救包**(裸 0x00FE, RADAR_PROBE_FAILSAFE): 它没有"进配置态"的语义,
- *   而且带**长时间全静默门控**(见 radar_probe_failsafe()), 插不进客户 APP 的配置事务。
+ *   而且**只在两种情况下才发**(见 radar_probe_failsafe()): ① 是**我们自己**的事务把模块留在配置态
+ *   (靶向); ② 该口彻底静默超过 RADAR_RESCUE_ABANDON_MS(长时兜底)。客户 APP 的会话不触发 ①,
+ *   所以"客户在参数页停留多久"与我们无关。细节见 radar_cfg.h 的 RADAR_PROBE_FAILSAFE 一节。
  * 参数读写等命令仍按协议包"使能配置->命令->结束配置", 但那是**显式调用**时才发生。 */
 /* 统一换档入口: 换波特率必须和『复位分帧器 + 清接收计数』一起做 ——
  * 换档瞬间线上那一帧会被拆开(前半截在旧档、后半截在新档或直接丢失),
@@ -413,7 +416,7 @@ static void radar_switch_baud(uint8_t port, uint32_t baud)
     radar_port_set_baud(port, baud);
 #if (RADAR_PROBE_FAILSAFE != 0U)
     /* 换到本档之后补一帧裸 0x00FE: 但只对"**我们自己**把模块留在配置态"的那一口补(靶向)。
-     * 这里只管"是不是重扫"; "要不要补"由 radar_probe_failsafe() 判(查 s_rescue_arm + 全静默),
+     * 这里只管"是不是重扫"; "要不要补"由 radar_probe_failsafe() 判(查靶向武装 s_rescue_own 与静默条件),
      * 见 radar_cfg.h 的 RADAR_PROBE_FAILSAFE / RADAR_FAILSAFE_SILENT_MS / RADAR_RESCUE_ABANDON_MS。 */
     if (s_probe_rescan[port] != 0U) { radar_probe_failsafe(port); }
 #endif

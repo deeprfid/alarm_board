@@ -417,7 +417,6 @@ static void radarQueryAll(void)
     }
 }
 
-/* pump one port's FIFO through the var-frame state machine */
 /* ===== 雷达触发输出: 轮询到某口有人(radarVal=1) -> Host_IRQ 输出 1 + 对应口 LED, 保持 radarTrigHoldMs ===== */
 #define radarTrigHoldMs     (5u)   /* 触发信号与点灯的保持时间(ms) */
 #define radarTrigLedOn      (10u)     /* LED_Start 参数: 亮 10*10ms */
@@ -490,6 +489,8 @@ static void radarTriggerOut(uint32_t now)
     }
 }
 
+/* 把该口 FIFO 里的字节喂进 0xAA 变长帧状态机(+ 0xFF 定长 32B)。
+ * **每轮主循环都调用**(不受 20ms 节拍限制): 回包一到就解析、就点灯, 省掉"回包躺在缓冲里等下一拍"。 */
 static void radarPumpPort(uint8_t i, uint32_t now)
 {
     uint8_t b;

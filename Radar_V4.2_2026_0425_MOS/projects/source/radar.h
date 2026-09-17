@@ -2,14 +2,17 @@
  * radar.h -- LD2410C 雷达服务层(设备状态 + 命令事务 + 有人判定)
  *
  * 用法:
- *   radar_init();                       // 上电初始化一次(含波特率自适应探测)
- *   while (1) { radar_poll(); ... }     // 主循环每拍调用(非阻塞)
- *   radar_read_params(&p);              // 读参数(阻塞式, 内部自行 poll, 有超时)
- *   radar_set_sensitivity(3, 40, 40);   // 设距离门 3 灵敏度
+ *   radar_init();                     // 上电初始化一次(含波特率自适应探测)
+ *   while (1) { radar_poll(); ... }   // **主循环每拍必须调用**: 波特率探测、所有命令事务、
+ *                                     //   链路监控全部由它逐拍推进(非阻塞, 单次占用有界)
+ *   // 命令一律是"发起 + 取结果"两段式(见文末命令区):
+ *   (void)radar_read_params_begin(0u);
+ *   ret = radar_read_params_poll(0u, &p);   // LL_ERR_BUSY = 还没做完, 下一拍再来
  *
- * 第 3 步(多口): 三路雷达(USART1/2/3)各跑各的。设备号 == 口号(0/1/2)。
- *   - 不带口号的旧接口一律是"口 0 兼容入口"(既有调用点不用改);
- *   - 需要指定口时用 radar_cmd_port() / radar_restart_port() 等 _port 版本。
+ * 多口: 三路雷达(USART1/2/3)各跑各的, 设备号 == 口号(0/1/2)。
+ *   - **命令接口一律带口**(radar_xxx_begin / radar_xxx_poll 的首参都是 port);
+ *   - 只有几个 Watch 标量保留了"口 0 兼容入口"(radar_baud_locked / radar_ready /
+ *     radar_get_baud / radar_param_state) —— 它们历史上是单口用的, 多口请看 g_radar_* 数组本身。
  ******************************************************************************/
 #ifndef __RADAR_H__
 #define __RADAR_H__

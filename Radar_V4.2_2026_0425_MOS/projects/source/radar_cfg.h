@@ -177,8 +177,6 @@
 #define RADAR_CMD_TIMEOUT_MS            (200U)      /* 命令等待 ACK 超时(非阻塞事务里 = 每帧最多等多久) */
 #define RADAR_TXN_TX_WAIT_MS            (50U)       /* 事务里发下一帧前, 等上一帧发完的最长时间 */
 #define RADAR_TX_TIMEOUT_MS             (50U)       /* 发送兜底: 超时仍未发完就复位 s_tx_busy 放行后续发送(见 radar_port_tx_watchdog) */
-#define RADAR_READ_TRY                  (2U)        /* radar_read_all() 每项最多试几次 */
-#define RADAR_READ_GAP_MS               (50U)       /* 每项之间的间隔(模块连续命令间需要喘口气) */
 #define RADAR_PROBE_BOOT_MS             (1000U)     /* 上电后等模块启动完成再开始探测 */
 #define RADAR_FRAME_GAP_MS              (20U)       /* 半包超时(帧内空闲复位) */
 #define RADAR_REPORT_STALE_MS           (1000U)     /* 上报数据过期(串口在线判定) */
@@ -215,7 +213,7 @@
 #define RADAR_PARAM_STILL_SENS          { 30U, 30U, 30U, 30U, 30U, 30U, 30U, 30U, 30U }  /* 门0/1 静止灵敏度不可设 */
 
 /* 编译期拦住写错的目标值(手册 2.2.3: 运动/静止距离门配置范围 2~8)。
- * 写错了宁可编不过, 也别把非法参数发给模块 —— 运行时 radar_set_max_gate_port() 还有一道。 */
+ * 写错了宁可编不过, 也别把非法参数发给模块 —— 运行时 radar_set_max_gate_begin() 还有一道。 */
 #if ((RADAR_PARAM_MAX_MOVE_GATE < 2U) || (RADAR_PARAM_MAX_MOVE_GATE > 8U))
 #error "RADAR_PARAM_MAX_MOVE_GATE must be 2..8 (LD2410C 协议 2.2.3)"
 #endif
@@ -269,7 +267,8 @@
 
 /* C. 上电读回一次只读信息(读参数/分辨率/辅助控制/固件版本/MAC)到 s_dump, 供 Keil Watch 查看。
  * 只读不写, 无害; 出厂可置 0。 */
-#define RADAR_DUMP_ONCE                 (0U)        /* 0 = 上电不读回(不发任何命令); 需要读时手动调 radar_read_all() */
+#define RADAR_DUMP_ONCE                 (0U)        /* 0 = 上电不读回(不发任何命令); 需要读时手动调 radar_dump_start(),
+                                                     *     之后由 radar_poll() 逐拍读完 5 项, 结果看 radar_dump() / s_dump */
 /* ==================== 探测重扫的"急救包"(补发裸 0x00FE) ====================
  * 背景: LD2410C 一旦进了配置态(收到 0x00FF 而没收到 0x00FE 收尾)**就彻底停止上报**,
  *       纯监听方案无法自救。固件的 cfg 事务已做到"无条件发 0x00FE"(见 radar.c), 但那帧也可能丢,
