@@ -20,25 +20,9 @@ uint32_t trng_create(void)
 
 
 
-/* ICG 配置字保活(工程侧, 不改库代码):
- * HC32F460 复位后硬件会读 0x400 处的 ICG 配置字, 用来决定看门狗/主时钟源/SWD/缓存等启动配置;
- * 这些字由库文件 hc32_ll_icg.c 的 u32ICGValue[] 提供, 而该数组没有任何代码引用、只靠链接器定位:
- *   - AC5 走 __attribute__((at())) 分支, 生成的是链接器根段, 因而保留;
- *   - AC6(尤其开了 LTO)会把它当未用符号在编译/LTO 阶段直接消除, 镜像里完全没有 ICG 段,
- *     芯片退化成按擦除态默认值启动 —— 表现就是固件完全不工作。
- * 链接器的 --keep 在 AC6+LTO 下救不了它(那时链接器已经看不到这个符号), 所以必须在工程侧引用它的地址。 */
-void ICG_KeepAlive(void)
-{
-    extern const uint32_t u32ICGValue[];
-    volatile uint32_t sink;
-
-    sink = (uint32_t)(uintptr_t)u32ICGValue;
-    (void)sink;
-}
-
 void TrngConfig(void)
 {
-    ICG_KeepAlive();
+
 
     /* Enable TRNG. */
     FCG_Fcg0PeriphClockCmd(FCG0_PERIPH_TRNG, ENABLE);
