@@ -25,6 +25,38 @@ static void SystemClock_Config(void);
 static void MX_IWDG_Init(void);      /* 定义也在这个条件里(见文件下部): 关狗时不留未引用告警 */
 #endif
 
+/* ==================== 复位原因(开机抓一次) ====================
+ * **为什么必须有**: 开了独立看门狗之后, 板子卡死会被**悄悄重启** —— RAM 清空、现象消失, 现场
+ *   **完全看不出故障发生过**(表现为"偶尔应答慢一下", 会被误当成 Linux 侧的问题)。
+ *   RCC_CSR 的复位标志是**粘滞的**(要写 RMVF 才清), 所以开机读一次就知道"上一次为什么重启"。
+ *
+ * **读后必须清标志**, 否则下一次读到的是累积的老标志(分不清是哪一次复位)。
+ *
+ * 位定义(与 Linux 侧约定, 上报到 gpio_pdu 的 GPIO[1]):
+ *   bit0 = 独立看门狗 IWDG      <- **重点看这个**: 不为 0 说明板子被狗咬过
+ *   bit1 = 软件复位             bit2 = 上电/掉电复位
+ *   bit3 = NRST 引脚复位        bit4 = 低功耗复位
+ *   bit5 = 选项字节装载复位     bit6 = V18 域掉电复位
+ * 0 = 未知/没抓到(理论上不会出现)。
+ *
+ * 局限: 只反映**最近一次**复位; 要统计"累计被咬几次"靠 Linux 侧累积日志, 别在 STM32 上写 Flash。 */
+uint8_t g_resetCause = 0u;
+
+void Reset_Cause_Capture(void)
+{
+    g_resetCause = 0u;
+
+    if (__HAL_RCC_GET_FLAG(RCC_FLAG_IWDGRST)  != RESET) { g_resetCause |= 0x01u; }
+    if (__HAL_RCC_GET_FLAG(RCC_FLAG_SFTRST)   != RESET) { g_resetCause |= 0x02u; }
+    if (__HAL_RCC_GET_FLAG(RCC_FLAG_PORRST)   != RESET) { g_resetCause |= 0x04u; }
+    if (__HAL_RCC_GET_FLAG(RCC_FLAG_PINRST)   != RESET) { g_resetCause |= 0x08u; }
+    if (__HAL_RCC_GET_FLAG(RCC_FLAG_LPWRRST)  != RESET) { g_resetCause |= 0x10u; }
+    if (__HAL_RCC_GET_FLAG(RCC_FLAG_OBLRST)   != RESET) { g_resetCause |= 0x20u; }
+    if (__HAL_RCC_GET_FLAG(RCC_FLAG_V18PWRRST)!= RESET) { g_resetCause |= 0x40u; }
+
+    __HAL_RCC_CLEAR_RESET_FLAGS();      /* 必须清: 否则下次读到的是累积的老标志 */
+}
+
 /*
 *********************************************************************************************************
 *	函 数 名: System_Init
@@ -38,6 +70,8 @@ void System_Init(void)
 
     HAL_Init();
 
+    /* 尽早抓复位原因(越早越保险, 免得被后面的代码清掉或改写) */
+    Reset_Cause_Capture();
 
     /* Configure the system clock */
     SystemClock_Config();

@@ -91,6 +91,11 @@
  * 超时约 1 秒(见 bsp.c 的 MX_IWDG_Init); 喂狗点在 main() 的 while(1) 末尾。
  * **量产前必须做一次"故意卡死"验证**: 在 while(1) 里插死循环, 确认板子自己重启且 RS485 恢复。 */
 #define STM32F0_IWDG_ENABLE   (1U)
+
+/* 复位原因(gpio_pdu 的 GPIO[1] 上报; 见 bsp.c 的位定义)。
+ * 开了看门狗之后这是现场唯一能证明"板子被悄悄重启过"的证据。 */
+extern uint8_t g_resetCause;
+void Reset_Cause_Capture(void);
 #define GET_RADAR_ENABLE      (1U)
 
 #ifndef TRUE

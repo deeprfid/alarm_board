@@ -77,6 +77,13 @@ unsigned short ipcCrc(unsigned char *msgbuf, int msglen)
 #define ipcTxSlotLen   (APP_FRAME_LEN_MAX)         /* 下行 PDU 定长 32B */
 
 static const COM_PORT_E sTxPort[ipcTxSlotCnt] = { COM6, COM2, COM3, COM4, COM5 };
+
+/* 逐口"丢帧"计数: 线上出现过帧头但**校验/格式不对被丢弃**的帧数(CRC 错、长度非法、被截断后重同步)。
+ * 饱和到 255。上报到 gpio_pdu 的 GPIO[2..6](下标 0..4 = COM6/COM2/COM3/COM4/COM5)。
+ * 注: "该口完全没应答"不在这里体现 —— 那种情况已经由 Rad_Status/Alarm_Done 归零表达
+ *     (radarPortFresh() 过了 200ms 就把该口按 0 上报), 而且是**持续**的、比计数更好认。 */
+#define ipcRadarPortCnt  (5u)               /* 雷达链路条数; 顺序与 sTxPort / sPortCom 一致 */
+static uint8_t sPortBad[ipcRadarPortCnt];
 static uint8_t sTxPend[ipcTxSlotCnt];              /* 1 = 该口有待发帧 */
 static uint8_t sTxLen[ipcTxSlotCnt];
 static uint8_t sTxBuf[ipcTxSlotCnt][ipcTxSlotLen];
@@ -508,6 +515,11 @@ static void radarPumpPort(uint8_t i, uint32_t now)
                 sPorts[i].lastRxMs = now;   /* 收到有效应答: 刷新该口新鲜度 */
             }
         }
+        else if (ev == frameEvVarBad)
+        {
+            /* 帧头认出来了但校验/格式不对(线上被干扰、被截断、双方不同步) —— 统计下来供现场定位 */
+            if (sPortBad[i] < 255u) { sPortBad[i]++; }
+        }
     }
 }
 
@@ -600,6 +612,8 @@ static uint8_t ipcReportBuild(uint32_t now)
             sIpcGpioPdu.Alarm_Done[ch] = sIpcReportVals[i][2];
         }
 
+        sIpcGpioPdu.GPIO[2u + i] = sPortBad[i];   /* 该口丢帧数(诊断, 正常应接近 0 且不涨) */
+
         if ((sIpcReportVals[i][0] != sIpcReportLast[i][0]) ||
             (sIpcReportVals[i][1] != sIpcReportLast[i][1]) ||
             (sIpcReportVals[i][2] != sIpcReportLast[i][2]))
@@ -610,8 +624,9 @@ static uint8_t ipcReportBuild(uint32_t now)
     /* GPIO[0]: 下行转发"待发槽被顶掉"的帧数 —— **诊断用, 正常应恒为 0**。
      *   (原来 GPIO[10] 全填 0 且 Linux 侧语义待确认, 这里只借用 GPIO[0], 其余仍为 0。)
      * 发现它不为 0 说明有下行帧在"待发槽未排空"时被新帧顶掉 —— 需要把 L 侧下发节奏放慢或加深队列。 */
-    sIpcGpioPdu.GPIO[0] = sTxDrop;
-    /* GPIO[1..9]: Linux 侧字段语义待确认, 暂填 0 */
+    sIpcGpioPdu.GPIO[0] = sTxDrop;          /* 下行待发槽被新帧顶掉的次数(正常恒为 0) */
+    sIpcGpioPdu.GPIO[1] = g_resetCause;     /* **复位原因**: bit0 不为 0 = 被看门狗咬过(见 bsp.c) */
+    /* GPIO[2..6] 在按口循环里填(逐口丢帧数); GPIO[7..9] 保留, 暂填 0 */
 
     sIpcGpioPdu.crc = ipcCrc((uint8_t *)&sIpcGpioPdu, sizeof(sIpcGpioPdu) - 2);
     return changed;
