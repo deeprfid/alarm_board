@@ -489,7 +489,7 @@ void Alarm_SilenceCmd(void)
 
 void system_power_on(void)
 {
-    extern __align(64) alarm_confirm_package  HC32_RS485_corfirm_PDU;
+    extern __attribute__((aligned(64))) alarm_confirm_package  HC32_RS485_corfirm_PDU;
     uint16_t  idkey = 0;
     idkey = Ucode_read(&HC32_RS485_corfirm_PDU.rngkey, &HC32_RS485_corfirm_PDU.uidkey);
 

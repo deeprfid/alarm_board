@@ -10,7 +10,7 @@ extern LED_T Board_LED_Green;
 
 
 uint8_t rgb_led_status = 0, EAS_switch = 0, offline_flag = 0;
-__align(64) alarm_confirm_package  HC32_RS485_corfirm_PDU;
+__attribute__((aligned(64))) alarm_confirm_package  HC32_RS485_corfirm_PDU;
 extern stc_ring_buf_t m_stcRingBuf;
 extern stc_ring_buf_t g_AlarmRing;
 /* ===== variable-length frame core (0xAA) + legacy scan ===== */

@@ -7,12 +7,12 @@
 /* RX DMA window: whole variable frame (0xAA max 257B) fits one block */
 #define RS485_RX_WIN               (512u)
 
-__align(64) uint8_t m_au8RxBuf  [RS485_RX_WIN];
-__align(64) uint8_t AlarmRingBuf[APP_FRAME_LEN_MAX];
+__attribute__((aligned(64))) uint8_t m_au8RxBuf  [RS485_RX_WIN];
+__attribute__((aligned(64))) uint8_t AlarmRingBuf[APP_FRAME_LEN_MAX];
 
 stc_ring_buf_t m_stcRingBuf;
 stc_ring_buf_t g_AlarmRing;
-__align(64) uint8_t m_au8DataBuf[RING_BUF_SIZE];
+__attribute__((aligned(64))) uint8_t m_au8DataBuf[RING_BUF_SIZE];
 
 
 /*******************************************************************************
