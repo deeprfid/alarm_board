@@ -15,6 +15,18 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 
 ## [Unreleased]
 
+- `[hc32f460]` **fix(Release target 的 FPU 选项错误 —— 这是「高优化档就不工作」的真正根因)**: Release target 的 Floating Point Hardware 一直是 **Not Used**, 链接器命令行是 `--cpu=Cortex-M4 --fpu=SoftVFP`(软件浮点 ABI); 而 Debug target 与全部现场固件是 **Single Precision**(`--cpu=Cortex-M4.fp.sp`)。两个 target 的其余功能差异(只有 `__DEBUG` 断言、`DebugInformation`、短枚举三项)经逐项实测**都不影响功能**。
+  - **症状与规律**: 同一份源码, Release 在 **-O2 及以上**必然不工作(**AC5 与 AC6 都一样**, 开 LTO 时阈值降到 -O1); 加 `-fno-inline-functions -fno-inline` 或用低优化档(-O0/-O1)则正常 —— 低优化档的保守代码生成把 FP ABI 的差异掩盖了, 所以现象看起来像「编译器/优化档问题」, 实际是**目标配置问题**。
+  - **修法**: Release target 的 Floating Point Hardware 改为 **Single Precision**(与 Debug 一致)。修后两个 target 的链接器命令行都是 `--cpu=Cortex-M4.fp.sp`, AC5+O3 与 AC6 各档位均正常(Release Code=25364 / Debug Code=33864, 0 Error / 0 Warning)。
+  - **发布检查清单新增一条**: 改动 target 配置后, 用 `output/<target>/usart_uart_dma.lnp` 里的 `--cpu=` 行核对两个 target 的 **FPU/ABI 必须一致**。
+
+- `[hc32f460]` **fix(四处「编译器不可见耦合」隐患)**: 与上面的 FPU 问题无关, 但都是真 bug, 一起修掉。
+  - **ICG 启动配置字**: `hc32_ll_icg.c` 的 `u32ICGValue[]`(复位后硬件要读的 0x400 处配置字)没有任何代码引用、只靠链接器定位; AC5 用 `at()` 会生成根段得以保留, **AC6 分支用的是普通 `section()` 属性, 被 armlink 的未用段消除直接删掉** —— AC6 镜像里完全没有 ICG 段, 芯片按擦除态默认启动。修法: 加 `used` 属性。AC6 下验证 ICG 段回到 `0x00000400` 且 RO 恰好 +32B, AC5 下 Code/RO/RW/ZI 一字不变。
+  - **严格别名**: `common.c` 的 `Get_pdu_data()` 原来把字节缓冲强转成结构体指针读字段(`alarm_pdu *getpdupack = (alarm_pdu *)pdubuff`), 同时又用 `CalcCRC()` 逐字节读**同一块内存** = UB(AC6/clang 在 -O2 起启用 TBAA 会据此重排读取)。改为 `memcpy` 到本地副本再读, 与 STM32 侧 `app.c` 的写法一致。
+  - **系统时基缺 volatile**: `m_u32Tickms` 在 `SysTick_Handler()` 里 `++`、被主循环到处读, 但 6 处声明都不是 `volatile` -> 全部改为 `volatile uint32_t`。否则高优化档下主循环可能一直读到寄存器里的陈旧值, `Check_UidKey()` 里靠 `m_u32Tickms % 50 / % 1000` 驱动的周期任务(报警状态机、LED、密钥)会停摆。
+  - **环形缓冲索引缺 volatile**: `ring_buf.h` 的 `stc_ring_buf_t` 中, 中断里的 `BUF_Write` 与主循环的 `BUF_Read` 共享 `u32In/u32Out/u32FreeSize` 却没有 `volatile` -> 加 `volatile`(LTO 内联时尤其危险, 主循环可能永远看不到中断推进的索引)。
+  - **构建**: 两个 target 均 0 Error / 0 Warning。
+
 - `[stm32f030]` **fix(看门狗超时修正 + 下行转发不再静默丢帧)**:
   - **看门狗**: 原 `Prescaler=4 / Reload=4095` 只有 **0.41 秒**, 而主循环最长合法耗时实测约 **30ms**(`radarQueryAll()` 5 口 x `UartTxWait(5ms)` + `ipcReportStatus()` 的 `UartTxWait(COM1,5ms)`, 且只在 TX 忙时才真的等) -> 只留 13 倍余量, 偏紧。改为 `Prescaler=64 / Reload=624` = **约 1.0 秒**(25 倍以上; LSI 容差 30~50kHz 对应 0.8~1.33s)。`STM32F0_IWDG_ENABLE` 仍保持 0(调试期必需: STM32F0 的 IWDG 走内部 LSI, **一旦启动就停不下来**, 调试器 halt 时照样计数, 单步会被复位), 量产置 1 即可。顺带把 `MX_IWDG_Init` 的声明与定义一起放进条件编译, **消掉了项目一直存在的 `#177-D: declared but never referenced` 告警**。
   - **下行转发静默丢帧**: `uart4/6_dma_tx_start()` 在 TX 忙时是**直接 return 把整帧丢掉**; 而 20ms 一次的 0x10 查询与 Linux 转下来的下行包走**同一根 TX** —— `stmVarSend()`(发查询)有 `UartTxWait()`、`ipc_hpm_message()`(转下行)**没有**, 所以**被丢的总是下行包**(Linux 侧还以为发出去了), 概率约 **1/140**。现场症状就是「下发参数/命令偶尔不生效, 而且查不出来」。改为**「待发槽 + 发送泵」**: 收包上下文里**只登记**(不阻塞), 发送泵只在 `UartTxEmpty()` 为真时才真正 `comSendBuf`, 撞上就留到下一轮主循环 —— **不丢、不阻塞**, 常见情况(TX 空闲)延迟仍为 0。被顶掉的帧数挂到上行帧 `GPIO[0]` 供诊断(**正常应恒为 0**)。
