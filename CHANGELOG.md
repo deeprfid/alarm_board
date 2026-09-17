@@ -21,7 +21,7 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
   - **发布检查清单新增一条**: 改动 target 配置后, 用 `output/<target>/usart_uart_dma.lnp` 里的 `--cpu=` 行核对两个 target 的 **FPU/ABI 必须一致**。
 
 - `[hc32f460]` **fix(四处「编译器不可见耦合」隐患)**: 与上面的 FPU 问题无关, 但都是真 bug, 一起修掉。
-  - **ICG 启动配置字**: `hc32_ll_icg.c` 的 `u32ICGValue[]`(复位后硬件要读的 0x400 处配置字)没有任何代码引用、只靠链接器定位; AC5 用 `at()` 会生成根段得以保留, **AC6 分支用的是普通 `section()` 属性, 被 armlink 的未用段消除直接删掉** —— AC6 镜像里完全没有 ICG 段, 芯片按擦除态默认启动。修法: 加 `used` 属性。AC6 下验证 ICG 段回到 `0x00000400` 且 RO 恰好 +32B, AC5 下 Code/RO/RW/ZI 一字不变。
+  - **ICG 启动配置字**: `hc32_ll_icg.c` 的 `u32ICGValue[]`(复位后硬件要读的 0x400 处配置字)没有任何代码引用、只靠链接器定位; AC5 用 `at()` 会生成根段得以保留, **AC6 分支用的是普通 `section()` 属性, 被 armlink 的未用段消除直接删掉** —— AC6 镜像里完全没有 ICG 段, 芯片按擦除态默认启动。**库代码不改**(厂商文件保持原样), 改在工程侧保活: `bsp_trng.c` 新增 `ICG_KeepAlive()`(由 `TrngConfig()` 调用), 引用一次 `u32ICGValue` 的地址, 使其成为被引用符号而不会被消除。实测确认**链接器 `--keep` 在 AC6+LTO 下救不了它**(LTO 阶段符号就已被删, 链接器看不到), 必须在工程侧引用。AC5 两个 target 与 AC6+LTO 下均验证 ICG 段位于 `0x00000400` / 32 字节, 且 0 Error / 0 Warning(代价: 两个 target 各 +8 字节)。
   - **严格别名**: `common.c` 的 `Get_pdu_data()` 原来把字节缓冲强转成结构体指针读字段(`alarm_pdu *getpdupack = (alarm_pdu *)pdubuff`), 同时又用 `CalcCRC()` 逐字节读**同一块内存** = UB(AC6/clang 在 -O2 起启用 TBAA 会据此重排读取)。改为 `memcpy` 到本地副本再读, 与 STM32 侧 `app.c` 的写法一致。
   - **系统时基缺 volatile**: `m_u32Tickms` 在 `SysTick_Handler()` 里 `++`、被主循环到处读, 但 6 处声明都不是 `volatile` -> 全部改为 `volatile uint32_t`。否则高优化档下主循环可能一直读到寄存器里的陈旧值, `Check_UidKey()` 里靠 `m_u32Tickms % 50 / % 1000` 驱动的周期任务(报警状态机、LED、密钥)会停摆。
   - **环形缓冲索引缺 volatile**: `ring_buf.h` 的 `stc_ring_buf_t` 中, 中断里的 `BUF_Write` 与主循环的 `BUF_Read` 共享 `u32In/u32Out/u32FreeSize` 却没有 `volatile` -> 加 `volatile`(LTO 内联时尤其危险, 主循环可能永远看不到中断推进的索引)。
