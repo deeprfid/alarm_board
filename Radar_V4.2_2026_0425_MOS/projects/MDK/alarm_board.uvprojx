@@ -744,7 +744,7 @@
           <SLE66CMisc></SLE66CMisc>
           <SLE66AMisc></SLE66AMisc>
           <SLE66LinkerMisc></SLE66LinkerMisc>
-          <SFDFile>../../../../../../drivers/cmsis/Device/HDSC/hc32f4xx/Source/ARM/sfr/HC32F460.SFR</SFDFile>
+          <SFDFile>..\..\drivers\cmsis\Device\HDSC\hc32f4xx\Source\ARM\sfr\HC32F460.SFR</SFDFile>
           <bCustSvd>1</bCustSvd>
           <UseEnv>0</UseEnv>
           <BinPath></BinPath>
@@ -878,8 +878,8 @@
             <AdsLmap>1</AdsLmap>
             <AdsLcgr>0</AdsLcgr>
             <AdsLsym>0</AdsLsym>
-            <AdsLszi>0</AdsLszi>
-            <AdsLtoi>0</AdsLtoi>
+            <AdsLszi>1</AdsLszi>
+            <AdsLtoi>1</AdsLtoi>
             <AdsLsun>0</AdsLsun>
             <AdsLven>0</AdsLven>
             <AdsLsxf>0</AdsLsxf>
