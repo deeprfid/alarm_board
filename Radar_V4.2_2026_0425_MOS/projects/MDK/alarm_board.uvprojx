@@ -1050,7 +1050,7 @@
               <MiscControls></MiscControls>
               <Define>HC32F460,USE_DDL_DRIVER,</Define>
               <Undefine></Undefine>
-              <IncludePath>..\source;../../../../../../drivers/cmsis/Device/HDSC/hc32f4xx/Include;../../../../../../drivers/cmsis/Include;../../../../../../drivers/hc32_ll_driver/inc;../../../../../../drivers/bsp/ev_hc32f460_lqfp100_v2</IncludePath>
+              <IncludePath>../source;../../../../../../drivers/cmsis/Device/HDSC/hc32f4xx/Include;../../../../../../drivers/cmsis/Include;../../../../../../drivers/hc32_ll_driver/inc;../../../../../../drivers/bsp/ev_hc32f460_lqfp100_v2;..\..\drivers\cmsis\Device\HDSC\hc32f4xx\Include;..\..\drivers\cmsis\Include;..\..\drivers\hc32_ll_driver\inc;..\..\drivers\bsp\ev_hc32f460_lqfp100_v2</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
