@@ -15,7 +15,7 @@
 #include <string.h>           /* memset */
 
 /* 1ms 计数(定义在 bsp_trng.c, 由 bsp_exint.c 的 SysTick_Handler 递增) */
-extern uint32_t m_u32Tickms;
+extern volatile uint32_t m_u32Tickms;
 
 #if (RADAR_DEV_CNT != RADAR_PORT_CNT)
 #error "RADAR_DEV_CNT must equal RADAR_PORT_CNT (device index == port index)"

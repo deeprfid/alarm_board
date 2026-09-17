@@ -114,7 +114,7 @@ void Radar_Led_update(void)
     {
         static uint32_t s_presence_ms   = 0u;
         static uint8_t  s_presence_seen = 0u;
-        extern uint32_t m_u32Tickms;
+        extern volatile uint32_t m_u32Tickms;
         uint32_t nowms = m_u32Tickms;
         uint8_t  presence_hold;
 			
@@ -240,7 +240,7 @@ static void AICAM_INT_IrqCallback(void)
     EXTINT_ClearExtIntStatus(AICAM_CH1);
 }
 
-extern uint32_t    m_u32Tickms;
+extern volatile uint32_t    m_u32Tickms;
 void SysTick_Handler(void)
 {
 

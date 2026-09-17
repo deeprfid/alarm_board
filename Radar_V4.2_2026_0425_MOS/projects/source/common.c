@@ -186,17 +186,17 @@ int8_t Get_pdu_data(uint8_t *pdubuff)
     extern uint8_t m_au8DataBuf[RING_BUF_SIZE];
     uint16_t       crcdata, temp;
     uint16_t       idkey = 0;
-    alarm_pdu      *getpdupack = (alarm_pdu *)pdubuff;
-    temp           = getpdupack->crc;
-    crcdata        = CalcCRC(pdubuff, getpdupack->Pdu_len - 2);
+    alarm_pdu      pdu; memcpy(&pdu, pdubuff, sizeof(pdu));
+    temp           = pdu.crc;
+    crcdata        = CalcCRC(pdubuff, pdu.Pdu_len - 2);
 
-    if(getpdupack->AntID != 0)
+    if(pdu.AntID != 0)
     {
-        buzz_duty      = getpdupack->Alarm_Duration[0];
-        radar_range    = getpdupack->Alarm_Duration[1];
-        rgb_led_status = getpdupack->Alarm_Duration[2];
-        alarm_duration = getpdupack->Alarm_Duration[3];
-        EAS_switch     = getpdupack->Alarm_Duration[4];
+        buzz_duty      = pdu.Alarm_Duration[0];
+        radar_range    = pdu.Alarm_Duration[1];
+        rgb_led_status = pdu.Alarm_Duration[2];
+        alarm_duration = pdu.Alarm_Duration[3];
+        EAS_switch     = pdu.Alarm_Duration[4];
 
         /* 雷达灵敏度: 按 Alarm_Duration[1] 下发(0=不设置; 1~10 -> 动态灵敏度 10~100, 静态恒 100)。
          * 只登记目标值, 真正的命令由 radar_poll() 幂等推进(值没变则一条命令都不发)——
@@ -212,15 +212,15 @@ int8_t Get_pdu_data(uint8_t *pdubuff)
     }
     else
     {
-        offline_flag   = getpdupack->Alarm_Duration[5];
+        offline_flag   = pdu.Alarm_Duration[5];
     }
 
     idkey = Ucode_read(&HC32_RS485_corfirm_PDU.rngkey, &HC32_RS485_corfirm_PDU.uidkey);
 
-    if(getpdupack->FrameHead == PDUHEAD && temp == crcdata && idkey && getpdupack->AntID != 0)
+    if(pdu.FrameHead == PDUHEAD && temp == crcdata && idkey && pdu.AntID != 0)
     {
         HC32_RS485_corfirm_PDU.framehead = PDUHEAD;
-        HC32_RS485_corfirm_PDU.deviceID = getpdupack->DeviceID;
+        HC32_RS485_corfirm_PDU.deviceID = pdu.DeviceID;
         HC32_RS485_corfirm_PDU.alarm_done = 1;
         {
             const radar_report_t *rr = radar_report(0);
@@ -238,7 +238,7 @@ int8_t Get_pdu_data(uint8_t *pdubuff)
         HC32_RS485_corfirm_PDU.crc = CalcCRC((uint8_t *)&HC32_RS485_corfirm_PDU, sizeof(HC32_RS485_corfirm_PDU) -2);
         return LL_OK;
     }
-    else if(getpdupack->FrameHead == PDUHEAD && temp == crcdata && idkey && getpdupack->AntID == 0 && offline_flag)
+    else if(pdu.FrameHead == PDUHEAD && temp == crcdata && idkey && pdu.AntID == 0 && offline_flag)
     {
 
         return LL_OK + offline_flag;
@@ -380,7 +380,7 @@ static void hc32_handle_var_frame(void)
 
 void Check_Uart_Pdu(void)
 {
-    extern uint32_t m_u32Tickms;
+    extern volatile uint32_t m_u32Tickms;
     uint8_t b;
     int ev;
     static uint8_t inited = 0u;

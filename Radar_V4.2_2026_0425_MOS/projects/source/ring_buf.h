@@ -56,10 +56,10 @@ extern "C"
  */
 typedef struct {
     uint8_t  *pu8Data;
-    uint32_t u32In;
-    uint32_t u32Out;
-    uint32_t u32Size;
-    uint32_t u32FreeSize;
+    volatile uint32_t u32In;        /* 中断里的 BUF_Write 写, 主循环读 -> 必须 volatile(否则高优化档/LTO 会被缓存进寄存器, 主循环永远看不到新数据) */
+    volatile uint32_t u32Out;       /* 主循环 BUF_Read 写, 中断里读 -> 同上 */
+    uint32_t u32Size;               /* 初始化后不再改变, 无需 volatile */
+    volatile uint32_t u32FreeSize;  /* 中断里的 BUF_Write 维护, 主循环读 -> 同上 */
 } stc_ring_buf_t;
 
 #define CBUF_SIZE 1024 

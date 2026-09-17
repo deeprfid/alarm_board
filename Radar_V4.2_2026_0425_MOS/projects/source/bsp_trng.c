@@ -3,7 +3,7 @@
  * Include files
  ******************************************************************************/
 #include "main.h"
-uint32_t    m_u32Tickms;
+volatile uint32_t    m_u32Tickms;
 
 uint32_t trng_create(void)
 {

@@ -9,7 +9,7 @@
 #include "ring_buf.h"
 #include <string.h>
 
-extern uint32_t m_u32Tickms;
+extern volatile uint32_t m_u32Tickms;
 
 /* ------------------------------ ¶Ë¿ÚÓ²¼şÃèÊö ------------------------------ */
 typedef struct {
