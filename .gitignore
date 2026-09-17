@@ -23,8 +23,6 @@ STM32F0_linux_v4.31/MDK-ARM/DebugConfig/
 
 # ---------- Radar_V4.2_2026_0425_MOS：IDE 用户/构建目录 ----------
 Radar_V4.2_2026_0425_MOS/projects/MDK/output/
-Radar_V4.2_2026_0425_MOS/projects/EWARM/settings/
-Radar_V4.2_2026_0425_MOS/projects/GCC/.settings/
 
 # ---------- 通用编译产物（保险，如散落在工程外的 .o/.axf） ----------
 *.o

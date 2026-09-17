@@ -7,7 +7,7 @@
 | 目录 | MCU / 工具链 | 角色 |
 | --- | --- | --- |
 | `STM32F0_linux_v4.31` | STM32F030CCTx / MDK-ARM (keil) | 通道中继板 v4.31（桥接 Linux 主机 IPC → 各通道报警板；IO 扩展） |
-| `Radar_V4.2_2026_0425_MOS` | HC32F460 / MDK(`alarm_board.uvprojx`)、EWARM、GCC | 单通道报警板 V4.2（确认触发并输出声光报警） |
+| `Radar_V4.2_2026_0425_MOS` | HC32F460 / MDK-ARM (keil) | 单通道报警板 V4.2（确认触发并输出声光报警） |
 
 ## 报警链路（已确认的现状）
 
