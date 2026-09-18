@@ -91,8 +91,8 @@ static void SystemClockConfig(void)
     /* Switch system clock source to MPLL. */
     CLK_SetSysClockSrc(CLK_SYSCLK_SRC_PLL);
     /* Reset cache ram */
-    EFM_CacheRamReset(ENABLE);
-    EFM_CacheRamReset(DISABLE);
+    EFM_DataCacheResetCmd(ENABLE);
+    EFM_DataCacheResetCmd(DISABLE);
     /* Enable cache */
     EFM_CacheCmd(ENABLE);
 }
