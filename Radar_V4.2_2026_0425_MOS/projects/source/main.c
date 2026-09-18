@@ -3,6 +3,7 @@
  * Include files
  ******************************************************************************/
 #include "main.h"
+#include "ota_layout.h"   /* OTA_SLOT_SIZE（槽对齐尺寸） */
 
 /*******************************************************************************
  * Local variable definitions ('static')
@@ -10,6 +11,15 @@
 
 int32_t main(void)
 {
+    /* OTA 槽化：向量表指向本槽基址。
+     * 槽按 OTA_SLOT_SIZE(128KB) 对齐，且链接区 ER_IROM1 被限死在 128KB 内，
+     * 故把本函数地址向下对齐到 128KB 边界即得本槽基址 —— 无需 per-slot 编译宏，
+     * 也就无从配错；未槽化(仍链接在 0x0)时该式为 0，与复位默认一致。
+     * Boot 跳转前也会设一次，这里是 App 侧的自我保证（含 App 启动早期异常）。 */
+    SCB->VTOR = ((uint32_t)(uint32_t)&main) & ~((uint32_t)OTA_SLOT_SIZE - 1UL);
+    __DSB();
+    __ISB();
+
     LL_PERIPH_WE(LL_PERIPH_SEL);
     (void)BSP_CLK_Init();
     (void)Relay_gpio_init();

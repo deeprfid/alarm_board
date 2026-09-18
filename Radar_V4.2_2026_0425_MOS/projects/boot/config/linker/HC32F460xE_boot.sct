@@ -1,0 +1,28 @@
+; ****************************************************************
+; HC32F460 报警板 Bootloader 分散加载
+; Boot 32KB @0x00000000（含 ICG@0x400、向量表）
+; 布局见 docs/ota_boot_design.md v0.2 §3：
+;   Boot   0x00000000-0x00007FFF   32KB
+;   槽 A   0x00008000-0x00027FFF  128KB
+;   槽 B   0x00028000-0x00047FFF  128KB
+;   标志   0x0007E000-0x0007FFFF    8KB
+; 注意：ER_IROM1 限死在 32KB 内，使 Boot 不可能越界覆盖槽区。
+; ****************************************************************
+LR_IROM1 0x00000000 0x00008000  {    ; load region size_region
+    ER_IROM1 0x00000000 0x00008000  {  ; load address = execution address
+        *.o (RESET, +First)
+        *(InRoot$$Sections)
+        .ANY (+RO)
+        .ANY (+XO)
+    }
+    RW_IRAM1 0x1FFF8000 UNINIT 0x00000040  {  ; RW data (8B used; the rest keeps RW_IRAM2 64B-aligned)
+        *(.bss.noinit)
+    }
+    RW_IRAM2 0x1FFF8040 0x00026FC0  {  ; RW data
+        .ANY (+RW +ZI)
+        .ANY (RAMCODE)
+    }
+    RW_IRAMB 0x200F0000 0x00001000  {  ; RW data
+        .ANY (+RW +ZI)
+    }
+}

@@ -15,6 +15,16 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 
 ## [Unreleased]
 
+- `[hc32f460]` **feat(ota): Boot 源码 + A/B 槽分散加载 + App 侧 VTOR（落地第 3、4 项的内容部分）** — 代码已就位并逐文件编译验证；**Keil 工程接线（Boot target、App 切槽分散加载、ICG 移出）尚未做**，故当前两个 target 仍按 0x0 链接、仍带 ICG。
+  - **`projects/boot/source/boot_jump.c/h`**：栈顶（须落在 SRAM 0x1FFF8000-0x20027000）+ 复位向量（须落在本槽内）双重校验；交接前 `CLK_SetSysClockSrc(HRC)` → `CLK_PLLCmd(DISABLE)` → `EFM_SetWaitCycle(0)` → `SCB->VTOR`；再用 `__set_MSP` + 跳转。**原则：不把配好的 PLL 交出去**（借鉴 Decoder bootloader 的 `fw_jump_helper.c`，让 App 从近复位态自行初始化），避开「Boot 配好时钟 + App 再配一次」的耦合；
+  - **`projects/boot/source/boot_main.c`**：读双份标志 → 选中槽校验（向量表 + 槽镜像 CRC32）→ RUNNABLE 直接跳 / TRIAL 则 `boot_count++`、超 `OTA_FLAG_MAX_BOOT` 标 FAILED 并切另一槽 / 标志无效则按 A→B 取第一个有效槽 / 两槽皆无效则停在 Boot（不跳任何槽 = 不砖）。Boot 刻意最小：**不配时钟、不开串口、不开看门狗、不初始化任何外设**（下载在 App 里做）；
+  - **`projects/boot/config/linker/HC32F460xE_boot.sct`**：Boot 32KB @0x0，`ER_IROM1` 限死 32KB 使 Boot 不可能越界覆盖槽区；**ICG 归 Boot 独占**；
+  - **`projects/MDK/config/linker/HC32F460xE_slotA.sct` / `_slotB.sct`**：App 链接基址 0x8000 / 0x28000，各 128KB，RAM 布局与原 `HC32F460xE.sct` 完全一致（保住此前 64B 对齐修复）；
+  - **`projects/source/main.c` 加 VTOR**：`SCB->VTOR = (uint32_t)&main & ~(OTA_SLOT_SIZE-1)` —— 槽按 128KB 对齐且链接区限死 128KB，故把本函数地址向下对齐即得本槽基址，**无需 per-slot 编译宏、也就无从配错**；未槽化（仍链接 0x0）时该式为 0，与复位默认一致，所以这次改动对当前固件是安全的（实测 Code 仅 +24B）；
+  - **「两槽皆无效」在 OTA 路径下不可达**（已写进 boot_main.c 注释）：A/B 无搬运下下载只写非活动槽、激活只在整镜像 CRC32 通过后发生 → **运行槽恒有效**，Boot 恒有槽可跳。只有用 SWD 等外部手段烧进坏镜像才可能构造该状态，那种情况需调试器恢复（Boot 不带下载通道）——这是本设计有意接受的边界；
+  - **命名映射（旧 DDL → 本工程 Rev3.3.0，照抄参考实现会编译不过）**：`M4_SYSREG`→`CM_CMU`/`CM_PWC`、`EFM_Unlock()`→`EFM_REG_Unlock()`、`enIrqResign()`→`INTC_IrqSignOut()`；另 `boot_jump.c` 需显式包含 `hc32_ll_clk.h`/`hc32_ll_efm.h`（`hc32_ll.h` 不含它们）；
+  - **验证**：`boot_jump.c` / `boot_main.c` / `ota_flash.c` / `ota_frame.c` / `ota_recv.c` 五个文件经 ARMCC 5.06u7 `--c99 -O1 -DHC32F460 -DUSE_DDL_DRIVER` 单文件编译**全部 0 error / 0 warning**；App 两个 target 加 VTOR 后仍 **0 Error / 0 Warning**（Debug Code 38106→38130、Release 28990→29014）；
+  - **待做（工程接线）**：Boot target（新 target 或独立工程）；App 两个 target 切到 slotA/slotB 分散加载并各自出 A/B 产物；App target 移除 `hc32_ll_icg.c`；打包工具（否则无法真机跑通一次完整升级）。
 - `[hc32f460]` **feat(ota): 接收端接线 + 业务态自动进入 + 升级期业务帧闸门（落地第 1 项）** — 做完这步，报警板端「可被上位机升级」的软件路径打通（尚缺 App 槽化与 Boot）。
   - **自动进入（先解析后进入）**：`ota_recv_sniff()` 在业务态逐字节嗅探 OTA1；**只有收到 CRC16 合法、type=DATA、0<len≤256 的完整帧才切升级模式** —— 不因「见到 'O'」或半帧/坏帧而进入，避免误触发让该链路业务停摆 10s；半帧 50ms 未补齐即丢弃（与业务帧守卫同量级）；
   - **`Check_Uart_Pdu()` 双模式**：升级模式下列表只跑 OTA1（按 64B 批量 `BUF_Read` 喂 `ota_recv_feed`，业务解析停摆并 return）；业务态下 OTA1 帧字节**不喂业务解析器**（continue），避免 OTA 载荷里的 0xFF/0xAA 被误当成业务帧头；

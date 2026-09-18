@@ -1,0 +1,28 @@
+; ****************************************************************
+; HC32F460 报警板 App —— 槽 B 分散加载（链接基址 0x00028000）
+; 布局见 docs/ota_boot_design.md v0.2 §3：
+;   Boot 0x00000000-0x00007FFF 32KB / 槽A 0x00008000-0x00027FFF 128KB（本文件不用）
+;   槽B 0x00028000-0x00047FFF 128KB / 标志 0x0007E000 8KB
+; 注意：
+;   1) ER_IROM1 限死 128KB —— 过界即链接报错，不会踩到槽 B；
+;   2) App 不带 ICG（hc32_ll_icg.c 从 App 工程移除）—— ICG 固定在 0x400，归 Boot 独占；
+;   3) App 启动早期写 SCB->VTOR = 本槽基址（见 main.c）。
+; ****************************************************************
+LR_IROM1 0x00028000 0x00020000  {    ; 槽 B
+    ER_IROM1 0x00028000 0x00020000  {
+        *.o (RESET, +First)
+        *(InRoot$$Sections)
+        .ANY (+RO)
+        .ANY (+XO)
+    }
+    RW_IRAM1 0x1FFF8000 UNINIT 0x00000040  {
+        *(.bss.noinit)
+    }
+    RW_IRAM2 0x1FFF8040 0x00026FC0  {
+        .ANY (+RW +ZI)
+        .ANY (RAMCODE)
+    }
+    RW_IRAMB 0x200F0000 0x00001000  {
+        .ANY (+RW +ZI)
+    }
+}
