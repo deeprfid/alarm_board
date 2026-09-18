@@ -4,6 +4,7 @@
  ******************************************************************************/
 #include "main.h"
 #include "bsp_report.h"
+#include "ota_recv.h"
 
 extern LED_T Board_LED_Blue;
 extern LED_T Board_LED_Green;
@@ -105,6 +106,7 @@ static int frame_var_send(uint8_t cmd, uint8_t addr, const uint8_t *pl, uint8_t 
     uint8_t out[FRAME_VAR_TOTAL_MAX];
     uint8_t lenv;
     uint16_t total, c;
+    if (ota_recv_busy() != 0u) { return 0; }   /* 升级期停业务帧 */
     if (plen > FRAME_MAX_PAYLOAD) { return 0; }
     lenv = (uint8_t)(plen + 2u);
     total = (uint16_t)lenv + 4u;
@@ -385,7 +387,24 @@ void Check_Uart_Pdu(void)
     int ev;
     static uint8_t inited = 0u;
 
-    if (inited == 0u) { frame_rx_init(&s_hc32_rx); inited = 1u; }
+    if (inited == 0u) { frame_rx_init(&s_hc32_rx); ota_recv_init(); inited = 1u; }
+
+    /* 会话心跳 / 半帧守卫（业务态与升级态都要走） */
+    ota_recv_tick(m_u32Tickms);
+
+    /* 升级模式：本链路只跑 OTA1 帧 —— 业务解析停摆；业务发送由 frame_var_send 自行抑制 */
+    if (ota_recv_busy() != 0u)
+    {
+        uint8_t  tmp[64];
+        uint32_t n;
+        while ((n = BUF_UsedSize(&m_stcRingBuf)) > 0u)
+        {
+            if (n > (uint32_t)sizeof(tmp)) { n = (uint32_t)sizeof(tmp); }
+            (void)BUF_Read(&m_stcRingBuf, tmp, n);
+            ota_recv_feed(tmp, n);
+        }
+        return;
+    }
 
     frame_rx_guard(&s_hc32_rx, m_u32Tickms);
 
@@ -393,6 +412,10 @@ void Check_Uart_Pdu(void)
     {
         BUF_Read(&m_stcRingBuf, &b, 1);
         s_hc32_rx.lastByteMs = m_u32Tickms;
+
+        /* OTA1 嗅探（先解析后进入）：本字节若属于 OTA1 帧，就不喂业务解析器 */
+        if (ota_recv_sniff(b) != 0u) { continue; }
+
         ev = frame_rx_feed(&s_hc32_rx, b);
         if (ev == FRAME_EV_LEGACY)
         {

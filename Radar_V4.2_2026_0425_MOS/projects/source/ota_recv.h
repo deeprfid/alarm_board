@@ -28,6 +28,7 @@
 #define OTA_RX_PKG_HDR_LEN      82u
 #define OTA_RX_FRAME_MAX        (9u + OTA_RX_MAX_PAYLOAD + 2u)
 #define OTA_RX_IDLE_MS          10000u   /* 会话空闲超时 */
+#define OTA_RX_GUARD_MS         50u      /* 半帧未补齐超时（与业务帧守卫同量级） */
 
 #ifndef OTA_RX_FW_VERSION
 #define OTA_RX_FW_VERSION       0u       /* 由工程侧覆盖（版本查询用） */
@@ -58,9 +59,13 @@ uint32_t       ota_recv_total(void);      /* 包总长（0 = 未知） */
 int            ota_recv_result(void);     /* 见 OTA_RX_RESULT_* */
 void           ota_recv_result_clear(void);
 
-/* 喂入链路收到的字节（升级模式下由主循环调用） */
+/* 业务态嗅探：喂 1 字节。返回 1 = 本字节属于 OTA1（或已处于升级模式）——调用方应跳过业务解析；
+ * 返回 0 = 与 OTA 无关，可交给业务解析器。收到合法 DATA 帧时会自动进入升级模式。 */
+uint8_t        ota_recv_sniff(uint8_t byte);
+
+/* 升级模式下批量喂入链路字节 */
 void           ota_recv_feed(const uint8_t *buf, uint32_t len);
-/* 会话心跳（周期调用，传毫秒时基） */
+/* 会话心跳 / 半帧守卫（周期调用，传毫秒时基） */
 void           ota_recv_tick(uint32_t now_ms);
 /* 立刻回一帧 ACK（调试/上报用） */
 void           ota_recv_send_ack(uint32_t offset);

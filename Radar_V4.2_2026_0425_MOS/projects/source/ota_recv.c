@@ -16,7 +16,8 @@ static uint32_t s_total;         /* 包总长（含 82B 包头） */
 static uint32_t s_off;           /* 已写偏移（含包头） */
 static uint32_t s_erased;        /* 目标槽内已擦除到（槽内相对偏移，扇区对齐） */
 static uint32_t s_last_ms;       /* 会话心跳（由 tick 补时基） */
-static uint8_t  s_active;        /* feed 期间有流量 -> 下个 tick 刷新心跳 */
+static uint32_t s_sniff_ms;      /* 业务态嗅探半帧计时 */
+static uint8_t  s_active;        /* 有流量 -> 下个 tick 补时基 */
 static int      s_result;
 
 /* 收帧状态机 */
@@ -67,6 +68,20 @@ static void rx_reset(void)
     s_sync  = 0u;
     s_have  = 0u;
     s_plen  = 0u;
+}
+
+/* 只切会话状态，不碰收帧缓冲 —— 供「先解析后进入」在帧已收全时使用 */
+static void enter_mode_only(void)
+{
+    s_state   = OTA_RX_WAIT_HDR;
+    s_slot    = OTA_SLOT_A;
+    s_total   = 0UL;
+    s_off     = 0UL;
+    s_erased  = 0UL;
+    s_last_ms = 0UL;
+    s_sniff_ms = 0UL;
+    s_active  = 0u;
+    s_result  = OTA_RX_RESULT_NONE;
 }
 
 /* ---------------- 完成：校验 + 激活（写选择器标志） ---------------- */
@@ -231,6 +246,18 @@ static void handle_frame(void)
     }
 
     type = s_rx[4];
+
+    /* 业务态自动进入：先解析、后进入 —— 只有 CRC16 合法且长度合规的 DATA 帧才切升级模式。
+     * 不因「见到 'O'」或「半帧/坏帧」而进入，避免误触发让业务停摆 10s。 */
+    if (s_state == OTA_RX_OFF)
+    {
+        if ((type != (uint8_t)OTA_FRAME_TYPE_DATA) || (plen == 0u) || (plen > (uint16_t)OTA_RX_MAX_PAYLOAD))
+        {
+            return;
+        }
+        enter_mode_only();   /* 保留已收帧，交给 handle_data 处理 */
+    }
+
     if (type == (uint8_t)OTA_FRAME_TYPE_DATA)
     {
         handle_data(&s_rx[9], plen);
@@ -260,14 +287,7 @@ void ota_recv_init(void)
 void ota_recv_enter(void)
 {
     rx_reset();
-    s_state  = OTA_RX_WAIT_HDR;
-    s_slot   = OTA_SLOT_A;
-    s_total  = 0UL;
-    s_off    = 0UL;
-    s_erased = 0UL;
-    s_last_ms = 0UL;
-    s_active  = 0u;
-    s_result = OTA_RX_RESULT_NONE;
+    enter_mode_only();
 }
 
 void ota_recv_exit(void)
@@ -287,56 +307,82 @@ uint32_t       ota_recv_total(void)        { return s_total; }
 int            ota_recv_result(void)       { return s_result; }
 void           ota_recv_result_clear(void) { s_result = OTA_RX_RESULT_NONE; }
 
-void ota_recv_feed(const uint8_t *buf, uint32_t len)
+/* 消费 1 字节。返回 1 = 本字节属于 OTA1（调用方跳过业务解析），0 = 与 OTA 无关 */
+static uint8_t consume_byte(uint8_t b)
 {
     static const uint8_t magic[4] = {
         (uint8_t)OTA_FRAME_MAGIC0, (uint8_t)OTA_FRAME_MAGIC1,
         (uint8_t)OTA_FRAME_MAGIC2, (uint8_t)OTA_FRAME_MAGIC3
     };
-    uint32_t i;
-    uint8_t  b;
 
-    if ((buf == NULL) || (len == 0UL)) { return; }
-    if (s_state == OTA_RX_OFF) { return; }
+    s_active = 1u;   /* 有流量：由下个 tick 补时基 */
 
-    for (i = 0u; i < len; i++)
+    if (s_sync == 0u)
     {
-        b = buf[i];
-        if (s_sync == 0u)
+        if (b == magic[s_have])
         {
-            if (b == magic[s_have])
-            {
-                s_rx[s_have] = b;
-                s_have++;
-                if (s_have >= 4u) { s_rxlen = 4u; s_sync = 1u; s_have = 0u; }
-            }
-            else
-            {
-                s_have = 0u;
-            }
-            continue;
+            s_rx[s_have] = b;
+            s_have++;
+            if (s_have >= 4u) { s_rxlen = 4u; s_sync = 1u; s_have = 0u; }
         }
-        if (s_rxlen >= (uint16_t)sizeof(s_rx)) { rx_reset(); continue; }
-        s_rx[s_rxlen++] = b;
-
-        if (s_rxlen == 9u)
+        else
         {
-            s_plen = (uint16_t)(s_rx[7] | ((uint16_t)s_rx[8] << 8));
-            if (s_plen > (uint16_t)OTA_RX_MAX_PAYLOAD) { rx_reset(); continue; }
+            s_have = 0u;
         }
-        else if ((s_rxlen >= 11u) && (s_rxlen == (uint16_t)(9u + s_plen + 2u)))
-        {
-            handle_frame();
-            rx_reset();
-        }
+        /* 部分匹配中或已对齐：算 OTA 相关；否则交给业务 */
+        return ((s_have > 0u) || (s_state != OTA_RX_OFF)) ? 1u : 0u;
     }
 
-    s_active = 1u;   /* 只置标志：feed 里没有时基，由下个 tick 补 */
+    if (s_rxlen >= (uint16_t)sizeof(s_rx)) { rx_reset(); return 1u; }
+    s_rx[s_rxlen++] = b;
+
+    if (s_rxlen == 9u)
+    {
+        s_plen = (uint16_t)(s_rx[7] | ((uint16_t)s_rx[8] << 8));
+        if (s_plen > (uint16_t)OTA_RX_MAX_PAYLOAD) { rx_reset(); return 1u; }
+    }
+    else if ((s_rxlen >= 11u) && (s_rxlen == (uint16_t)(9u + s_plen + 2u)))
+    {
+        handle_frame();
+        rx_reset();
+    }
+    return 1u;
+}
+
+uint8_t ota_recv_sniff(uint8_t byte)
+{
+    return consume_byte(byte);
+}
+
+void ota_recv_feed(const uint8_t *buf, uint32_t len)
+{
+    uint32_t i;
+
+    if ((buf == NULL) || (len == 0UL)) { return; }
+    for (i = 0u; i < len; i++)
+    {
+        (void)consume_byte(buf[i]);
+    }
 }
 
 void ota_recv_tick(uint32_t now_ms)
 {
-    if ((s_state == OTA_RX_OFF) || (s_state == OTA_RX_DONE) || (s_state == OTA_RX_FAIL)) { return; }
+    if (s_state == OTA_RX_OFF)
+    {
+        /* 业务态嗅探：半帧 50ms 未补齐则丢弃，避免卡在半个魔数上 */
+        if ((s_sync != 0u) || (s_have > 0u))
+        {
+            if ((s_sniff_ms == 0UL) || (s_active != 0u)) { s_sniff_ms = now_ms; s_active = 0u; }
+            else if ((now_ms - s_sniff_ms) > OTA_RX_GUARD_MS) { rx_reset(); s_sniff_ms = 0UL; }
+        }
+        else
+        {
+            s_sniff_ms = 0UL;
+            s_active   = 0u;
+        }
+        return;
+    }
+    if ((s_state == OTA_RX_DONE) || (s_state == OTA_RX_FAIL)) { return; }
     if ((s_last_ms == 0UL) || (s_active != 0u))
     {
         s_last_ms = now_ms;   /* 首次进入，或本拍有流量 */
