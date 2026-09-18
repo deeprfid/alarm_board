@@ -20,7 +20,7 @@
 #define OTA_FRAME_TYPE_RESUME   0x52
 #define OTA_FRAME_HDR_LEN       9
 #define OTA_FRAME_CRC_LEN       2
-#define OTA_FRAME_MAX_PAYLOAD   4096
+#define OTA_FRAME_MAX_PAYLOAD   4096   /* v9.81h: 2048->4096 串口提速（与 USB 帧对齐），static 缓冲已就绪 */
 #define OTA_FRAME_MAX_LEN       (OTA_FRAME_HDR_LEN + OTA_FRAME_MAX_PAYLOAD + OTA_FRAME_CRC_LEN)
 
 /* CRC16-CCITT-FALSE（poly 0x1021, init 0xFFFF） */
@@ -29,10 +29,10 @@ uint16_t ota_frame_crc16(const uint8_t *buf, uint32_t len);
 /* 组帧：返回帧总长（≤OTA_FRAME_MAX_LEN）；失败 -1 */
 int ota_frame_build(uint8_t type, uint16_t seq, const uint8_t *payload, uint16_t plen, uint8_t *out);
 
-/* 解析帧：校验 magic/长度/CRC16；0=OK，非 0 拒绝 */
+/* 解析帧：校验 magic/长度/CRC16；0=OK，<0 拒绝 */
 int ota_frame_parse(const uint8_t *frame, uint16_t flen, uint8_t *type, uint16_t *seq, uint16_t *plen);
 
-/* 流式组帧状态机（字节流通道：USB/网络/串口） */
+/* 流式组帧状态机（字节流通道：USB/网络） */
 typedef struct {
     uint8_t  buf[OTA_FRAME_MAX_LEN];
     uint16_t len;

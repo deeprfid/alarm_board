@@ -5,7 +5,7 @@
 #include <string.h>
 #include "ota_frame.h"
 
-/* 查表 CRC-16/CCITT-FALSE（与逐位版结果一致，快 ~8 倍） */
+/* v9.82: 查表 CRC-16/CCITT-FALSE（与逐位版结果一致，快 ~8 倍） */
 static uint16_t s_crc16_tab[256];
 static int s_crc16_tab_init = 0;
 
