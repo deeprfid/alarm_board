@@ -353,7 +353,31 @@ EFM_REG_Lock();
 > App 曾因此缺 `RW_RAMCODE`，启动时擦标志扇区直接把 CPU 卡死（现象是「蜂鸣器长鸣 + 三灯常亮」）。
 > 复核方法：在 `.map` 里确认 `ota_flag_write` / `EFM_Program` / `EFM_SectorErase` 的地址是 `0x20018xxx` 而**不是** `0x0000xxxx`。
 
-### 15.2 Boot 使用量产时钟配置
+### 15.2 Boot 的时钟配置：尝试过量产配置，但本板上电不运行 —— 已回退
+
+**现状（现场实测可用）**：Boot **不配置时钟**，跑 ICG 决定的复位默认时钟（HRC，约 20MHz）。
+App 自己 `BSP_CLK_Init()` 配到 PLL 200MHz；跳转前 `boot_jump()` 把时钟退回默认态再交接。
+
+**试过什么**：按扫描板量产 `boot_iap` 的 `SystemClockConfig()`（XTAL 8MHz → MPLL 200MHz）逐行恢复，
+唯一改动 `EFM_CacheRamReset` → `EFM_DataCacheResetCmd`。
+→ **本板上电 Boot 完全不运行（绿灯都不亮）**，已回退（见 commit `f1d3d0c`）。
+
+**已排查、未找到差异的三项**：
+
+| 查什么 | 结果 |
+| --- | --- |
+| XTAL 引脚 | BSP 头文件：`GPIO_PORT_H` / `BSP_XTAL_IN_PIN=PIN_01` / `BSP_XTAL_OUT_PIN=PIN_00` —— 与 boot_iap 写法一致 |
+| 配置顺序 | 与 App 的 `BSP_CLK_Init()`（**本板实测能跑**）逐行同序 |
+| 参数 | `CLK_XTAL_MD_OSC/DRV_ULOW/ON/STB_2MS`、`PLLM=1/PLLN=50/PLLP=2/PLLQ=2/PLLR=2/PLLSRC=XTAL` —— 完全相同 |
+
+**同一套配置 App 能跑、Boot 不能** —— 至今无法从代码解释。**再试必须分步，每步上板验证**：
+
+1. 只加 `GPIO_AnalogCmd(PH0/PH1)` + `CLK_XtalInit`（**不开 PLL**）
+2. 再加 `CLK_PLLInit` + 等 PLL 稳定
+3. 再加 `SRAM/EFM/GPIO` 等待周期 + `PWC_HighSpeedToHighPerformance` + 切 PLL 源
+4. 最后加 cache 复位/开启
+
+### 15.2.1 （原 15.2 内容，已作废）
 
 `main.c` 的 `SystemClockConfig()` 与 `boot_iap` **逐行一致**（XTAL 8MHz → MPLL 200MHz），
 唯一改动是 `EFM_CacheRamReset` → `EFM_DataCacheResetCmd`（新版 DDL 命名）。
@@ -379,6 +403,32 @@ EFM_REG_Lock();
 `ota_flash.h` 的 `OTA_APP_ENABLE`（默认 **0 = 关闭**）。
 关闭时 App 启动不写任何 Flash，Boot 恒走兜底路径（按 A→B 扫）→ **恒跳槽 A**。
 用于把「Boot 能否跳到 App」与「OTA 整条链」这两件事分开验证。
+
+### 15.5 已验证基线（2026-09-18 现场实测）
+
+**可用的组合**：
+
+| 项 | 状态 |
+| --- | --- |
+| Boot | 不配时钟（HRC）＋ 跳转路径完整 `SystemClock_DeInit` 对齐 ＋ `flash.c` 原语层；Code 5812 |
+| App | 槽 A：`usart_uart_dma.hex` @0x8000；槽 B：`usart_uart_dma_b.hex` @0x28000；`RW_RAMCODE` 已在位 |
+| OTA | `OTA_APP_ENABLE = 0`（关闭）→ Boot 恒走兜底路径按 A→B 扫 → **恒跳槽 A** |
+| 现象 | 上电 **绿灯常亮 2 秒 → 跳槽 A → App 正常起来** ✓ |
+
+**已确认修掉的真 bug**（仅 1 条有硬证据，其余为真 bug 但未逐一实测对应现象）：
+
+| # | 问题 | 证据强度 |
+| --- | --- | --- |
+| 1 | **App 缺 `RW_RAMCODE`** —— 擦标志扇区时擦写代码在 Flash 里执行，CPU 取指失败卡死（现象：蜂鸣器长鸣 + 三灯常亮） | **硬证据**：map 地址 `0x0000f2f0` → `0x200189e4` |
+| 2 | VTOR 用对齐掩码推导（槽 A=0x8000 / 槽 B=0x28000 都不是 128KB 倍数） | 真 bug，现象未逐一实测 |
+| 3 | Boot 强制要求槽尾元数据，而它只在 OTA 下载时写入 → 烧录器烧的板子必卡 | 同上 |
+| 4 | LED 极性搞反（红/蓝低有效，我却拉低当"灭"） | 同上 |
+| 5 | LED 分组搞错（`LED_R/G/B`=PB5/PB8/PC15 与板载三灯 PA12/PA11/PB3 是两组） | 同上 |
+| 6 | `main.c` 里一个静默 `for(;;)` 防呆块 | 已删 |
+| 7 | `main.c` UTF-8/GBK 混编导致注释乱码 | 已统一 GBK |
+| 8 | LED 节拍按 200MHz 拍（实际跑 HRC 20MHz）→ 改用 `DDL_DelayMS()` | 同上 |
+
+**尚未做**：OTA 整链在真机上一次都没跑过（下载 / 激活 / 回退 / 槽 B）。
 
 ### 14.9 尚未接线
 
