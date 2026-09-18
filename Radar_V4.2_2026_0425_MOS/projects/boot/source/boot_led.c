@@ -3,6 +3,7 @@
  * @brief Boot 的 LED 指示实现（直接操作 DDL GPIO，不依赖 BSP）
  */
 #include "hc32_ll.h"
+#include "hc32_ll_utility.h"   /* DDL_DelayMS：按实测 SystemCoreClock 计时，不依赖猜时钟频率 */
 #include "boot_led.h"
 
 #define BOOT_LED_PORT   (GPIO_PORT_B)
@@ -19,13 +20,17 @@
 #define BOOT_LED2_RED   (GPIO_PIN_12)   /* 低=亮, 故拉高为灭 */
 #define BOOT_LED2_BLUE  (GPIO_PIN_11)   /* 低=亮, 故拉高为灭 */
 
-/* 粗略延时：Boot 跑在 SystemInit 配好的 200MHz 上，一次循环约数百 ns */
-static void boot_wait(volatile uint32_t u32Loop)
-{
-    while (u32Loop-- != 0UL) {
-        __NOP();
-    }
-}
+/* 【不要再用忙等循环拍时间】
+ * 原先这里是一个按「200MHz」估的循环计数，但事实是：
+ *   system_hc32f460.c 的 SystemInit() 【并不配置时钟】，它只调用 SystemCoreClockUpdate()
+ *   按当前 CMU 寄存器【测出】频率；而本 Boot 不配时钟，跑在 ICG 决定的 HRC(~20MHz) 上。
+ * 于是那个循环快了约 10 倍 -> 闪得又快又糊, 现场根本数不清。
+ *
+ * 改用 DDL_DelayMS()：它基于实测的 SystemCoreClock 计时，
+ * 因此无论 Boot 跑在什么频率上，灯的节拍都是设计值。 */
+#define BOOT_LED_ON_MS     200u   /* 亮 200ms */
+#define BOOT_LED_OFF_MS    200u   /* 灭 200ms */
+#define BOOT_LED_GAP_MS   1500u   /* 轮间长灭 1.5s，便于分段数数 */
 
 void boot_led_init(void)
 {
@@ -58,9 +63,9 @@ void boot_led_blink(uint8_t cnt)
 
     for (i = 0u; i < cnt; i++) {
         GPIO_SetPins(BOOT_LED_PORT, BOOT_LED_PIN);
-        boot_wait(120000UL);            /* 约 100ms 亮 */
+        DDL_DelayMS(BOOT_LED_ON_MS);
         GPIO_ResetPins(BOOT_LED_PORT, BOOT_LED_PIN);
-        boot_wait(120000UL);            /* 约 100ms 灭 */
+        DDL_DelayMS(BOOT_LED_OFF_MS);
     }
 }
 
@@ -72,7 +77,7 @@ void boot_led_signal(uint8_t cnt, uint8_t rounds)
 
     for (i = 0u; i < rounds; i++) {
         boot_led_blink(cnt);
-        boot_wait(1500000UL);           /* 约 1.2s 长停分隔 */
+        DDL_DelayMS(BOOT_LED_GAP_MS);
     }
 }
 
@@ -80,6 +85,6 @@ void boot_led_code(uint8_t cnt)
 {
     for (;;) {
         boot_led_blink(cnt);
-        boot_wait(1500000UL);           /* 约 1.2s 长停，便于数数 */
+        DDL_DelayMS(BOOT_LED_GAP_MS);
     }
 }
