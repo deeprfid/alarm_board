@@ -409,6 +409,11 @@
               <FilePath>../../source/ota_flash.c</FilePath>
             </File>
             <File>
+              <FileName>flash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../../source/flash.c</FilePath>
+            </File>
+            <File>
               <FileName>boot_ota.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\source\boot_ota.c</FilePath>
@@ -906,6 +911,11 @@
               <FileName>ota_flash.c</FileName>
               <FileType>1</FileType>
               <FilePath>../../source/ota_flash.c</FilePath>
+            </File>
+            <File>
+              <FileName>flash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../../source/flash.c</FilePath>
             </File>
             <File>
               <FileName>boot_ota.c</FileName>

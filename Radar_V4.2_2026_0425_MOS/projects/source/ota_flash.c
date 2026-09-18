@@ -10,7 +10,7 @@
  */
 #include <string.h>
 #include "ota_flash.h"
-#include "hc32_ll_efm.h"
+#include "flash.h"      /* 原语层: FLASH_EraseSector/WriteData/ReadData（与量产 boot_iap 的 flash.c 对齐） */
 
 /* App 自检确认（见 ota_flash.h 的说明：并入本文件以确保与 ota_flash.o 同在 RW_RAMCODE 中执行） */
 int32_t ota_app_boot_confirm(uint32_t slot)
@@ -75,48 +75,28 @@ uint32_t ota_crc32(const uint8_t *buf, uint32_t len)
 /* ---------------- 片内 Flash 基本操作（擦/写 = RAM 驻留） ---------------- */
 __RAM_FUNC int32_t ota_flash_erase(uint32_t addr, uint32_t size)
 {
-    uint32_t i;
-    uint32_t sectors;
-    int32_t  ret = 0;
-
     if (size == 0UL) { return -3; }
     if (size > OTA_FLASH_SIZE) { return -1; }
     if ((addr + size) > (OTA_FLASH_BASE + OTA_FLASH_SIZE)) { return -1; }
     if (0UL != (addr % OTA_FLASH_SECTOR)) { return -2; }
 
-    sectors = (size + OTA_FLASH_SECTOR - 1UL) / OTA_FLASH_SECTOR;
-    EFM_REG_Unlock();
-    for (i = 0u; i < sectors; i++)
-    {
-        EFM_FWMC_Cmd(ENABLE);   /* 每个操作前重新解锁 FWMC */
-        if (LL_OK != EFM_SectorErase(addr + (i * OTA_FLASH_SECTOR))) { ret = -4; break; }
-    }
-    EFM_FWMC_Cmd(DISABLE);
-    EFM_REG_Lock();
-    return ret;
+    return (LL_OK == FLASH_EraseSector(addr, size)) ? 0 : -4;
 }
 
 __RAM_FUNC int32_t ota_flash_write(uint32_t addr, const uint8_t *buf, uint32_t len)
 {
-    int32_t ret;
-
     if ((buf == NULL) || (len == 0UL)) { return -1; }
     if (len > OTA_FLASH_SIZE) { return -2; }
     if ((addr + len) > (OTA_FLASH_BASE + OTA_FLASH_SIZE)) { return -2; }
     if (0UL != (addr % 4UL)) { return -3; }   /* DDL 要求字对齐 */
 
-    EFM_REG_Unlock();
-    EFM_FWMC_Cmd(ENABLE);
-    ret = (LL_OK == EFM_Program(addr, (uint8_t *)(uint32_t)buf, len)) ? 0 : -4;
-    EFM_FWMC_Cmd(DISABLE);
-    EFM_REG_Lock();
-    return ret;
+    return (LL_OK == FLASH_WriteData(addr, (uint8_t *)(uint32_t)buf, len)) ? 0 : -4;
 }
 
 void ota_flash_read(uint32_t addr, uint8_t *buf, uint32_t len)
 {
     if ((buf == NULL) || (len == 0UL)) { return; }
-    (void)memcpy(buf, (const void *)(uint32_t)addr, len);
+    (void)FLASH_ReadData(addr, buf, len);
 }
 
 int32_t ota_flash_verify(uint32_t addr, const uint8_t *buf, uint32_t len)

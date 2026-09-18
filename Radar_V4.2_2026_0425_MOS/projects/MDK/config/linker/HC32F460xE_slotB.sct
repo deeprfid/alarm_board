@@ -28,5 +28,6 @@ LR_IROM1 0x00028000 0x00020000  {    ; 槽 B 分散加载
     RW_RAMCODE 0x20018000 0x00008000  {  ; 片内 Flash 擦/写执行区（必须 RAM）
         hc32_ll_efm.o (+RO)
         ota_flash.o (+RO)
+        flash.o (+RO)
     }
 }

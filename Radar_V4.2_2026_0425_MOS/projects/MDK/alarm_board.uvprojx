@@ -425,6 +425,11 @@
               <FilePath>..\source\ota_flash.c</FilePath>
             </File>
             <File>
+              <FileName>flash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\flash.c</FilePath>
+            </File>
+            <File>
               <FileName>ota_recv.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\source\ota_recv.c</FilePath>
@@ -1145,6 +1150,11 @@
               <FileName>ota_flash.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\source\ota_flash.c</FilePath>
+            </File>
+            <File>
+              <FileName>flash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\flash.c</FilePath>
             </File>
             <File>
               <FileName>ota_recv.c</FileName>
@@ -1869,6 +1879,11 @@
               <FilePath>..\source\ota_flash.c</FilePath>
             </File>
             <File>
+              <FileName>flash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\flash.c</FilePath>
+            </File>
+            <File>
               <FileName>ota_recv.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\source\ota_recv.c</FilePath>
@@ -2589,6 +2604,11 @@
               <FileName>ota_flash.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\source\ota_flash.c</FilePath>
+            </File>
+            <File>
+              <FileName>flash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\flash.c</FilePath>
             </File>
             <File>
               <FileName>ota_recv.c</FileName>
