@@ -430,6 +430,11 @@
               <FilePath>..\source\ota_recv.c</FilePath>
             </File>
             <File>
+              <FileName>ota_app.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\ota_app.c</FilePath>
+            </File>
+            <File>
               <FileName>ring_buf.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\source\ring_buf.c</FilePath>
@@ -1150,6 +1155,11 @@
               <FileName>ota_recv.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\source\ota_recv.c</FilePath>
+            </File>
+            <File>
+              <FileName>ota_app.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\ota_app.c</FilePath>
             </File>
             <File>
               <FileName>ring_buf.c</FileName>
@@ -1874,6 +1884,11 @@
               <FilePath>..\source\ota_recv.c</FilePath>
             </File>
             <File>
+              <FileName>ota_app.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\ota_app.c</FilePath>
+            </File>
+            <File>
               <FileName>ring_buf.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\source\ring_buf.c</FilePath>
@@ -2594,6 +2609,11 @@
               <FileName>ota_recv.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\source\ota_recv.c</FilePath>
+            </File>
+            <File>
+              <FileName>ota_app.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\ota_app.c</FilePath>
             </File>
             <File>
               <FileName>ring_buf.c</FileName>

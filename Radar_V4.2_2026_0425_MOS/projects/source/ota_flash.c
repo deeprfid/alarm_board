@@ -179,7 +179,7 @@ uint32_t ota_flag_active_slot(void)
 void ota_img_read_hdr(uint32_t slot, uint32_t *version, uint32_t *img_len, uint32_t *crc32, uint8_t *slot_field)
 {
     uint8_t hdr[OTA_IMG_HDR_LEN];
-    uint32_t base = OTA_SLOT_BASE(slot);
+    uint32_t base = OTA_SLOT_BASE(slot) + OTA_IMG_TRAILER_OFF;   /* 元数据在槽末尾 */
 
     ota_flash_read(base, hdr, OTA_IMG_HDR_LEN);
     if (version != NULL)    { (void)memcpy(version, &hdr[OTA_IMG_OFF_VERSION], 4); }
@@ -195,15 +195,40 @@ int32_t ota_img_check(uint32_t slot)
     uint32_t magic, img_len, crc_hdr;
     uint8_t  slot_field;
 
-    ota_flash_read(base, hdr, OTA_IMG_HDR_LEN);
+    ota_flash_read(base + OTA_IMG_TRAILER_OFF, hdr, OTA_IMG_HDR_LEN);
     (void)memcpy(&magic, &hdr[0], 4);
     (void)memcpy(&img_len, &hdr[OTA_IMG_OFF_IMGLEN], 4);
     (void)memcpy(&crc_hdr, &hdr[OTA_IMG_OFF_CRC32], 4);
     slot_field = hdr[OTA_IMG_OFF_SLOT];
 
     if (magic != OTA_IMG_MAGIC) { return -1; }
-    if ((img_len < OTA_IMG_HDR_LEN) || (img_len > OTA_IMG_MAX)) { return -2; }
+    if ((img_len < 64UL) || (img_len > OTA_IMG_MAX)) { return -2; }
     if (slot_field != (uint8_t)slot) { return -3; }   /* 防错槽 */
+    /* CRC32 覆盖 [槽基址, +ImageLen) 的 App 二进制本体；元数据在覆盖范围之外，不自指 */
     if (ota_crc32_flash(base, img_len) != crc_hdr) { return -4; }
+    return 0;
+}
+
+/* 写槽尾元数据：CRC32 由【Flash 实际内容】算出（先写完 App 二进制再写这里） */
+int32_t ota_img_write_trailer(uint32_t slot, uint32_t img_len, uint32_t version)
+{
+    uint8_t  hdr[OTA_IMG_HDR_LEN];
+    uint32_t base = OTA_SLOT_BASE(slot);
+    uint32_t magic = OTA_IMG_MAGIC;
+    uint32_t crc;
+    uint8_t  slot_field = (uint8_t)slot;
+
+    if ((img_len < 64UL) || (img_len > OTA_IMG_MAX)) { return -1; }
+
+    crc = ota_crc32_flash(base, img_len);
+    (void)memcpy(&hdr[0], &magic, 4);
+    (void)memcpy(&hdr[OTA_IMG_OFF_VERSION], &version, 4);
+    (void)memcpy(&hdr[OTA_IMG_OFF_IMGLEN], &img_len, 4);
+    (void)memcpy(&hdr[OTA_IMG_OFF_CRC32], &crc, 4);
+    hdr[OTA_IMG_OFF_SLOT] = slot_field;
+
+    /* 元数据落在槽最后一个扇区内，先擦该扇区 */
+    if (0 != ota_flash_erase(base + OTA_IMG_TRAILER_OFF, OTA_IMG_TRAILER_SIZE)) { return -2; }
+    if (0 != ota_flash_write(base + OTA_IMG_TRAILER_OFF, hdr, OTA_IMG_HDR_LEN)) { return -3; }
     return 0;
 }

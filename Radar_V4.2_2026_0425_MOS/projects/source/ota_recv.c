@@ -15,6 +15,7 @@ static uint32_t s_slot;          /* 目标槽（非活动槽） */
 static uint32_t s_total;         /* 包总长（含 82B 包头） */
 static uint32_t s_off;           /* 已写偏移（含包头） */
 static uint32_t s_erased;        /* 目标槽内已擦除到（槽内相对偏移，扇区对齐） */
+static uint32_t s_version;        /* 本包版本（OTA1 包头 [4:8]），写槽尾元数据用 */
 static uint32_t s_last_ms;       /* 会话心跳（由 tick 补时基） */
 static uint32_t s_sniff_ms;      /* 业务态嗅探半帧计时 */
 static uint8_t  s_active;        /* 有流量 -> 下个 tick 补时基 */
@@ -89,10 +90,17 @@ static int32_t ota_recv_finish(void)
 {
     ota_flag_t flag;
     uint32_t   other;
+    uint32_t   img_len = s_total - OTA_RX_PKG_HDR_LEN;
 
-    if (ota_img_check(s_slot) != 0)
+    /* 1) 先写槽尾元数据（CRC32 由 Flash 实际内容算出），再回读校验 ——
+     *    校验的是 Flash 里真实的内容，不是我们以为写进去的内容 */
+    if (0 != ota_img_write_trailer(s_slot, img_len, s_version))
     {
-        return -1;   /* 槽镜像头 magic/长度/TargetSlot/整镜像 CRC32 任一不过 */
+        return -1;
+    }
+    if (0 != ota_img_check(s_slot))
+    {
+        return -2;   /* 元数据 magic/长度/TargetSlot/App 二进制 CRC32 任一不过 */
     }
 
     if (0 != ota_flag_read(&flag))
@@ -145,7 +153,8 @@ static void handle_data(const uint8_t *payload, uint16_t plen)
             return;
         }
         (void)memcpy(&plen_pkg, &payload[10], 4);   /* 包头 [10:14] = payload 长度 */
-        if ((plen_pkg < OTA_IMG_HDR_LEN) || (plen_pkg > OTA_IMG_MAX)) { tx_resume(0UL); return; }
+        if ((plen_pkg < 64UL) || (plen_pkg > OTA_IMG_MAX)) { tx_resume(0UL); return; }
+        (void)memcpy(&s_version, &payload[4], 4);    /* 包头 [4:8] = 版本，写槽尾元数据用 */
 
         s_total  = OTA_RX_PKG_HDR_LEN + plen_pkg;
         s_slot   = OTA_SLOT_OTHER(ota_flag_active_slot());   /* 目标 = 非活动槽 */

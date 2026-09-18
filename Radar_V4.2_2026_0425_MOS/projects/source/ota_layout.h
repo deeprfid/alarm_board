@@ -44,14 +44,20 @@
 #define OTA_FLAG_COPY1          1u
 #define OTA_FLAG_COPY_ADDR(c)   (OTA_FLAG_BASE + ((c) * OTA_FLAG_COPY_SIZE))
 
-/* ---------------- 槽镜像头（写在槽起始处，见设计稿 §4） ---------------- */
+/* ---------------- 槽尾部元数据（trailer，不放在槽起始处！） --------------
+ * 为什么放尾部：App 就链接在【槽基址】(0x8000/0x28000)，向量表在最前 8 字节；
+ * 若把元数据放槽起始处会与向量的重叠。故元数据置于槽末尾 32B，App 二进制原样从槽基址起。
+ * CRC32 覆盖 [槽基址, 槽基址+ImageLen) 的 App 二进制本体，元数据在覆盖范围之外 ——
+ * 既不会自指，又保证校验的是 Flash 实际内容。见 docs/ota_boot_design.md §4/§14。 */
 #define OTA_IMG_MAGIC           0x534C4F54UL   /* 'S','L','O','T'（LE） */
 #define OTA_IMG_HDR_LEN         17u
 #define OTA_IMG_OFF_VERSION     4u             /* 主.次.构建（仅展示/防呆，不参与选槽） */
-#define OTA_IMG_OFF_IMGLEN      8u             /* 镜像字节数（= OTA1 包头里的 payload len） */
-#define OTA_IMG_OFF_CRC32       12u            /* 整镜像（含头）CRC32，IEEE 0xEDB88320 */
+#define OTA_IMG_OFF_IMGLEN      8u             /* App 二进制字节数（= OTA1 包头里的 payload len） */
+#define OTA_IMG_OFF_CRC32       12u            /* App 二进制的 CRC32（IEEE 0xEDB88320） */
 #define OTA_IMG_OFF_SLOT        16u            /* TargetSlot：A/B，防错槽运行 */
-#define OTA_IMG_MAX             OTA_SLOT_SIZE  /* 单槽容量上限 */
+#define OTA_IMG_TRAILER_SIZE    32u            /* 槽末尾预留 32B（扇区对齐友好） */
+#define OTA_IMG_TRAILER_OFF     (OTA_SLOT_SIZE - OTA_IMG_TRAILER_SIZE)
+#define OTA_IMG_MAX             (OTA_SLOT_SIZE - OTA_IMG_TRAILER_SIZE)  /* App 二进制上限 */
 
 /* ---------------- 槽状态与选择器标志 ---------------- */
 typedef enum

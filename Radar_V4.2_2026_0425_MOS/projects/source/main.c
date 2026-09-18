@@ -4,6 +4,7 @@
  ******************************************************************************/
 #include "main.h"
 #include "ota_layout.h"   /* OTA_SLOT_SIZE（槽对齐尺寸） */
+#include "ota_app.h"        /* ota_app_boot_confirm */
 
 /*******************************************************************************
  * Local variable definitions ('static')
@@ -37,6 +38,14 @@ int32_t main(void)
     (void)SysTick_Init(1000U);
     (void)system_power_on();
     (void)radar_init();          /* 雷达三口(USART1/2/3, 逐字节RI中断收+轮询TXE发); 自适应由 radar_poll 推进 */
+    /* ===== OTA 自检确认（A/B 无搬运）=====
+     * 走到这里说明初始化全部完成 = 自检通过：把本槽置 RUNNABLE、清 NEED_CONFIRM、boot_count 归零,
+     * 否则 Boot 会每 3 次启动就把本槽判 FAILED 并回退旧槽（升完会被判失败）。
+     * 放在 WDT_Config()【之前】：ota_flag_write 要擦 8KB 标志扇区(约 20-30ms), 此时看门狗还没开,
+     * 避免在擦写窗口里被狗咬。
+     * 本槽号由 SCB->VTOR 反推 —— 与上面 VTOR 的设置同源, 不会不一致。 */
+    (void)ota_app_boot_confirm(OTA_SLOT_OF_ADDR(SCB->VTOR));
+
     (void)WDT_Config();
 	  LL_PERIPH_WP(LL_PERIPH_SEL);
     for (;;)

@@ -35,9 +35,11 @@ int32_t ota_flag_write(const ota_flag_t *in);
 uint32_t ota_flag_active_slot(void);
 
 /* ---- 槽镜像头 ---- */
-/* 校验某槽镜像头：magic / 长度 / TargetSlot / 整镜像 CRC32。返回 0 有效 */
+/* 校验某槽：槽尾元数据 magic / 长度 / TargetSlot / App 二进制 CRC32。返回 0 有效 */
 int32_t ota_img_check(uint32_t slot);
-/* 读槽镜像头字段（不做校验） */
+/* 读槽尾元数据字段（不做校验） */
 void    ota_img_read_hdr(uint32_t slot, uint32_t *version, uint32_t *img_len, uint32_t *crc32, uint8_t *slot_field);
+/* 写槽尾元数据（CRC32 由 Flash 实际内容算出）；先由 App 写完二进制再调用。返回 0 成功 */
+int32_t ota_img_write_trailer(uint32_t slot, uint32_t img_len, uint32_t version);
 
 #endif /* OTA_FLASH_H */

@@ -15,6 +15,17 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 
 ## [Unreleased]
 
+- `[hc32f460]` **feat(ota): 自检确认 + 打包工具 + F4A0 分发集成层（第 2、1、3 项一起做完）** — 至此升级闭环的每一环都有代码，只差真机联调。
+  - **修两处我自己引入的严重缺陷**（都会让升级 100% 失败的级别）：
+    - ① **槽镜像 CRC32 自指**：原设计「CRC32 覆盖整镜像（含 17B 槽头）」，而 CRC32 字段自身就在被覆盖范围内 —— 打包侧根本算不出、设备侧永远校验不过。改为 **CRC32 只覆盖槽头之后的 payload**；
+    - ② **槽头与向量表重叠**：元数据原本放槽起始处，但 **App 就链接在槽基址**（0x8000/0x28000）、向量表在最前 8 字节 —— 直接冲突。改为 **槽尾 trailer（槽末尾 32B）**，App 二进制原样从槽基址起；CRC32 覆盖 `[槽基址, +ImageLen)`，元数据在覆盖范围之外，既不自指又保证校验的是 Flash 实际内容；
+  - **第 2 项 · App 自检确认**：新增 `ota_app.c/h`，`ota_app_boot_confirm(OTA_SLOT_OF_ADDR(SCB->VTOR))` 在 `main()` 里 **`WDT_Config()` 之前**调用（`ota_flag_write` 要擦 8KB 标志扇区约 20~30ms，此时看门狗还没开，避免在擦写窗口被狗咬）；作用是把本槽置 RUNNABLE、清 NEED_CONFIRM、boot_count 归零 —— **不做的话 Boot 每 3 次启动就把刚升的槽判 FAILED 并回退**；槽号由 `SCB->VTOR` 反推，与 VTOR 设置同源不会不一致；
+  - **第 1 项 · 打包工具** `tools/ota_pack_f460.py`：按槽分别打包（A/B 是两份独立编译产物）；包格式与 `tools/ota_pack.py` 逐字段一致（82B 头：magic/ver/platform/app/len/CRC32/SHA256/HMAC）；**payload = App 二进制本体**（槽尾元数据由设备端收满后自行写入，其 CRC32 由 Flash 实际内容算出）；带**起始地址防呆**（拿错产物即报错）；
+  - **打包实测**：`radar_slotA_v01020304.otapkg` / `radar_slotB_v01020304.otapkg`，各 30574B（镜像 30492B）；回读校验两个包的 **len/CRC32/SHA256/HMAC 全部 True**；A/B 因基址不同 CRC 天然不同（0x431CB3CB vs 0x1AADDA2D）；
+  - **第 3 项 · F4A0 集成层**（F4A0 仓库 `hc32f4a0_app`）：新增 `ota_dist.c/h` —— 提供 `ota_host` 需要的 4 个 IO 回调（`read/write(fd)` + `osKernelGetTickCount()`）、分发状态、以及 **业务帧闸门 `ota_dist_busy()`**；在 `alarm.c` 与 `mqtt_interface.c` 的两份 `ipc_hpm_message()` 里都加了闸门（升级期间**全系统**停发业务帧，符合既定口径）；
+  - **构建**：HC32 四个 App target 全 0 Error / 0 Warning；F4A0 app 0 Error，唯一警告是既有的 `ota_usb_stream.c(47)` 未使用变量（与本笔无关）；
+  - **说明**：F4A0 侧本笔只把**闸门接通**（`ota_dist_busy` 被业务路径引用，故真的链接进去了）；`ota_dist_start/poll` 尚无调用点，被链接器回收 —— Code 仅 +24B。**触发方式（谁在什么条件下发起分发）仍是待定项**。
+  - **仍未做**：真机联调（烧 Boot+App → 用 .otapkg 走一次完整升级）；F4A0 侧触发入口与进度/结果上报界面。
 - `[hc32f460]` **feat(ota): App 槽化收尾 —— 切 A/B 分散加载 + 移除 ICG + 出 A/B 双份产物（第 3 项完成）** — 至此 Boot 与 App 可配套烧录。
   - **App 工程 4 个 target**：`usart_uart_dma_Debug` / `_Release`（**槽 A**，`HC32F460xE_slotA.sct`）+ 新增 `_Debug_B` / `_Release_B`（**槽 B**，`HC32F460xE_slotB.sct`）。原有两个 target 名字与输出目录（`output\debug`、`output\release`）保持不变以免打断既有流程；B 用 `output\slotb_debug` / `slotb_release` 且 `OutputName` 为 `usart_uart_dma_b`；
   - **移除 ICG**：App 四个 target 均删掉 `hc32_ll_icg.c` 条目 —— ICG 固定在 `0x400`，App 链接基址改为 0x8000/0x28000 后若继续携带会落到链接区之外；**ICG 归 Boot 独占**（Boot 的 map 已核对 `.ARM.__AT_0x00000400 @0x400/32B`）；
