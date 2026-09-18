@@ -1,0 +1,477 @@
+
+#include "hc32_ddl.h"
+#include "flash.h"
+#include "timer.h"
+#include "common.h"
+#include "irq.h"
+#include "uart.h"
+#include "pio.h"
+#include "crc.h"
+#include "spi.h"
+#include "w5100s_init.h"
+#include <string.h>
+
+uint32_t WrBuf[64];
+uint8 CmdRecContent[260];
+int Boot_ModuletechCmd_0xaa(void);
+
+//2015-1-6---------------------
+uint32_t Main_BpsVal=115200;
+//-----------------------------
+
+int main(void)
+{
+    int cmdhandleflag = 0;
+    uint8 flag=0,k=0;
+    uint16 revbuflen=0;
+
+    uint8_t wrrddat[256],pagestartflag=0,wrstate=0;
+    uint16_t DAT_CRC=0,i=0;
+    uint32_t len=0,wordcnt=0,wraddr=0,pagenum=0,verifyCrc=0,calverifyCrc[4]= {0,0,0,0},calCRC=0;
+    // uint32_t bps_val=115200,bps_setval=0,
+    uint32_t regval[8];
+    uint8_t bootloaderver[4]= {0,0,0,0x0c},hardwarever[4]= {0xA0,0,0,0},supportpro[4]= {0,0,0,0x10},firmwaredata[4],firmwarever[4];
+
+    RCC_Configuration();
+    GPIO_Configuration();
+    timer_Init();
+    SWDT_RefreshCounter();
+
+    flash_OemRead(0x08,&regval[0]);
+    flash_OemRead(0x09,&regval[1]);
+    flash_OemRead(0x0A,&regval[2]);
+
+    if((regval[1]==0xa5a55a5a)||(regval[2]==0xa5a55a5a))
+    {
+        SWDT_RefreshCounter();
+        run_app();
+        while(1);
+    }
+    if((regval[0]==9600)||(regval[0]==19200)||(regval[0]==38400)||(regval[0]==57600)||(regval[0]==115200)||(regval[0]==230400)||(regval[0]==460800)||(regval[0]==921600))
+    {
+        Main_BpsVal=regval[0];
+    }
+    else
+    {
+        Main_BpsVal=115200;
+    }
+    hc32f460_uart_init(1,Main_BpsVal);
+    hc32f460_uart_init(2,Main_BpsVal);
+    hc32f460_uart_init(3,Main_BpsVal);
+    hc32f460_uart_init(4,Main_BpsVal);
+    RS485_set_rec();
+    led_on();
+
+// W5100S inint//////////////////////////////
+    WIZ_SPI_Init();
+    Reset_W5100S();
+    Set_Network();
+
+    while(1)
+    {
+        SWDT_RefreshCounter();
+
+        flag=1;//先以一直等待接收到一个完整帧为止，如果检测到命令是盘存到一个标签即上传则在对应的命令再使用flag=0的接收
+        cmdhandleflag=uart3_GetCmdFram(CmdRecContent,&revbuflen,&flag);
+        if((revbuflen>250)||(cmdhandleflag!=0))
+        {
+            continue;
+        }
+        else
+        {
+
+            k= CmdRecContent[1];
+            DAT_CRC=  crc_CalcCRC(CmdRecContent,k+3);
+            if(DAT_CRC==(((CmdRecContent[k+3]&0xFF)<<8)|(CmdRecContent[k+4]&0xFF)))
+            {
+                switch(CmdRecContent[2])
+                {
+                case 1://WRITE FLASH********************************************************
+                    if((CmdRecContent[8]==32)&&((CmdRecContent[3]==0)||(CmdRecContent[3]==0xff)))
+                    {
+                        for(i=0; i<32; i++)
+                        {
+                            WrBuf[i]= (CmdRecContent[i*4+9]&0xFF)|((CmdRecContent[i*4+10]&0xFF)<<8)|((CmdRecContent[i*4+11]&0xFF)<<16)|((CmdRecContent[i*4+12]&0xff)<<24);
+                        }
+                        wraddr=((CmdRecContent[4]&0xFF)<<24)|((CmdRecContent[5]&0xFF)<<16)|((CmdRecContent[6]&0xFF)<<8)|CmdRecContent[7];
+                        wraddr=(wraddr&0x00ffffff)+0xB000;//地址转换
+                        //if(wraddr<0x08003000)
+                        if(wraddr<0xE000)
+                        {
+                            CmdRespone(1,0x105,0,wrrddat);
+                            break;
+                        }
+                        //pagenum= (wraddr-0x00100000)/256;
+                        pagenum=0;	//该参数无用
+                        if(CmdRecContent[3]==0)
+                        {
+                            if(pagestartflag==0)
+                            {
+                                USART3_IT_DISABLE();
+                                wrstate=Write_Page(pagenum,wraddr,WrBuf,32,0,0);
+                                USART3_IT_ENABLE();
+                                if(wrstate!=0)
+                                {
+                                    CmdRespone(1,0x0302,0,wrrddat);
+                                    break;
+                                }
+                                else
+                                {
+                                    pagestartflag=1;
+                                    CmdRespone(1,0,0,wrrddat);
+                                    break;
+                                }
+                            }
+                            else if(pagestartflag==1)
+                            {
+                                USART3_IT_DISABLE();
+                                wrstate=Write_Page(pagenum,wraddr,WrBuf,32,1,1);
+                                USART3_IT_ENABLE();
+                                if(wrstate!=0)
+                                {
+                                    CmdRespone(1,0x0302,0,wrrddat);
+                                    break;
+                                }
+                                else
+                                {
+                                    pagestartflag=0;
+                                    CmdRespone(1,0,0,wrrddat);
+                                    break;
+                                }
+                            }
+                        }
+                        else if(CmdRecContent[3]==0xff)
+                        {
+                            if(pagestartflag==0)
+                            {
+                                USART3_IT_DISABLE();
+                                wrstate=Write_Page(pagenum,wraddr,WrBuf,32,0,1);
+                                USART3_IT_ENABLE();
+                                if(wrstate!=0)
+                                {
+                                    CmdRespone(1,0x0302,0,wrrddat);
+                                    break;
+                                }
+                                else
+                                {
+                                    pagestartflag=0;
+                                    CmdRespone(1,0,0,wrrddat);
+                                    break;
+                                }
+                            }
+                            else if(pagestartflag==1)
+                            {
+                                USART3_IT_DISABLE();
+                                wrstate=Write_Page(pagenum,wraddr,WrBuf,32,1,1);
+                                USART3_IT_ENABLE();
+                                if(wrstate!=0)
+                                {
+                                    CmdRespone(1,0x0302,0,wrrddat);
+                                    break;
+                                }
+                                else
+                                {
+                                    pagestartflag=0;
+                                    CmdRespone(1,0,0,wrrddat);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    else if((CmdRecContent[8]<32)&&(CmdRecContent[3]==0xff))
+                    {
+                        for(i=0; i<CmdRecContent[8]; i++)
+                        {
+                            WrBuf[i]= (CmdRecContent[i*4+9]&0xFF)|((CmdRecContent[i*4+10]&0xFF)<<8)|((CmdRecContent[i*4+11]&0xFF)<<16)|((CmdRecContent[i*4+12]&0xff)<<24);
+                        }
+                        wraddr=((CmdRecContent[4]&0xFF)<<24)|((CmdRecContent[5]&0xFF)<<16)|((CmdRecContent[6]&0xFF)<<8)|CmdRecContent[7];
+                        wraddr=(wraddr&0x00ffffff)+0xB000;//地址转换
+                        if(wraddr<0xE000)
+                            //if(wraddr<0x08003000)
+                        {
+                            CmdRespone(1,0x105,0,wrrddat);
+                            break;
+                        }
+                        //pagenum= (wraddr-0x00100000)/256;
+                        pagenum=0;	//该参数无用
+                        if(pagestartflag==0)
+                        {
+                            USART3_IT_DISABLE();
+                            wrstate=Write_Page(pagenum,wraddr,WrBuf,CmdRecContent[8],0,1);
+                            USART3_IT_ENABLE();
+                            if(wrstate!=0)
+                            {
+                                CmdRespone(1,0x0302,0,wrrddat);
+                                break;
+                            }
+                            else
+                            {
+                                pagestartflag=0;
+                                CmdRespone(1,0,0,wrrddat);
+                                break;
+                            }
+                        }
+                        else if(pagestartflag==1)
+                        {
+                            USART3_IT_DISABLE();
+                            wrstate=Write_Page(pagenum,wraddr,WrBuf,CmdRecContent[8],1,1);
+                            USART3_IT_ENABLE();
+                            if(wrstate!=0)
+                            {
+                                CmdRespone(1,0x0302,0,wrrddat);
+                                break;
+                            }
+                            else
+                            {
+                                pagestartflag=0;
+                                CmdRespone(1,0,0,wrrddat);
+                                break;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        CmdRespone(1,0x0105,0,wrrddat);
+                        break;
+                    }
+                    break;
+
+                case 2://READ FLASH***************************************************8
+
+                    wraddr=((CmdRecContent[3]&0xFF)<<24)|((CmdRecContent[4]&0xFF)<<16)|((CmdRecContent[5]&0xFF)<<8)|CmdRecContent[6];
+                    wraddr=(wraddr&0x00ffffff)+0xB000;//地址转换
+                    if(wraddr<0xE000)
+                        //if(wraddr<0x08003000)
+                    {
+                        CmdRespone(2,0x105,0,wrrddat); //????
+                        break;
+                    }
+                    if(CmdRecContent[7]>32)
+                    {
+                        CmdRespone(2,0x105,0,wrrddat); //??????
+                        break;
+                    }
+                    Read_Page(wraddr,WrBuf,CmdRecContent[7]);
+                    for(i=0; i<CmdRecContent[7]; i++)
+                    {
+                        wrrddat[i*4]=(WrBuf[i]&0xffffffff);
+                        wrrddat[i*4+1]=(WrBuf[i]&0xffffffff)>>8;
+                        wrrddat[i*4+2]=(WrBuf[i]&0xffffffff)>>16;
+                        wrrddat[i*4+3]=(WrBuf[i]&0xffffffff)>>24;
+                    }
+                    CmdRespone(2,0x00,(CmdRecContent[7]*4),wrrddat);
+
+                    break;//2014-9-19----------------------------------
+
+                case 8://APP		//continue inventory****************************************************8888
+
+
+                    calverifyCrc[0] = 0;
+                    calverifyCrc[1] = 0;
+                    calverifyCrc[2] = 0;
+                    calverifyCrc[3] = 0;
+                    wraddr=((CmdRecContent[3]&0xFF)<<24)|((CmdRecContent[4]&0xFF)<<16)|((CmdRecContent[5]&0xFF)<<8)|CmdRecContent[6];
+                    wraddr=(wraddr&0x00ffffff)+0xB000;//地址转换
+                    if(wraddr<0xE000)
+                        //if(wraddr<0x08003000)
+                    {
+                        CmdRespone(8,0x105,0,wrrddat); //????
+                        break;
+                    }
+                    wordcnt=((CmdRecContent[7]&0xFF)<<24)|((CmdRecContent[8]&0xFF)<<16)|((CmdRecContent[9]&0xFF)<<8)|CmdRecContent[10];
+                    verifyCrc=((CmdRecContent[11]&0xFF)<<24)|((CmdRecContent[12]&0xFF)<<16)|((CmdRecContent[13]&0xFF)<<8)|CmdRecContent[14];
+                    for(len=0; len<wordcnt; len++)
+                    {
+                        Read_Page(wraddr,WrBuf,1);
+                        calverifyCrc[0] += ((WrBuf[0]&0xffffffff) >> 24) & 0xff;
+                        calverifyCrc[1] += ((WrBuf[0]&0xffffffff) >> 16) & 0xff;
+                        calverifyCrc[2] += ((WrBuf[0]&0xffffffff) >> 8) & 0xff;
+                        calverifyCrc[3] += ((WrBuf[0]&0xffffffff) >> 0) & 0xff;
+                        wraddr=wraddr+4;
+                    }
+                    calCRC=(calverifyCrc[0]&0xff)|((calverifyCrc[1]&0xff)<<8)|((calverifyCrc[2]&0xff)<<16)|((calverifyCrc[3]&0xff)<<24);
+                    if(calCRC==verifyCrc)
+                    {
+                        CmdRespone(8,0x00,0,wrrddat);
+                    }
+                    else
+                    {
+                        CmdRespone(8,0x0200,0,wrrddat);
+                    }
+                    break;
+                case 3://get version ,oem????0??FIRMWARE ??,???1??FIRMWARE VER
+                    //Read_Page(0X0801E000,regval,5);	 //2014-7-14
+                    Read_Page(0X0000a000,regval,5);	 //2014-7-14
+                    bootloaderver[0]=0x22;//(regval[0]&0xff000000)>>24;
+                    bootloaderver[1]=0x01;//(regval[0]&0x00ff0000)>>16;
+                    bootloaderver[2]=0x11;//(regval[0]&0x0000ff00)>>8;
+                    bootloaderver[3]=0x00;//(regval[0]&0x000000ff);
+
+                    hardwarever[0]=0xa6;
+                    //hardwarever[0]=(regval[1]&0xff000000)>>24;
+                    hardwarever[1]=(regval[1]&0x00ff0000)>>16;
+                    //hardwarever[2]=(regval[1]&0x0000ff00)>>8;
+                    hardwarever[2]=0x02;
+                    hardwarever[3]=(regval[1]&0x000000ff);
+
+                    firmwaredata[0]=(regval[2]&0xff000000)>>24;
+                    firmwaredata[1]=(regval[2]&0x00ff0000)>>16;
+                    firmwaredata[2]=(regval[2]&0x0000ff00)>>8;
+                    firmwaredata[3]=(regval[2]&0x000000ff);
+
+                    firmwarever[0]=(regval[3]&0xff000000)>>24;
+                    firmwarever[1]=(regval[3]&0x00ff0000)>>16;
+                    firmwarever[2]=(regval[3]&0x0000ff00)>>8;
+                    firmwarever[3]=(regval[3]&0x000000ff);
+
+                    supportpro[0]=(regval[4]&0xff000000)>>24;
+                    supportpro[1]=(regval[4]&0x00ff0000)>>16;
+                    supportpro[2]=(regval[4]&0x0000ff00)>>8;
+                    // supportpro[3]=(regval[4]&0x000000ff);
+                    supportpro[3]=0x10;
+                    for(i=0; i<4; i++)
+                    {
+                        wrrddat[0+i]=bootloaderver[i];
+                        wrrddat[4+i]=hardwarever[i];
+                        wrrddat[8+i]=firmwaredata[i];
+                        wrrddat[12+i]=firmwarever[i];
+                        wrrddat[16+i]=supportpro[i];
+                    }
+                    CmdRespone(3,0x00,20,wrrddat);
+                    break;
+                case 4://BOOT FIRMWARE
+                    //USART3_IT_DISABLE();
+                    //TIM_Cmd(TIM3,DISABLE);
+                    run_app();
+                    break;
+                case 6://set bps	  2015-1-6
+//		  		 bps_setval=((CmdRecContent[3]&0xff)<<24)|((CmdRecContent[4]&0xff)<<16)|((CmdRecContent[5]&0xff)<<8)|CmdRecContent[6];
+//				 if(bps_setval==bps_val)
+//				 {
+                    CmdRespone(6,0x00,0,wrrddat);
+//				 }
+//				 else
+//				 {
+//					 CmdRespone(6,0x010a,0,wrrddat); //????
+//
+//				 }
+                    break;
+
+                case 9://START BOOTLOADER**************************************************************************************
+                    CmdRespone(9,0,0,wrrddat);
+                    break;
+
+                case 0x0c: //get current program
+                    wrrddat[0]=0X11;
+                    CmdRespone(0X0C,0,1,wrrddat);
+                    break;
+                case 0x10:
+                    //Read_Page(0X0801E014,regval,3);
+                    Read_Page(0X0000a014,regval,3);
+                    for(i=0; i<3; i++)
+                    {
+                        wrrddat[i*4]=(regval[i]&0xff000000)>>24;
+                        wrrddat[i*4+1]=(regval[i]&0x00ff0000)>>16;
+                        wrrddat[i*4+2]=(regval[i]&0x0000ff00)>>8;
+                        wrrddat[i*4+3]=regval[i]&0x000000ff;
+                    }
+                    CmdRespone(0x10,0x00,12,wrrddat);
+                    break;
+                case 0xaa:
+                    Boot_ModuletechCmd_0xaa();
+                    break;
+                default:
+                    CmdRespone(CmdRecContent[2],0x101,0,wrrddat);
+                    break;
+                }
+                //ResetUartFlag();
+            }
+            else
+            {
+                //ResetUartFlag();
+            }
+
+        }
+
+    }
+}
+
+
+int Boot_ModuletechCmd_0xaa(void)
+{
+    //int cmdhandleflag = 0;
+    uint8_t wrrddat[128],wrstate=0;
+    uint16_t addresult=0,subcmd=0,i=0,err_flag=0;
+    uint8_t calsubcrc=0,cmdlen=0,subcrc=0;
+    uint32_t formatdata[32],baseaddr=0,basepagenum=0;
+    uint8_t cmpdata[10]= {'M','o','d','u','l','e','t','e','c','h'};
+    if(!memcmp(cmpdata,&CmdRecContent[3],10))
+    {
+        cmdlen=CmdRecContent[1];
+        if((cmdlen>13)&&((CmdRecContent[cmdlen+2])==0xbb))
+        {
+            subcrc=CmdRecContent[cmdlen+1];
+            for(i=0; i<(cmdlen-10-2); i++)
+            {
+                addresult=addresult+CmdRecContent[13+i];
+            }
+            calsubcrc=(addresult&0xff);
+            if(subcrc==calsubcrc)
+            {
+                subcmd=((CmdRecContent[13]&0xff)<<8)|CmdRecContent[14]; //
+                switch(subcmd)
+                {
+                case 0xaa2a://OEM?????
+                    for(i=0; i<32; i++)
+                    {
+                        formatdata[i]=0;
+                    }
+                    baseaddr=OEMAdd;
+                    USART3_IT_DISABLE();
+                    for(i=0; i<64; i++)	 //8k
+                    {
+                        wrstate=Write_Page(basepagenum,(baseaddr+i*128),formatdata,32,0,0);
+                        if(wrstate!=0)
+                        {
+                            err_flag=0xaa2a;
+                            USART3_IT_ENABLE();
+                            goto exit_done;
+                        }
+                    }
+                    USART3_IT_ENABLE();
+                    err_flag=0;
+                    goto exit_done;
+                default:
+                    goto notmoduletechcmd;
+
+                }
+            }
+            else
+            {
+                goto notmoduletechcmd;
+            }
+        }
+        else
+        {
+            goto notmoduletechcmd;
+        }
+    }
+    else
+    {
+        goto notmoduletechcmd;
+    }
+notmoduletechcmd:
+    CmdRespone(0Xaa,0x101,0,wrrddat);
+    return 0x101;
+exit_done:
+    for(i=0; i<10; i++)
+    {
+        wrrddat[i]=cmpdata[i];
+    }
+    wrrddat[10]=CmdRecContent[13];
+    wrrddat[11]=CmdRecContent[14];
+    CmdRespone(0Xaa,err_flag,12,wrrddat);
+    return err_flag;
+}
+
+

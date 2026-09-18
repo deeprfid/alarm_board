@@ -1,0 +1,54 @@
+;=============================================================================
+; usb_new_winusb.inf  —  F460 扫描盘 "WinUSB 组合" 的免驱/兜底安装文件
+;
+; 用途：当 Windows 没有按微软 OS 描述符自动把设备绑到 winusb.sys 时，
+;       用这个 INF 手动绑定（配合 self-signed catalog，见同目录 README.txt）。
+;
+; 适用范围（PID 规则）：
+;   VID_2E88&PID_4608  = 含 WinUSB 的组合（usb_type 3 = 自定义HID+WinUSB，
+;                                            4 = WinUSB+CDC）← 本 INF 处理
+;   VID_2E88&PID_4605  = HID / CDC / 键盘组合，Windows 用内置 HID/CDC 类驱动，
+;                        不需要也不需要装本 INF
+;
+; DeviceInterfaceGUID 与设备端"微软 OS 描述符"里的 DeviceInterfaceGUID 保持一致，
+; 这样 C# 上位机无论走免驱还是走 INF，都可用同一个 GUID 打开设备。
+;=============================================================================
+
+[Version]
+Signature           = "$Windows NT$"
+Class               = USBDevice
+ClassGuid           = {88BAE032-5A81-49f0-BC3D-A4FF138216D6}
+Provider            = %ManufacturerName%
+CatalogFile         = usb_new_winusb.cat
+DriverVer           = 09/15/2026,1.0.0.0
+PnpLockdown         = 1
+
+[Manufacturer]
+%ManufacturerName%  = USB_Device, NTamd64, NTarm64
+
+[USB_Device.NTamd64]
+%DeviceName%        = USB_Install, USB\VID_2E88&PID_4608
+
+[USB_Device.NTarm64]
+%DeviceName%        = USB_Install, USB\VID_2E88&PID_4608
+
+; ---- 复用系统内置的 winusb.sys（不复制任何第三方二进制） ----
+[USB_Install]
+Include             = winusb.inf
+Needs               = WINUSB.NT
+
+[USB_Install.Services]
+Include             = winusb.inf
+Needs               = WINUSB.NT.Services
+
+[USB_Install.HW]
+AddReg              = Dev_AddReg
+
+[Dev_AddReg]
+; 让 WinUSB 使用批量传输（与设备端 BULK 0x82/0x03 对应）
+HKR,,DeviceInterfaceGUIDs,0x10000,"{13EB360B-BC1E-46CB-AC8B-EF3DA47B4062}"
+HKR,,DeviceInterfaceGUID,0x10000,"{13EB360B-BC1E-46CB-AC8B-EF3DA47B4062}"
+
+[Strings]
+ManufacturerName    = "HDSC"
+DeviceName          = "F460 Scanner (WinUSB)"

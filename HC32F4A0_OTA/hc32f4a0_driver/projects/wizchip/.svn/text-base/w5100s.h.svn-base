@@ -1,0 +1,440 @@
+
+
+#ifndef _W5100S_H_
+#define _W5100S_H_
+
+//#include "types.h"
+
+#define S_RX_SIZE	2048		/*定义Socket接收缓冲区的大小，可以根据W5100_RMSR的设置修改 */
+#define S_TX_SIZE	2048  		/*定义Socket发送缓冲区的大小，可以根据W5100_TMSR的设置修改 */
+
+/********************
+*w5100s与stm32f103通信方式有两种，分别为：
+*1、间接总线模式
+*2、SPI模式
+*******************/
+#define MODE_SPI  1
+#define MODE_BUS  0
+//如果使用总线模式
+#if( MODE_BUS ==1)
+#define Bank1_SRAM3_ADDR	0x68000000
+//#define	COMMON_BASE	 (Bank1_SRAM3_ADDR+0x00000000)			//地址数据线复用
+#define	COMMON_BASE	        0x00000000			//Base address，根据需要修改
+#define IDM_OR             ((Bank1_SRAM3_ADDR  + 0x0000))
+#define IDM_AR0            ((Bank1_SRAM3_ADDR + 0x0001))
+#define IDM_AR1            ((Bank1_SRAM3_ADDR+ 0x0002))
+#define IDM_DR             ((Bank1_SRAM3_ADDR + 0x0003))
+#endif
+
+
+//使用SPI的通信方式
+#if (MODE_SPI==1)
+#define	 COMMON_BASE	        0x00000000
+#endif
+
+//-----------------------------------------------------------------------------
+//                               Common register
+//-----------------------------------------------------------------------------
+//Mode register, R/W, Default=0x03 [0x0000][0x03]
+#define W5100S_MR	COMMON_BASE
+#define MR_RST		0x80		//Software reset
+//#define MODE_MT		0x20		//Memory test
+#define MR_PB		0x10		//Ping block mode
+#define MR_PPPOE	0x08		//PPOE mode
+//#define MODE_LB		0x04		//Little_endian/Big_endian ordering in indirect bus I/F
+//#define MODE_AI		0x02		//Address auto increment in indirect bus I/F
+//#define MODE_IND		0x01		//Indirect bus I/F mode
+
+//Gateway address register, R/W, default=0x00
+#define	W5100S_GAR	(COMMON_BASE+0x01)
+
+//Subnet mask address, R/W, default=0x00
+#define	W5100S_SUBR	(COMMON_BASE+0x05)
+
+//Source hardware address, R/W, default=0x00
+#define	W5100S_SHAR	(COMMON_BASE+0x09)
+
+//Source IP address, R/W, default=0x00
+#define	W5100S_SIPR	(COMMON_BASE+0x0f)
+
+//Interrupt Pending Time Register ,R/W.default = 0x0000
+#define W5100S_INTPTMR =  COMMON_BASE+0x13
+
+//Interrupt and interrupt mask register
+#define	W5100S_IR	COMMON_BASE+0x15	//RO, Default=0x00
+#define IR_CONFLICT	0x80		//IP conflict
+#define IR_UNREACH	0x40		//Destination unreachable
+#define IR_PPPTER	0x20		//Received PPPT or LCPT Packet only on PPOE 
+#define IR_S3_INT	0x08		//Occurrence of socket 3 socket interrupt
+#define IR_S2_INT	0x04		//Occurrence of socket 2 socket interrupt
+#define IR_S1_INT	0x02		//Occurrence of socket 1 socket interrupt
+#define IR_S0_INT	0x01		//Occurrence of socket 0 socket interrupt
+
+#define	W5100S_IMR	COMMON_BASE+0x16	//R/W, Default=0x00
+#define IMR_CONFLICT	0x80		//IP conflict
+#define IMR_UNREACH	0x40		//Destination unreachable
+#define IMR_PPPTERM	0x20		//PADT/LCPT Interrupt 
+#define IMR_S3_INT	0x08		//Occurrence of socket 3 socket interrupt
+#define IMR_S2_INT	0x04		//Occurrence of socket 2 socket interrupt
+#define IMR_S1_INT	0x02		//Occurrence of socket 1 socket interrupt
+#define IMR_S0_INT	0x01		//Occurrence of socket 0 socket interrupt
+
+//Retry time value. Value 1 means 100us, R/W, default=0x07D0
+#define W5100S_RTR0	(COMMON_BASE+0x17)
+#define W5100S_RTR1	(COMMON_BASE+0x18)
+
+//Retry count, R/W, Default=0x08
+#define W5100S_RCR	COMMON_BASE+0X19
+
+//RX memory size register, R/W, default=0x55
+//--------------------------------------------------------    S1      S0      Memory size
+//  Socket3    |  Socket2    |  Socket1    |  Socket0    |    0       0           1KB
+//-------------|-------------|-------------|-------------|    0       1           2KB
+//S1       S0  |S1       S0  |S1       S0  |S1       S0  |    1       0           4KB
+//--------------------------------------------------------    1       1           8KB
+#define W5100S_RMSR	COMMON_BASE+0x1a
+
+//TX memory size register, R/W, default=0x55
+#define W5100S_TMSR	COMMON_BASE+0x1b
+
+
+// INnterrupt register 2 ,R/W,default=0x00,wake on lan
+#define W5100S_IR2  COMMON_BASE+0x20
+
+//IMR2 Is usedfor the IR2 mask, r=w ,default = 0x00
+#define W5100S_IMR2 COMMON_BASE+0x21
+//Authentication type in PPPOE mode, R, default=0x0000
+//#define W5100_PATR	COMMON_BASE+0x1c
+
+//PPP LCP request timer register, R/W, default=0x28
+//Value 1 is about 25ms
+#define W5100S_PTIMER	COMMON_BASE+0x28
+
+//PPP LCP magic number register, R/W, default=0x00
+#define W5100S_PMAGIC	COMMON_BASE+0x29
+
+//Unreachable IP address, RO, default=0x00
+#define W5100S_UIPR	COMMON_BASE+0x2a
+
+//Unreachable port register, RO, default=0x0000
+#define W5100S_UPORT	COMMON_BASE+0x2e
+
+//MODE Register 2 r/w ,default = 0x40
+#define W5100S_MR2 COMMON_BASE +0X30
+//#define MR2_CLKSEL_100MHZ   0X00
+#define MR2_CLKSEL_25MHZ    0x80
+#define MR2_IEN_Enable  0x40
+#define MR2_NOTCPRST   0X20
+#define MR2_UDPURB    0X10
+#define MR2_WOL 0x80
+#define MR2_FARP 0X10
+
+//Destination Hardware Address Register on PPPoE,R/W,[0X0000]
+#define W5100S_PHAR0 COMMON_BASE + 0x32
+#define W5100S_PHAR1 COMMON_BASE + 0x33
+#define W5100S_PHAR2 COMMON_BASE + 0x34
+#define W5100S_PHAR3 COMMON_BASE + 0x35
+#define W5100S_PHAR4 COMMON_BASE + 0x36
+#define W5100S_PHAR5 COMMON_BASE + 0x37
+//Session ID Register on PPPoE,R/W,[0x0000]
+#define W5100S_PSIDR0 COMMON_BASE+0x38
+#define W5100S_PSIDR1 COMMON_BASE+0x39
+//PPPoE Maximum Receive Unit Register,R/W,[0xffff]
+#define W5100S_PMRUR0 COMMON_BASE+0x3a
+#define W5100S_PMRUR1 COMMON_BASE+0x3B
+//PHY Status Register,RW,[0X00]
+#define W5100S_PHYSR COMMON_BASE+0x3C
+
+//PHY Register Address Register,r/w,[0x00]
+#define W5100S_PHYRAR COMMON_BASE +0x3f
+
+//PHY Data Input Register，r/w,[0x0000]
+#define W5100S_PHYDIR0 COMMON_BASE+0x40
+#define W5100S_PHYDIR1 COMMON_BASE+0x41
+//PHY Data Output Register,R,[0x0000]
+#define W5100S_PHYDOR0 COMMON_BASE+0x42
+#define W5100S_PHYDOR1 COMMON_BASE+0x43
+//PHY Access Control Register
+#define W5100S_PHYACR COMMON_BASE+0x44
+//PHY Division Register,R/W,[0x01]
+#define W5100S_PHYDIVR COMMON_BASE+0x45
+
+//PHY Control Register 0,W,0x00
+#define W5100S_PHYCR0 COMMON_BASE+0x46
+#define PHYCR0_DPX 0x01
+#define PHYCR0_SPD 0x02
+#define PHYCR0_AUTO 0X04
+//PHY Control Register 1,RW,[0X41]
+#define W5100S_PHYCR1 COMMON_BASE+0x47
+#define PHYCR1_PWDN  0x20
+#define PHYCR1_RST  0x01
+//SOCKET-less Command Register,RW,[0x00]
+#define W5100S_SLCR COMMON_BASE+0x4c
+//SOCKET-less Retransmission Time Register,R/W,[0x07D0]
+#define W5100S_SLRTR0 COMMON_BASE+0x4d
+#define W5100S_SLRTR1 COMMON_BASE+0x4E
+//SOCKET-less Retransmission Count Register,R/W,[0X00]
+#define W5100S_SLRCR COMMON_BASE+0x4f
+//SOCKET-less Peer IP Address Register,R/W,[0x00000000]
+#define W5100S_SLPIPR COMMON_BASE+0x50
+//SOCKET-less Peer Hardware Address Register,R,[0x00000000]
+#define W5100S_SLPHAR COMMON_BASE +0x54
+//PING Sequence-number Register,R/W,[0x0000]
+#define W5100S_PINGSEQR0 COMMON_BASE +0x5a
+#define W5100S_PINGSEQR1 COMMON_BASE +0x5B
+//PING ID Register,RW,[0X0000]
+#define W5100S_PINGIDR0 COMMON_BASE +0x5c
+#define W5100S_PINGIDR1 COMMON_BASE +0x5D
+
+//SOCKET-less Interrupt Mask Register,R/W [0x00]
+#define W5100S_SLIMR COMMON_BASE+0x5e
+#define SLIMR_PING 0x01
+#define SLIMR_ARP  0x02
+#define SLIMR_TIMEOUT 0x04
+#define W5100S_SLIR COMMON_BASE + 0x5F
+#define SLIR_PING 0x01
+#define SLIR_ARP  0x02
+#define SLIR_TIMEOUT 0x04
+//	 Clock Lock Register，WO,[0X00]
+#define W5100S_CLKLCKR COMMON_BASE+0x70
+#define CLKLCKR_UNLOCK  0xce
+
+//Network Lock Register,WO,[0x00]
+#define W5100S_NETLCKR COMMON_BASE +0x71
+#define NETLCKR_UNLOCK 0xc5
+#define NETLCKE_LOCK 0x3a
+
+//PHY Lock Register,WO,[0x00]
+#define W5100S_PHYLCKR COMMON_BASE +0x72
+#define PHYLCKR_UNLOCK 0x53
+//	Version Register，RO,[0x51]
+#define W5100S_VERR COMMON_BASE +0x80
+
+//	 Ticker Counter Register,RO,[0X0000]
+#define W5100S_TCNTR COMMON_BASE+0x82
+//Ticker Counter Clear Register,WO,[0X00]
+#define W5100S_TCNTCLR COMMON_BASE +0x88
+
+
+
+
+
+//-----------------------------------------------------------------------------
+//                                  Socket register
+//-----------------------------------------------------------------------------
+//Socket mode register, R/W, default=0x00
+#define W5100S_Sn_MR(ch)   (COMMON_BASE+0x0400+0x0100*ch)
+
+
+
+#define Sn_MR_MULTI	   0x80		//Multcasting
+#define Sn_MR_MF       0x40
+#define Sn_MR_MC		   0x20		//Multcast
+#define Sn_MR_ND		   0x20
+/* P3   P2   P1   P0     Meaning*/
+#define Sn_MR_CLOSED	 0x00		//  0    0    0    0      Closed
+#define Sn_MR_TCP		   0x01		//  0    0    0    1      TCP
+#define Sn_MR_UDP		   0x02		//  0    0    1    0      UDP
+#define Sn_MR_IPRAW	   0x03		//  0    0    1    1      IPRAW
+#define Sn_MR_MACRAW	 0x04		//  0    1    0    0      MACRAW
+//	#define Sn_MR_PPPOE	   0x05		//  0    1    0    1      PPPOE
+
+//Socket command register, R/W, default=0x00
+#define W5100S_Sn_CR(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0001)
+#define Sn_CR_OPEN	0x01		//It is used to initialize the socket
+#define Sn_CR_LISTEN	0x02		//In TCP mode, it waits for a connection request from any remote
+//peer(Client)
+#define Sn_CR_CONNECT	0x04		//In TCP mode, it sends a connection request to remote peer(SERVER)
+#define Sn_CR_DISCON	0x08		//In TCP mode, it sends a connection termination request
+#define Sn_CR_CLOSE	0x10		//Used to close the socket
+#define Sn_CR_SEND	0x20		//It transmit the data as much as the increase size of write pointer
+#define Sn_CR_SEND_MAC	0x21		//In UDP mode, same as SEND
+#define Sn_CR_SEND_KEEP	0x22		//In TCP mode
+#define Sn_CR_RECV	0x40		//Receiving is processed including the value of socket RX read
+//pointer register
+
+/* Definition for PPPOE */
+#define Sn_CR_PCON	0x23		//Start of ADSL connection
+#define Sn_CR_PDISCON	0x24		//End of ADSL connection
+#define Sn_CR_PCR	0x25		//Send REQ message ineach phase
+#define Sn_CR_PCN	0x26		//Send NAK message in each phase
+#define Sn_CR_PCJ	0x27		//Senf REJECT message in each phase
+
+//Socket interrup register, RO, default=0x00
+#define W5100S_Sn_IR(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0002)
+
+#define Sn_IR_SENDOK	0x10		//Send data complete
+#define Sn_IR_TIMEOUT	0x08		//Set if timeout occurs during connection or termination
+//or data transmission
+#define Sn_IR_RECV		0x04		//Set if data is received
+#define Sn_IR_DISCON	0x02		//Set if receiv connection termination request
+#define Sn_IR_CON		0x01		//Set if connetion is established
+
+/* Definition for PPPOE */
+#define Sn_IR_PRECV	0x80		//Indicate receiving no support option data
+#define Sn_IR_PFAIL	0x40		//Indicate PAP Authentication fail
+#define Sn_IR_PNEXT	0x20		//Go next phase
+
+//Socket status register, RO, default=0x00
+#define W5100S_Sn_SR(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0003)
+
+#define Sn_SR_CLOSED	0x00		//In case that OPEN command are given to Sn_CR, Timeout interrupt
+//is asserted or connection is terminated
+#define Sn_SR_INIT	0x13		//In case that Sn_MR is set as TCP and OPEN commands are given to Sn_CR
+#define Sn_SR_LISTEN	0x14		//In case that under the SOCK_INIT status, LISTEN commands
+//are given to Sn_CR
+#define Sn_SR_ESTABLISHED	0x17	//In case that connection is established
+#define Sn_SR_CLOSE_WAIT	0x1c	//In case that connection temination request is received
+#define Sn_SR_UDP	0x22		//In case that OPEN command is given to Sn_CR when Sn_MR is set as UDP
+#define Sn_SR_IPRAW	0x32		//In case that OPEN command is given to Sn_CR when Sn_MR is set as IPRAW
+#define Sn_SR_MACRAW	0x42		//In case that OPEN command is given to S0_CR when S0_MR is set as MACRAW
+
+//#define S_SR_PPPOE	0x5f		//In case that OPEN command is given to S0_CR when S0_MR is set as PPPOE
+//Below is shown in the status change, and does not need much attention
+#define Sn_SR_SYNSEND	0x15
+#define Sn_SR_SYNRECV	0x16
+#define Sn_SR_FIN_WAIT	0x18
+//#define S_SR_CLOSING	0x1a
+#define Sn_SR_TIME_WAIT	0x1b
+#define Sn_SR_LAST_ACK	0x1d
+//#define S_SR_ARP0	0x11
+//	#define S_SR_ARP1	0x21
+//	#define S_SR_ARP2	0x31
+
+//Socket Source port register, R/W, default=0x00
+#define W5100S_Sn_PORT0(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0004)
+#define W5100S_Sn_PORT1(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0005)
+
+
+//Socket destination hardware address register, R/W, default=0x00
+#define W5100S_Sn_DHAR0(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0006)
+#define W5100S_Sn_DHAR1(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0007)
+#define W5100S_Sn_DHAR2(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0008)
+#define W5100S_Sn_DHAR3(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0009)
+#define W5100S_Sn_DHAR4(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x000A)
+#define W5100S_Sn_DHAR5(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x000B)
+
+
+//Socket destination IP address register, R/W, default=0x00
+#define W5100S_Sn_DIPR0(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x000C)
+#define W5100S_Sn_DIPR1(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x000D)
+#define W5100S_Sn_DIPR2(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x000E)
+#define W5100S_Sn_DIPR3(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x000F)
+
+
+//Socket destionation port register, R/W, default=0x00
+#define W5100S_Sn_DPORT0(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0010)
+#define W5100S_Sn_DPORT1(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0011)
+
+
+
+//Socket maximum segment size register, R/W, default=0x00
+#define W5100S_Sn_MSS0(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0012)
+#define W5100S_Sn_MSS1(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0013)
+
+//Socket IP protocol register, R/W, default=0x00
+//See http://www.iana.org/assignments/protocol-number
+#define W5100S_Sn_PROTOR(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0014)
+
+
+//Socket IP type of servce register, R/W, default=0x00
+#define W5100S_Sn_TOS(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0015)
+
+
+//Socket IP time to live register, R/W, default=0x80
+#define W5100S_Sn_TTL(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0016)
+
+
+//SOCKET n RX Buffer Size Register,RW,0x02
+#define W5100S_Sn_RXBUF_SIZE(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x001E)
+//SOCKET n TX Buffer Size Register,RW,0x02
+#define W5100S_Sn_TXBUF_SIZE(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x001F)
+
+//Socket TX free size register, RO, default=0x0800
+//should read upper byte first and lower byte later
+#define W5100S_Sn_TX_FSR0(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0020)
+#define W5100S_Sn_TX_FSR1(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0021)
+//Socket TX read pointer register, RO, default=0x0000
+//should read upper byte first and lower byte later
+#define W5100S_Sn_TX_RD0(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0022)
+#define W5100S_Sn_TX_RD1(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0023)
+
+
+//Socket TX write pointer register, R/W, default=0x0000
+//should read upper byte first and lower byte later
+#define W5100S_Sn_TX_WR0(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0024)
+#define W5100S_Sn_TX_WR1(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0025)
+
+
+//Socket RX size register, RO, default=0x0000
+//should read upper byte first and lower byte later
+#define W5100S_Sn_RX_RSR0(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0026)
+#define W5100S_Sn_RX_RSR1(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0027)
+
+//Socket RX read pointer register, R/W, default=0x0000
+//should read upper byte first and lower byte later
+#define W5100S_Sn_RX_RD0(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0028)
+#define W5100S_Sn_RX_RD1(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0029)
+
+
+//Socket RX read pointer register, R/W, default=0x0000
+//should read upper byte first and lower byte later
+#define W5100S_Sn_RX_WR0(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x002A)
+#define W5100S_Sn_RX_WR1(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x002B)
+
+
+#define W5100S_Sn_IMR(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x002C)
+#define W5100S_Sn_FRAGR(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x002D)
+#define W5100S_Sn_MR2(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x002F)
+#define W5100S_Sn_KPALVTR(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0030)
+#define W5100S_Sn_RTR(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0032)
+#define W5100S_Sn_RCR(ch)   (COMMON_BASE+0x0400+0x0100*ch+0x0034)
+//TX memory
+#define W5100_TX	COMMON_BASE+0x4000
+
+//RX memory
+#define W5100_RX	COMMON_BASE+0x6000
+
+
+
+/*******************W51OOS ACCESS FUNCTION**********************/
+extern void IINCHIP_WRITE( uint32 addrbsb,  uint8 data);
+extern uint8 IINCHIP_READ(uint32 addrbsb);
+extern uint16 wiz_write_buf(uint32 addrbsb,uint8* buf,uint16 len);
+extern uint16 wiz_read_buf(uint32 addrbsb, uint8* buf,uint16 len);
+
+
+void iinchip_init(void); // reset iinchip
+void sys_init(uint8 tx_size, uint8  rx_size); // setting tx/rx buf size
+uint8 getISR(uint8 s);
+void putISR(uint8 s, uint8 val);
+uint16 getIINCHIP_RxMAX(uint8 s);
+uint16 getIINCHIP_TxMAX(uint8 s);
+void setMR(uint8 val);
+void setRTR(uint16 timeout); // set retry duration for data transmission, connection, closing ...
+void setRCR(uint8 retry); // set retry count (above the value, assert timeout interrupt)
+void clearIR(uint8 mask); // clear interrupt
+uint8 getIR( void );
+void setSn_MSS(SOCKET s, uint16 Sn_MSSR); // set maximum segment size
+uint8 getSn_IR(SOCKET s); // get socket interrupt status
+uint8 getSn_SR(SOCKET s); // get socket status
+uint16 getSn_TX_FSR(SOCKET s); // get socket TX free buf size
+uint16 getSn_RX_RSR(SOCKET s); // get socket RX recv buf size
+uint8 getSn_SR(SOCKET s);
+void setSn_TTL(SOCKET s, uint8 ttl);
+void send_data_processing(SOCKET s, uint8 *wizdata, uint16 len);
+void recv_data_processing(SOCKET s, uint8 *wizdata, uint16 len);
+
+void setGAR(uint8 * addr); // set gateway address
+void setSUBR(uint8 * addr); // set subnet mask address
+void setSHAR(uint8 * addr); // set local MAC address
+void setSIPR(uint8 * addr); // set local IP address
+void getGAR(uint8 * addr);
+void getSUBR(uint8 * addr);
+void getSHAR(uint8 * addr);
+void getSIPR(uint8 * addr);
+uint8 getSn_TXBUF_SIZE(uint8 s);
+uint8 getSn_RXBUF_SIZE(uint8 s);
+void setSn_IR(uint8 s, uint8 val);
+void setkeepalive(SOCKET s);
+#endif

@@ -1,0 +1,20 @@
+; ****************************************************************
+; Scatter-Loading Description File
+; ****************************************************************
+; Phase 4: App 偏移 0x10000（bootloader 0x0-0xFFFF，标志区 0xF0000-0xFFFFF）
+LR_IROM1 0x00010000 0x000E0000  {    ; load region size_region (896KB)
+    ER_IROM1 0x00010000 0x000E0000  {  ; load address = execution address
+        *.o (RESET, +First)
+        .ANY (+RO)
+        .ANY (+XO)
+    }
+    RW_IRAM2 0x1FFE0000 UNINIT 0x00000008  {  ; RW data
+        *(.bss.noinit)
+    }
+    RW_IRAM1 0x1FFE0008 0x0007FFF8  {  ; RW data
+        .ANY (+RW +ZI)
+        .ANY (RAMCODE)
+
+    }
+}
+

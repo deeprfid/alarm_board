@@ -1,0 +1,15 @@
+{
+  "platforms": {
+    "2": {
+      "app_id": 0,
+      "versions": {
+        "0x01150202": {
+          "file": "fw_acc.otapkg",
+          "sha256": "628d361abccae693e23865df896885b44157986d1e5efddb202864585534b36f",
+          "sign": "demo-hmac"
+        }
+      },
+      "latest": "0x01150202"
+    }
+  }
+}

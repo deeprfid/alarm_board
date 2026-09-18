@@ -1,0 +1,622 @@
+diff --git a/hc32f4a0_app/projects/app/src/APIHttpRequest.cpp b/hc32f4a0_app/projects/app/src/APIHttpRequest.cpp
+index 5e98beb..cb799e1 100644
+--- a/hc32f4a0_app/projects/app/src/APIHttpRequest.cpp
++++ b/hc32f4a0_app/projects/app/src/APIHttpRequest.cpp
+@@ -67,6 +67,7 @@ int APIHttpRequest::Parse(char *threebytes)
+ 	LTClear(staticlist);   /* v9.81ce: free readtag-rebuilt staticlist BEFORE body parse - on_stream_epc (DELlist add) needs heap; message-complete clear was too late */
+ 	if (m_postjson != NULL) { free_hexp(m_postjson); m_postjson = NULL; }   /* v9.81cj-i: �ͷ��ϸ������ body ���� */
+ 	int pos = 0;
++	g_stream_tags_added = 0;   /* v9.82j: per-request reset (stream scanner re-counts from 0) */
+ 	m_iscontentlen = false;
+ 	m_isfinpars = false;
+ 	m_lasthttpheaderstate = HttpParseHeader_None;
+@@ -186,7 +187,8 @@ int APIHttpRequest::OnHeaderValueCallback(http_parser *parser, const char *at, s
+ 	if (pReq->m_lasthttpheaderstate == HttpParseHeader_Field)
+ 	{
+ 		pReq->m_headerfield[pReq->m_headerfieldpos] = 0;
+-		if (strcmp("Content-Length", pReq->m_headerfield) == 0)
++		if (strcmp("Content-Length", pReq->m_headerfield) == 0 ||
++		    strcmp("content-length", pReq->m_headerfield) == 0)
+ 			pReq->m_iscontentlen = true;
+ 		if (length <= HTTP_HEADERVALUELEN)
+ 		{
+@@ -254,7 +256,8 @@ int APIHttpRequest::OnHeadersCompleteCallback(http_parser *parser)
+ 	{
+ 		int bodylen = atoi(pReq->m_headervalue);
+ 		if (bodylen <= 0) bodylen = HTTP_POSTJSONLEN;
+-		if (bodylen > 128*1024) bodylen = 128*1024;   /* v9.81cj-i: ���� 128KB�������������㹻��������(>128KB)EPC ����ʽ(g_stream_tags_added ��֧)�������������� */
++		/* v9.82j: 恢复设计——body 按 Content-Length 动态申请、上限 128KB(v9.81cj-i-b)；>128KB 截断缓冲，EPC 走流式豁免 */
++		if (bodylen > 128 * 1024) bodylen = 128 * 1024;
+ 		pReq->m_postjson = (char*)malloc_hexp(bodylen + 1);
+ 		if (pReq->m_postjson == NULL)
+ 			pReq->m_respcode = 500;
+diff --git a/hc32f4a0_app/projects/app/src/HttpModuleAPI.cpp b/hc32f4a0_app/projects/app/src/HttpModuleAPI.cpp
+index d726373..8f58bce 100644
+--- a/hc32f4a0_app/projects/app/src/HttpModuleAPI.cpp
++++ b/hc32f4a0_app/projects/app/src/HttpModuleAPI.cpp
+@@ -23,6 +23,7 @@ extern "C" uint8_t get_tag_counter(void);
+ extern "C" uint8_t removeDuplicates(uint8_t *arr, uint8_t *epcid, uint8_t len);
+ extern "C" void tagtable_list_update(LTNode *phead, LTDataType epcID, uint8_t method);
+ extern "C" uint32_t tsdb_tarversal_total(fdb_tsdb_t tsdb);
++extern "C" void whitelist_index_rebuild(fdb_tsdb_t tsdb);   /* v9.82i */
+ extern "C" LTDataType Getlist_tag(LTNode* phead, uint32_t index);
+ extern "C" uint32_t Get_whitetags_total_count(LTNode* phead);
+ extern "C" void seconds_to_date(time_t secs, char *date);
+@@ -1507,6 +1508,39 @@ void HttpModuleAPI::httpEascfg(char *json, int len)
+    // char system_time[30];
+     char tmpbuf[256];
+ 
++    {   /* v9.82j: EPCs already streamed into ADDlist/DELlist by on_stream_epc (stream scanner).
++         * Body may be unbuffered (json==0 when request lacks Content-Length) so json_parse below
++         * cannot run; if tags were streamed, set the sync flag directly and let Check_Buffer_Diff
++         * flush ADDlist into TSDB and rebuild the 64-bit hash index. */
++        cJSON *STCP;
++        char *stag;
++        if (g_stream_tags_added > 0)
++        {
++            tag_method = g_stream_tag_is_add ? OPTION_ADD : OPTION_DEL;
++            FlashDB_Sync_flag = 11;
++            tag_csv_mark_dirty();
++            g_stream_tags_added = 0;
++            STCP = cJSON_CreateObject();
++            if (STCP != NULL)
++            {
++                cJSON_AddNumberToObject(STCP, "code", 1);
++                cJSON_AddStringToObject(STCP, "msg", "success");
++                cJSON_AddStringToObject(STCP, "result", "succ");
++                stag = cJSON_Print(STCP);
++                if (stag != NULL)
++                {
++                    int selen = (int)strlen(stag);
++                    strcpy(m_AddOtherJsonBuf, stag);
++                    if (selen >= 2) { m_AddOtherJsonBuf[0] = ' '; m_AddOtherJsonBuf[selen - 1] = ' '; }
++                    cJSON_free(stag);
++                }
++                cJSON_Delete(STCP);
++            }
++            m_OpError = HMApiErr_Ok;
++            return;
++        }
++    }
++
+     jvalue = json_parse_auto(json, len);
+      CHK_PARA_RET(jvalue == NULL, "json format error");
+      memset(tmpbuf,0,sizeof(tmpbuf));
+@@ -1772,6 +1806,7 @@ void HttpModuleAPI::httptagprocess(char *json, int len)
+     {
+         /* v9.81ce: clear whitelist TSDB (remove stale/old-version records that cause garbage in readtag) */
+         fdb_tsl_iter(&whitelistDB, del_all_cb, &whitelistDB);   /* v9.81ce: soft-delete all WRITE - preserves FlashDB structure (no partition erase) */
++        whitelist_index_rebuild(&whitelistDB);   /* v9.82i: cleartag ��ɾ�����ؽ����� */
+         m_IsAddOtherJson = true;
+         sprintf(m_AddOtherJsonBuf, " \"result\":\"cleartag\",\"msg\":\"ok\"");
+         cJSON_Delete(CFGROOT);
+diff --git a/hc32f4a0_app/projects/app/src/alarm.c b/hc32f4a0_app/projects/app/src/alarm.c
+index 4882c10..dc38047 100644
+--- a/hc32f4a0_app/projects/app/src/alarm.c
++++ b/hc32f4a0_app/projects/app/src/alarm.c
+@@ -8,6 +8,7 @@ extern LTNode *g_Uploadtag;
+ extern LTNode *ADDlist;
+ extern LTNode *DELlist;
+ extern uint32_t FlashDB_Sync_flag;
++extern osMutexId_t uploadMuxID;   /* v9.82j: ADDlist/DELlist 访问互斥 */
+ unsigned short ipcCrc(unsigned char *msgbuf, int msglen);
+ 
+ uint32_t Match_EPC_inTSDB(fdb_tsdb_t tsdb, uint8_t *input_tag, uint16_t tlen);
+@@ -61,9 +62,19 @@ void tag_package(MsgQueObj_HPM6340 *tagobj)
+    if(mycfgdata.easflag == 0)
+     {
+ 			 
+-			uint8_t	mask_add=tagmatching(ADDlist,tagobj->epcid,tagobj->epclen); 
+-			uint8_t	mask_del=tagmatching(DELlist,tagobj->epcid,tagobj->epclen);
++			uint8_t	mask_add;
++			uint8_t	mask_del;
++			osMutexAcquire(uploadMuxID, osWaitForever);   /* v9.82j: 遍历 ADDlist/DELlist 与 HTTP flush 的 LTClear 互斥(防 use-after-free HardFault) */
++			mask_add = tagmatching(ADDlist, tagobj->epcid, tagobj->epclen);
++			mask_del = tagmatching(DELlist, tagobj->epcid, tagobj->epclen);
++			osMutexRelease(uploadMuxID);
+       uint8_t	mask_tsdb = Match_EPC_inTSDB(&whitelistDB, tagobj->epcid, tagobj->epclen);
++			/* v9.82i 调试: 每次读到 EPC 输出匹配结果（hit=白名单命中） */
++			{
++				char epcdbg[64];
++				Hex2Str(tagobj->epcid, tagobj->epclen, epcdbg);
++				TRACE("[wl] epc=%s add=%u del=%u hit=%u\n", epcdbg, mask_add, mask_del, mask_tsdb);
++			}
+ 			if(mask_add || mask_tsdb)
+ 			{
+ 			   maskcode=1;
+@@ -233,7 +244,7 @@ void FlashDB_Task(void *argument)
+         {
+            // while(utc_time_stamp);
+             Check_Buffer_Diff(FlashDB_Sync_flag);
+-                        tag_csv_task();   /* v9.81cj-k: idle generate TAG.CSV */
++            tag_csv_task();   /* v9.81cj-k: idle generate TAG.CSV */
+         }
+         else
+         {
+@@ -444,3 +455,40 @@ void SetEasBit(uint8_t *epcid, uint16_t tlen, const uint32_t easflag, bool match
+     }
+ }
+ 
++
++/* ===== v9.82j: HardFault 现场记录（强定义覆盖启动文件 [WEAK] 的 B . 空转，供调试器定位崩溃点）=====
++ * 崩了之后 CPU 停在下面 for(;;)，Keil Halt 后到 Watch 窗口读：
++ *   g_hf_pc  = 崩溃指令地址（映射 .map/axf 即得具体函数行）
++ *   g_hf_bfar/MMFAR = 出错访问地址（UAF 时是已释放堆地址）
++ *   g_hf_cfsr = 错误类型（bit1 DACCVIOL 数据访问违例 / bit9 PRECISERR 精确总线错 / bit16 未定义指令）
++ */
++volatile uint32_t g_hf_cfsr = 0;
++volatile uint32_t g_hf_hfsr = 0;
++volatile uint32_t g_hf_bfar = 0;
++volatile uint32_t g_hf_mmfar = 0;
++volatile uint32_t g_hf_pc   = 0;
++volatile uint32_t g_hf_lr   = 0;
++
++/* v9.82j: armcc 内联汇编——读 PSP（RTX 任务当前栈=异常帧所在），避免依赖 core_cm4.h */
++__asm uint32_t hf_get_psp(void)
++{
++    MRS     R0, PSP
++    BX      LR
++}
++
++void HardFault_Handler(void)
++{
++    volatile uint32_t *pSCB = (volatile uint32_t *)0xE000ED00UL;
++    uint32_t *frame;
++
++    g_hf_cfsr  = pSCB[0x28 >> 2];
++    g_hf_hfsr  = pSCB[0x2C >> 2];
++    g_hf_mmfar = pSCB[0x34 >> 2];
++    g_hf_bfar  = pSCB[0x38 >> 2];
++    frame = (uint32_t *)hf_get_psp();   /* RTX 任务用 PSP：异常帧 = R0,R1,R2,R3,R12,LR,PC,xPSR */
++    g_hf_pc = frame[6];
++    g_hf_lr = frame[5];
++    for (;;) { }
++}
++
++
+diff --git a/hc32f4a0_app/projects/app/src/httpAPI.cpp b/hc32f4a0_app/projects/app/src/httpAPI.cpp
+index 9fdd1ed..e64717c 100644
+--- a/hc32f4a0_app/projects/app/src/httpAPI.cpp
++++ b/hc32f4a0_app/projects/app/src/httpAPI.cpp
+@@ -45,9 +45,13 @@ int httpapi_openrdr(int *hreader)
+ 	return -1;
+ }
+ 
++extern "C" void http_req_enter(void);   /* v9.82j: 串行化 HTTP 处理(两个监听任务共用全局 pHttpReq，并发解析会互相重置导致 http_parser 跑飞) */
++extern "C" void http_req_leave(void);
+ void httpapi_hander(int fd, char *threebytes)
+ {
++	http_req_enter();
+ 	APIHttpResponse::httpRespose(pHttpMAPI, pHttpReq, fd, threebytes);
++	http_req_leave();
+ }
+ /*
+ int user_main_httpapi(void)
+diff --git a/hc32f4a0_app/projects/app/src/ipc.c b/hc32f4a0_app/projects/app/src/ipc.c
+index eb7ed3a..89fce32 100644
+--- a/hc32f4a0_app/projects/app/src/ipc.c
++++ b/hc32f4a0_app/projects/app/src/ipc.c
+@@ -16,6 +16,8 @@ osRtxMutex_t gTb_SpiMux_cb;
+ 
+ osMutexId_t uploadMuxID;
+ osRtxMutex_t uploadMux_cb;
++osMutexId_t httpReqMuxID;      /* v9.82j: HTTP 请求串行化(共享 pHttpReq 防并发重置跑飞) */
++osRtxMutex_t httpReqMux_cb;
+ 
+ __align(64) rfidcfg mycfgdata;
+ 
+@@ -281,19 +283,6 @@ void Tag_update_thread(void *arg)
+ 
+             if(osOK == osMessageQueueGet(gIdMsgQue_HPM6340, &hpmtag, NULL, NULL))
+             {
+-                /* v9.81cj-e: 低频读标签统计（每秒一次，替代已删除的每标签 FDB_INFO）。
+-                 * cnt=1s 内处理标签数；queue=积压数（持续增大=处理不过来）。
+-                 * 只打计数不打每标签内容，不拖慢读标签。 */
+-                static uint32_t s_tag_cnt = 0;
+-                static uint32_t s_last_tick = 0;
+-                uint32_t now = getSysTick();
+-                s_tag_cnt++;
+-                if (now - s_last_tick >= 1000) {
+-                    TRACE("[RFID] tags/s: %u (queue=%u)\n",
+-                          (unsigned)s_tag_cnt, (unsigned)osMessageQueueGetCount(gIdMsgQue_HPM6340));
+-                    s_tag_cnt = 0;
+-                    s_last_tick = now;
+-                }
+                 tag_package(&hpmtag);
+             }
+         }
+@@ -549,10 +538,30 @@ void tagfiltbuff_init(void)
+     };
+     uploadMuxID = osMutexNew(&mux_upload_attr);
+ 
++    osMutexAttr_t mux_http_attr =
++    {
++        NULL,
++        osMutexRecursive | osMutexPrioInherit,
++        &httpReqMux_cb,
++        sizeof(httpReqMux_cb)
++    };
++    httpReqMuxID = osMutexNew(&mux_http_attr);
++
+     //  Yjson_test_read();
+     //  Yjson_test_write();
+ }
+ 
++/* v9.82j: HTTP 入口互斥——同一时刻只允许一个请求解析/响应(两个监听任务共用全局 pHttpReq/pHttpMAPI) */
++void http_req_enter(void)
++{
++    osMutexAcquire(httpReqMuxID, osWaitForever);
++}
++
++void http_req_leave(void)
++{
++    osMutexRelease(httpReqMuxID);
++}
++
+ void deviceID_update(ReaderRunTimeSettings_ST *prtset)
+ {
+     int namelen = strlen(prtset->glob_params.name);
+@@ -613,44 +622,4 @@ void get_eastag_to_flash(void)
+     flash_bytes_read(EastagPage_Addr, &mycfgdata, sizeof(mycfgdata));
+ }
+ 
+-//void Yjson_test_read(void)
+-//{
+-
+-//    const char *json = "{\"name\":\"Mash\",\"star\":4,\"hits\":[2,2,1,3]}";
+-//    yyjson_doc *doc = yyjson_read(json, strlen(json), 0);
+-//    yyjson_val *root = yyjson_doc_get_root(doc);
+-//    yyjson_val *name = yyjson_obj_get(root, "name");
+-//    printf("name: %s\n", yyjson_get_str(name));
+-//    yyjson_val *star = yyjson_obj_get(root, "star");
+-//    printf("star: %d\n", (int)yyjson_get_int(star));
+-//    yyjson_val *hits = yyjson_obj_get(root, "hits");
+-//    size_t idx, max;
+-//    yyjson_val *hit;
+-//    yyjson_arr_foreach(hits, idx, max, hit)
+-//    {
+-//        printf("hit%d: %d\n", (int)idx, (int)yyjson_get_int(hit));
+-//    }
+-
+-//    yyjson_doc_free(doc);
+-//}
+-
+-//void Yjson_test_write(void)
+-//{
+-//    yyjson_mut_doc *doc = yyjson_mut_doc_new(NULL);
+-//    yyjson_mut_val *root = yyjson_mut_obj(doc);
+-//    yyjson_mut_doc_set_root(doc, root);
+-//    yyjson_mut_obj_add_str(doc, root, "name", "Mash");
+-//    yyjson_mut_obj_add_int(doc, root, "star", 4);
+-//    int hits_arr[] = {2, 2, 1, 3};
+-//    yyjson_mut_val *hits = yyjson_mut_arr_with_sint32(doc, hits_arr, 4);
+-//    yyjson_mut_obj_add_val(doc, root, "hits", hits);
+-//    const char *json = yyjson_mut_write(doc, 0, NULL);
+-
+-//    if (json)
+-//    {
+-//        printf("json: %s\n", json); // {"name":"Mash","star":4,"hits":[2,2,1,3]}
+-//        free((void *)json);
+-//    }
+-
+-//    yyjson_mut_doc_free(doc);
+-//}
++
+diff --git a/hc32f4a0_app/projects/flashDB/QSPI_Sync.c b/hc32f4a0_app/projects/flashDB/QSPI_Sync.c
+index 100c9b3..1a79c57 100644
+--- a/hc32f4a0_app/projects/flashDB/QSPI_Sync.c
++++ b/hc32f4a0_app/projects/flashDB/QSPI_Sync.c
+@@ -28,6 +28,7 @@ extern LTNode* taglist;
+ extern LTNode *ADDlist;
+ extern LTNode *DELlist;
+ extern bool Double_EPC_Rmove(fdb_tsdb_t tsdb);
++extern void whitelist_index_rebuild(fdb_tsdb_t tsdb);   /* v9.82i: 白名单 64 位哈希索引重建 */
+ 
+ void Transfer_EPC_from_list_to_kvDB(fdb_kvdb_t kvdb,uint8_t method)
+ {
+@@ -108,6 +109,9 @@ void Check_Buffer_Diff(uint8_t flag)
+ 		 FlashDB_Sync_flag=0;
+ 		 Transfer_EPC_from_list_to_TSDB(&whitelistDB,ADDlist,OPTION_ADD);
+      Transfer_EPC_from_list_to_TSDB(&whitelistDB,DELlist,OPTION_DEL);
++		 TRACE("[wl] sync: before rebuild\r\n");
++		 whitelist_index_rebuild(&whitelistDB);   /* v9.82i: ADD/DEL 落盘后重建索引 */
++		 TRACE("[wl] sync: after rebuild\r\n");
+ 	   TRACE("[FlashDB][RFID][TSDB][SDRAM<-->QSPI FLASH SYNC SUCCESS]\r\n");
+  
+ 	 }
+diff --git a/hc32f4a0_app/projects/flashDB/flashdb.c b/hc32f4a0_app/projects/flashDB/flashdb.c
+index 778abdf..122282e 100644
+--- a/hc32f4a0_app/projects/flashDB/flashdb.c
++++ b/hc32f4a0_app/projects/flashDB/flashdb.c
+@@ -37,6 +37,7 @@ static fdb_time_t counts = 0;
+ extern void kvdb_type_string_sample(fdb_kvdb_t kvdb);
+ extern void kvdb_type_blob_sample(fdb_kvdb_t kvdb);
+ extern void tsdb_sample(fdb_tsdb_t tsdb);
++extern void whitelist_index_rebuild(fdb_tsdb_t tsdb);   /* v9.82i: 白名单哈希索引重建 */
+ extern unsigned long long getSysTick(void);
+ static void lock(fdb_db_t db)
+ {
+@@ -100,6 +101,7 @@ int flashdb(void)
+         }
+  
+          fdb_tsdb_control(&whitelistDB, FDB_TSDB_CTRL_GET_LAST_TIME, &counts);
++         whitelist_index_rebuild(&whitelistDB);   /* v9.82i: 启动时显式构建白名单哈希索引 */
+          TRACE("[FlashDB][RFID][TSDB][whitelistDB Init take %f s]\r\n",(double)(endtime-startT)*0.001);
+ 
+ 				startT=getSysTick();
+diff --git a/hc32f4a0_app/projects/flashDB/samples/tsdb_sample.c b/hc32f4a0_app/projects/flashDB/samples/tsdb_sample.c
+index 190188e..b4dee6e 100644
+--- a/hc32f4a0_app/projects/flashDB/samples/tsdb_sample.c
++++ b/hc32f4a0_app/projects/flashDB/samples/tsdb_sample.c
+@@ -38,10 +38,12 @@ bool set_status_cb(fdb_tsl_t tsl, void *arg);
+ extern  struct fdb_tsdb whitelistDB;
+ extern list_err_t tagtable_list_update_with_duplicate(LTNode* phead, LTDataType epcID, uint8_t method);
+ 
++extern osMutexId_t uploadMuxID;   /* v9.82j: ADDlist/DELlist 释放与 reader tagmatching 遍历互斥(防 use-after-free HardFault) */
+ void Init_list_clear(LTNode *phead)
+ {
+-
++    osMutexAcquire(uploadMuxID, osWaitForever);
+     LTClear(phead);
++    osMutexRelease(uploadMuxID);
+ }
+ 
+ void tsdb_sample(fdb_tsdb_t tsdb)
+@@ -138,36 +140,6 @@ bool set_status_cb(fdb_tsl_t tsl, void *arg)
+     return false;
+ }
+ 
+-static  uint8_t filter_flag = 0;
+-
+-
+-static bool filter_EPCID_cb(fdb_tsl_t tsl, void *arg)
+-{
+-    struct fdb_blob blob;
+-    // fdb_tsdb_t db = arg;
+-    LTDataType  *epcidlist = arg, epcidtsdb;
+-    fdb_blob_read((fdb_db_t)&whitelistDB, fdb_tsl_to_blob(tsl, fdb_blob_make(&blob, &epcidtsdb, sizeof(epcidtsdb))));
+-
+-    if(tsl->status != FDB_TSL_WRITE)
+-    {
+-        return false;
+-    }
+-
+-    if(memcmp(epcidlist->epc, epcidtsdb.epc, epcidlist->Epclen) == 0)
+-    {
+-        char epcstr[64];
+-        Hex2Str(epcidlist->epc, epcidlist->Epclen, epcstr);
+-        FDB_INFO("[find tag in whitelist (time %" __PRITS ") EPCID is '%s'] \n", tsl->time, epcstr);
+-        filter_flag = 1;
+-        return true;
+-    }
+-
+-    // fdb_tsl_set_status(db, tsl, FDB_TSL_USER_STATUS1);
+-
+-    return false;
+-}
+-
+-
+ extern  uint32_t Get_whitetags_total_count(LTNode* phead);
+ LTDataType Getlist_tag(LTNode* phead, uint32_t index);
+ extern LTNode* taglist;
+@@ -220,6 +192,7 @@ static uint32_t del_hash_key(LTDataType *e)
+ static void del_hash_build(LTNode *plist)
+ {
+     LTNode *cur;
++    osMutexAcquire(uploadMuxID, osWaitForever);   /* v9.82j: 遍历 DELlist 与并发增/清互斥 */
+     memset(g_del_hash, 0, sizeof(g_del_hash));
+     cur = plist->next;
+     while (cur != plist)
+@@ -233,6 +206,7 @@ static void del_hash_build(LTNode *plist)
+         }
+         cur = cur->next;
+     }
++    osMutexRelease(uploadMuxID);
+ }
+ 
+ static void del_hash_free(void)
+@@ -356,35 +330,130 @@ void Del_Tag_TSDB(fdb_tsdb_t tsdb,LTNode* plist,uint8_t method)
+     TRACE("[FlashDB][RFID][TSDB][delete: %d tags\r\n", tagcnt);
+ }
+ 
+-uint32_t Match_EPC_inTSDB(fdb_tsdb_t tsdb, uint8_t *input_tag, uint16_t tlen)
++/* ==== v9.82i: 白名单 64 位哈希索引（解决 Match_EPC_inTSDB 全遍历 O(n) 慢） ====
++ * key = (fdb_calc_crc32(0,epc,len) << 32) | fdb_calc_crc32(0xFFFFFFFF,epc,len)
++ * 64 位碰撞率≈0（2万条期望 1e-11 对）；查找二分 O(log n)，不碰 flash。
++ * 构建：whitelist_index_rebuild() 遍历 TSDB 一次性建索引（启动/变更后调用）。 */
++#define WL_INDEX_MAX   (20000)
++
++static uint64_t *s_wl_key = NULL;   /* 64 位 key 排序数组（按实际白名单条数动态扩容，最高 WL_INDEX_MAX） */
++static uint32_t  s_wl_cnt = 0;
++static uint32_t  s_wl_cap = 0;      /* v9.82j: 当前索引容量（条数），随白名单增长按需扩容 */
++
++static uint64_t wl_calc_key(const uint8_t *epc, uint16_t len)
+ {
+-    LTDataType  epcidlist;
++    uint32_t crc1 = fdb_calc_crc32(0x00000000UL, epc, (size_t)len);
++    uint32_t crc2 = fdb_calc_crc32(0xFFFFFFFFUL, epc, (size_t)len);
++    return ((uint64_t)crc1 << 32) | (uint64_t)crc2;
++}
+ 
+-    memcpy(epcidlist.epc, input_tag, tlen);
+-    epcidlist.Epclen = tlen;
++static void wl_key_qsort(uint64_t *a, int lo, int hi)
++{
++    if (lo >= hi) return;
++    uint64_t pivot = a[(lo + hi) >> 1];
++    int i = lo, j = hi;
++    while (i <= j) {
++        while (a[i] < pivot) i++;
++        while (a[j] > pivot) j--;
++        if (i <= j) { uint64_t t = a[i]; a[i] = a[j]; a[j] = t; i++; j--; }
++    }
++    if (lo < j) wl_key_qsort(a, lo, j);
++    if (i < hi) wl_key_qsort(a, i, hi);
++}
+ 
++/* v9.82j: 索引容量不足时扩容（翻倍），避免开机/导入期预留 160KB 挤占堆 */
++static void wl_index_grow(uint32_t need)
++{
++    uint32_t ncap;
++    uint64_t *np;
++
++    if (need <= s_wl_cap)
++        return;
++    ncap = (s_wl_cap == 0) ? 512 : s_wl_cap;
++    while (ncap < need && ncap < WL_INDEX_MAX)
++        ncap <<= 1;
++    if (ncap > WL_INDEX_MAX)
++        ncap = WL_INDEX_MAX;
++    if (ncap <= s_wl_cap)
++        return;   /* 已达硬上限，只能截断 */
++    np = (uint64_t *)malloc((size_t)ncap * sizeof(uint64_t));
++    if (np == NULL)
++    {
++        TRACE("[wl] index grow FAIL %luB\r\n", (unsigned long)((size_t)ncap * sizeof(uint64_t)));
++        return;
++    }
++    if (s_wl_key != NULL)
++        memcpy(np, s_wl_key, (size_t)s_wl_cnt * sizeof(uint64_t));
++    __disable_irq();          /* v9.82j: 与 Match_EPC_inTSDB 二分查找互斥——换指针+释放旧缓冲期间 reader 不可能在读它 */
+     {
+-        /* GET the KV value */
++        uint64_t *old = s_wl_key;
++        s_wl_key = np;
++        s_wl_cap = ncap;
++        if (old != NULL)
++            free(old);
++    }
++    __enable_irq();
++}
+ 
+-        filter_flag = 0;
+-        /* get the "temp" KV value */
+-        fdb_tsl_iter(tsdb, filter_EPCID_cb, &epcidlist);
++static uint32_t s_iter_cnt = 0;    /* v9.82i 诊断: 遍历到的 TSL 总数 */
++static uint32_t s_iter_write = 0;   /* v9.82i 诊断: WRITE 状态数 */
+ 
+-        if(filter_flag)
+-        {
+-           // return filter_flag;
+-        }
+-				/* v9.81cj-e: 删除热路径 FDB_INFO 打印——每个非白名单标签都执行 printf
+-				 * (CM_USART1 115200 逐字符阻塞 ~2.6ms/条)，串口刷屏拖垮读标签速度 */
+-				else
+-				{
+-				}	
++static bool wl_index_cb(fdb_tsl_t tsl, void *arg)
++{
++    struct fdb_blob blob;
++    LTDataType epc;
++    (void)arg;
++    s_iter_cnt++;
++    if (tsl->status == FDB_TSL_WRITE) s_iter_write++;
++    if (tsl->status != FDB_TSL_WRITE) return false;
++    fdb_blob_read((fdb_db_t)&whitelistDB, fdb_tsl_to_blob(tsl, fdb_blob_make(&blob, &epc, sizeof(epc))));
++    if (blob.saved.len > 0 && epc.Epclen > 0 && epc.Epclen <= 16) {
++        wl_index_grow(s_wl_cnt + 1);
++        if (s_wl_cnt < s_wl_cap)
++            s_wl_key[s_wl_cnt++] = wl_calc_key(epc.epc, epc.Epclen);
++    }
++    return false;
++}
+ 
+-        /* the blob.saved.len is more than 0 when get the value successful */
++void whitelist_index_rebuild(fdb_tsdb_t tsdb)
++{
++    if (s_wl_key == NULL)
++        wl_index_grow(256);   /* 空表也建最小缓冲，避免 Match_EPC 每次都触发懒重建全遍历 */
++    s_wl_cnt = 0;
++    s_iter_cnt = 0; s_iter_write = 0;
++    fdb_tsl_iter(tsdb, wl_index_cb, NULL);
++    if (s_wl_cnt > 1) wl_key_qsort(s_wl_key, 0, (int)s_wl_cnt - 1);
++    TRACE("[wl] index built: %u tags (iter=%u write=%u)\r\n", (unsigned)s_wl_cnt, (unsigned)s_iter_cnt, (unsigned)s_iter_write);
++}
+ 
++uint32_t Match_EPC_inTSDB(fdb_tsdb_t tsdb, uint8_t *input_tag, uint16_t tlen)
++{
++    uint64_t key;
++    int lo, hi, mid;
++    uint32_t cnt;
++    int result = 0;
++
++    /* v9.82i: 懒构建——启动后无显式加载路径，首次查找时自动建索引（一次性全遍历，之后走二分） */
++    if (s_wl_key == NULL)
++        whitelist_index_rebuild(tsdb);
++
++    key = wl_calc_key(input_tag, tlen);
++    __disable_irq();          /* v9.82j: 关中断做二分——wl_index_grow/rebuild 释放旧缓冲时本任务不可能正在读它 */
++    cnt = s_wl_cnt;
++    if (s_wl_key != NULL && cnt > 0)
++    {
++        lo = 0;
++        hi = (int)cnt - 1;
++        while (lo <= hi)
++        {
++            mid = (lo + hi) >> 1;
++            if (s_wl_key[mid] == key) { result = 1; break; }
++            if (s_wl_key[mid] < key) lo = mid + 1;
++            else hi = mid - 1;
++        }
+     }
+-
+-    return filter_flag;
++    __enable_irq();
++    return (uint32_t)result;
+ }
+ 
+ 
+@@ -402,6 +471,8 @@ uint32_t tsdb_tarversal_total(fdb_tsdb_t tsdb)
+     fdb_tsl_iter(tsdb, createlist_query_cb, tsdb);
+     counttag = Get_whitetags_total_count(staticlist);
+     mycfgdata.totaltagcnt = counttag;
++    /* v9.82i: 不在此重建索引——readtag(获取)也调本函数，重建会每次获取都全遍历；
++     * 索引只在启动(flashdb.c) + 增删落盘后(Check_Buffer_Diff)重建 */
+     return counttag;
+ }
+ 
+diff --git a/release/FW.BIN b/release/FW.BIN
+index b7d181d..4724046 100644
+Binary files a/release/FW.BIN and b/release/FW.BIN differ
+diff --git a/release/fw_0x01150500_20260831_2309.otapkg b/release/fw_0x01150500_20260831_2309.otapkg
+deleted file mode 100644
+index b7d181d..0000000
+Binary files a/release/fw_0x01150500_20260831_2309.otapkg and /dev/null differ
+diff --git a/release/fw_0x01150600_20260831_2309.otapkg b/release/fw_0x01150600_20260831_2309.otapkg
+deleted file mode 100644
+index d5169fa..0000000
+Binary files a/release/fw_0x01150600_20260831_2309.otapkg and /dev/null differ
+diff --git a/release/manifest.txt b/release/manifest.txt
+index f90f804..20d79cc 100644
+--- a/release/manifest.txt
++++ b/release/manifest.txt
+@@ -1,16 +1,16 @@
+-firmware release manifest  ver=0x01150500  bridge=0x01150600  built=20260831_2309
++firmware release manifest  ver=0x01150500  bridge=0x01150600  built=20260908_2223
+ 
+-[LATEST] merged =merged_f4a0_0x01150500_20260831_2309.bin
+-         pkg    =fw_0x01150500_20260831_2309.otapkg
+-         bridge =fw_0x01150600_20260831_2309.otapkg
++[LATEST] merged =merged_f4a0_0x01150500_20260908_2223.bin
++         pkg    =fw_0x01150500_20260908_2223.otapkg
++         bridge =fw_0x01150600_20260908_2223.otapkg
+ 
+-merged_f4a0_0x01150500_20260831_2309.bin  size=469188  sha256=7426f8432f89a45b1bd1b82ebd19568874e055bcd33847889d4e190e5d0e1a87
+-fw_0x01150500_20260831_2309.otapkg  size=403734  sha256=a57fdff85d59c4db2ed103b80ef16866b7bdb7215c71eb8bf7c3476f00b73fae
++merged_f4a0_0x01150500_20260908_2223.bin  size=469720  sha256=a4c947ddb77217eee5b25efde18aa98e1db331ca12e071d1a19a4a275ad41816
++fw_0x01150500_20260908_2223.otapkg  size=404266  sha256=28df660636e60d30ecc95dafca194f89d067bb8a2114965511454757031d14d9
+   [OK]   header ver match 0x01150500
+-fw_0x01150600_20260831_2309.otapkg  size=403734  sha256=44f9d98fff9fc8c504c354d66e48928c576dc9655780d480d064840497dbb15a
++fw_0x01150600_20260908_2223.otapkg  size=404266  sha256=ae54fea7a3792c046dc76a51bd76e769e8195de55deb340fa55580ef5042a257
+   [OK]   header ver match 0x01150600
+-FW.BIN  size=403734  sha256=a57fdff85d59c4db2ed103b80ef16866b7bdb7215c71eb8bf7c3476f00b73fae
++FW.BIN  size=404266  sha256=28df660636e60d30ecc95dafca194f89d067bb8a2114965511454757031d14d9
+   [OK]   FW.BIN identical to standard otapkg
+ 
+-cleaned legacy: fw_0x01150500_20260831_2300.otapkg, fw_0x01150600_20260831_2300.otapkg, merged_f4a0_0x01150500_20260831_2300.bin
++cleaned legacy: fw_0x01150500_20260908_2043.otapkg, fw_0x01150600_20260908_2043.otapkg, merged_f4a0_0x01150500_20260908_2043.bin
+ 
+diff --git a/release/merged_f4a0_0x01150500_20260831_2309.bin b/release/merged_f4a0_0x01150500_20260831_2309.bin
+deleted file mode 100644
+index 31ba16f..0000000
+Binary files a/release/merged_f4a0_0x01150500_20260831_2309.bin and /dev/null differ

@@ -1,0 +1,907 @@
+
+
+#include "SPI.h"
+#include <stdio.h>
+#include <string.h>
+#include "socket.h"
+#include "w5100s.h"
+#include "w5100s_init.h"
+
+//总线通信方式发送数据
+void IINCHIP_BusSendData(uint32 addr,uint8 data)
+{
+    *((volatile uint8*)addr) = data;
+
+}
+//总线方式读数据
+uint8 IINCHIP_BusReadData(uint32 addr)
+{
+    return *((volatile uint8*)addr) ;
+
+}
+
+//spi模式下的通信
+
+
+static uint8 I_STATUS[MAX_SOCK_NUM];
+static uint16 SSIZE[MAX_SOCK_NUM]; /**< Max Tx buffer size by each channel */
+static uint16 RSIZE[MAX_SOCK_NUM]; /**< Max Rx buffer size by each channel */
+
+//获取每个socket的端口状态
+uint8 getISR(uint8 s)
+{
+    return I_STATUS[s];
+}
+
+//
+void putISR(uint8 s, uint8 val)
+{
+    I_STATUS[s] = val;
+}
+
+
+//获取每个socket 接收缓冲区的大小
+uint16 getIINCHIP_RxMAX(uint8 s)
+{
+    return RSIZE[s];
+}
+
+
+//获取每个socket发送缓冲区的大小
+uint16 getIINCHIP_TxMAX(uint8 s)
+{
+    return SSIZE[s];
+}
+
+//SPI片选信号拉低
+void IINCHIP_CSoff(void)
+{
+    WIZ_CS(LOW);
+}
+
+//片选信号拉高
+void IINCHIP_CSon(void)
+{
+    WIZ_CS(HIGH);
+}
+
+//SPI发送一个字节的数据
+uint8  IINCHIP_SpiSendData(uint8 dat)
+{
+    return(SPI1_SendByte(dat));
+}
+
+//MCU通过SPI接口向W5100S写字节数据
+/*
+  SPI帧  |---8bits---|---16bits---|----DATA---|
+            控制段      偏移地址       数据
+  控制段： 0xf0 写
+          0x0f 读
+*/
+
+void IINCHIP_WRITE( uint32 addrbsb,  uint8 data)   //2018-07-17
+{
+    //IINCHIP_ISR_DISABLE();                        // Interrupt Service Routine Disable
+
+#if(MODE_SPI==1)
+    IINCHIP_CSoff();
+    delay_us(10);                          // CS=0, SPI start
+    IINCHIP_SpiSendData( 0xf0);
+    IINCHIP_SpiSendData( (addrbsb & 0xff00)>>8);// Address byte 1
+    IINCHIP_SpiSendData( (addrbsb & 0x00ff));// Address byte 2
+    IINCHIP_SpiSendData(data);                    // Data write (write 1byte data)
+    IINCHIP_CSon();                              // CS=1,  SPI end
+
+#elif(MODE_BUS==1)
+    IINCHIP_BusSendData(IDM_AR0 ,(addrbsb & 0xff00)>>8);
+    IINCHIP_BusSendData(IDM_AR1 ,addrbsb & 0x00ff);
+    IINCHIP_BusSendData(IDM_DR, data);
+#endif
+
+    //IINCHIP_ISR_ENABLE();                         // Interrupt Service Routine Enable
+}
+
+//读取1byte数据
+uint8 IINCHIP_READ(uint32 addrbsb)   //2018-07-17
+{
+    uint8 data = 0;
+
+#if((MODE_SPI==1))
+    //IINCHIP_ISR_DISABLE();                        // Interrupt Service Routine Disable
+    IINCHIP_CSoff(); 	// CS=0, SPI start
+    delay_us(10);
+    {
+        IINCHIP_SpiSendData( 0x0f);
+        IINCHIP_SpiSendData( (addrbsb & 0xff00)>>8);// Address byte 1
+        IINCHIP_SpiSendData( (addrbsb & 0x00ff));// Address byte 2
+        // IINCHIP_SpiSendData( (addrbsb & 0x000000F8))    ;// Data read command and Read data length 1
+        data = IINCHIP_SpiSendData(0x00);             // Data read (read 1byte data)
+    }
+    IINCHIP_CSon();                               // CS=1,  SPI end
+
+#elif(MODE_BUS==1)
+    {
+        IINCHIP_BusSendData(IDM_AR0 ,(addrbsb & 0xff00)>>8);
+        IINCHIP_BusSendData(IDM_AR1 ,(addrbsb & 0x00ff));
+        data = IINCHIP_BusReadData(IDM_DR);
+    }
+#endif
+
+//printf("data = %x\r\n",data);
+    //IINCHIP_ISR_ENABLE();                         // Interrupt Service Routine Enable
+    return data;
+}
+
+
+//写多个字节的数据
+uint16 wiz_write_buf(uint32 addrbsb,uint8* buf,uint16 len)   //2018-07-17
+{
+    uint16 idx = 0;
+    if(len == 0)
+        addrbsb = addrbsb+COMMON_BASE;
+
+    //IINCHIP_ISR_DISABLE();
+#if(MODE_SPI==1)
+    IINCHIP_CSoff(); 	// CS=0, SPI start
+    delay_us(10);
+    IINCHIP_SpiSendData( 0xf0);
+    IINCHIP_SpiSendData( (addrbsb & 0xff00)>>8);// Address byte 1
+    IINCHIP_SpiSendData( (addrbsb & 0x00ff));// Address byte 2
+    for(idx = 0; idx < len; idx++)                // Write data in loop
+    {
+        IINCHIP_SpiSendData(buf[idx]);
+        // delay_us(10);
+    }
+    IINCHIP_CSon();                               // CS=1, SPI end
+
+#elif(MODE_BUS==1)
+    IINCHIP_BusSendData(IDM_AR0 ,(addrbsb & 0xff00)>>8);
+    IINCHIP_BusSendData(IDM_AR1 ,addrbsb & 0x00ff);
+
+    for(idx = 0; idx < len; idx++)                // Write data in loop
+    {
+        IINCHIP_BusSendData(IDM_DR, buf[idx]);
+    }
+#endif
+
+    //IINCHIP_ISR_ENABLE();                         // Interrupt Service Routine Enable
+
+    return len;
+}
+
+uint16 wiz_read_buf(uint32 addrbsb, uint8* buf,uint16 len)      //2018-07-17
+{
+    uint16 idx = 0;
+    if(len == 0)
+    {
+
+    }
+    addrbsb = addrbsb+COMMON_BASE;
+    //IINCHIP_ISR_DISABLE();
+    //SPI MODE I/F
+
+#if(MODE_SPI==1)
+    IINCHIP_CSoff();	// CS=0, SPI start
+    delay_us(10);
+    IINCHIP_SpiSendData( 0x0f);
+    IINCHIP_SpiSendData( (addrbsb & 0xff00)>>8);// Address byte 1
+    IINCHIP_SpiSendData( (addrbsb & 0x00ff));// Address byte 2
+    for(idx = 0; idx < len; idx++)                    // Write data in loop
+    {
+        buf[idx] = IINCHIP_SpiSendData(0x00);
+    }
+    IINCHIP_CSon();                                   // CS=1, SPI end
+
+#elif(MODE_BUS==1)
+    IINCHIP_BusSendData(IDM_AR0 ,(addrbsb & 0xff00)>>8);
+    IINCHIP_BusSendData(IDM_AR1 ,addrbsb & 0x00ff);
+
+    for(idx = 0; idx < len; idx++)                // Write data in loop
+    {
+        buf[idx] =IINCHIP_BusReadData(IDM_DR);
+    }
+#endif
+
+    //IINCHIP_ISR_ENABLE();                             // Interrupt Service Routine Enable
+
+    return len;
+}
+
+
+/**
+@brief  This function is for resetting of the iinchip. Initializes the iinchip to work in whether DIRECT or INDIRECT mode
+*/
+void iinchip_init(void)
+{
+    setMR( MR_RST );
+#ifdef __DEF_IINCHIP_DBG__
+    printf("MR value is %02x \r\n",IINCHIP_READ_COMMON(MR));
+#endif
+}
+
+/**
+//RX memory size register, R/W, default=0x55
+//--------------------------------------------------------    S1      S0      Memory size
+//  Socket3    |  Socket2    |  Socket1    |  Socket0    |    0       0           1KB
+//-------------|-------------|-------------|-------------|    0       1           2KB
+//S1       S0  |S1       S0  |S1       S0  |S1       S0  |    1       0           4KB
+//--------------------------------------------------------    1       1           8KB
+*/
+void sys_init( uint8  tx_size, uint8  rx_size  )
+{
+
+    IINCHIP_WRITE( W5100S_RMSR, tx_size);		//
+    IINCHIP_WRITE( W5100S_TMSR, rx_size);		//
+
+
+}
+
+// added
+
+/*.
+*/
+
+
+
+
+
+
+
+void setGAR(
+    uint8 * addr  /**< a pointer to a 4 -byte array responsible to set the Gateway IP address. */
+)
+{
+    wiz_write_buf(W5100S_GAR, addr, 4);
+}
+void getGWIP(uint8 * addr)
+{
+    wiz_read_buf(W5100S_GAR, addr, 4);
+}
+
+/**
+@brief  It sets up SubnetMask address
+*/
+void setSUBR(uint8 * addr)
+{
+    wiz_write_buf(W5100S_SUBR, addr, 4);
+}
+/**
+@brief  This function sets up MAC address.
+*/
+void setSHAR(
+    uint8 * addr  /**< a pointer to a 6 -byte array responsible to set the MAC address. */
+)
+{
+    wiz_write_buf(W5100S_SHAR, addr, 6);
+}
+
+/**
+@brief  This function sets up Source IP address.
+*/
+void setSIPR(
+    uint8 * addr  /**< a pointer to a 4 -byte array responsible to set the Source IP address. */
+)
+{
+    wiz_write_buf(W5100S_SIPR, addr, 4);
+}
+
+/**
+@brief  set keep-alive
+*/
+void setkeepalive(SOCKET s)
+{
+    IINCHIP_WRITE(W5100S_Sn_KPALVTR(s),0x02);
+}
+
+/**
+@brief  This function sets up Source IP address.
+*/
+void getGAR(uint8 * addr)
+{
+    wiz_read_buf(W5100S_GAR, addr, 4);
+}
+void getSUBR(uint8 * addr)
+{
+    wiz_read_buf(W5100S_SUBR, addr, 4);
+}
+void getSHAR(uint8 * addr)
+{
+    wiz_read_buf(W5100S_SHAR, addr, 6);
+}
+void getSIPR(uint8 * addr)
+{
+    wiz_read_buf(W5100S_SIPR, addr, 4);
+}
+
+void setMR(uint8 val)
+{
+    IINCHIP_WRITE(W5100S_MR,val);
+}
+
+
+
+/**
+@brief  This function gets Interrupt register in common register.
+ */
+uint8 getIR( void )
+{
+    return IINCHIP_READ(W5100S_IR);
+}
+
+/**
+@brief  This function sets up Retransmission time.
+
+If there is no response from the peer or delay in response then retransmission
+will be there as per RTR (Retry Time-value Register)setting
+*/
+void setRTR(uint16 timeout)
+{
+    IINCHIP_WRITE(W5100S_RTR0,(uint8)((timeout & 0xff00) >> 8));
+    IINCHIP_WRITE(W5100S_RTR1,(uint8)(timeout & 0x00ff));
+}
+
+/**
+@brief  This function set the number of Retransmission.
+
+If there is no response from the peer or delay in response then recorded time
+as per RTR & RCR register seeting then time out will occur.
+*/
+void setRCR(uint8 retry)
+{
+    IINCHIP_WRITE(W5100S_RCR,retry);
+}
+
+/**
+@brief  This function set the interrupt mask Enable/Disable appropriate Interrupt. ('1' : interrupt enable)
+
+If any bit in IMR is set as '0' then there is not interrupt signal though the bit is
+set in IR register.
+*/
+void clearIR(uint8 mask)
+{
+    IINCHIP_WRITE(W5100S_IR, ~mask | getIR() ); // must be setted 0x10.
+}
+
+/**
+@brief  This sets the maximum segment size of TCP in Active Mode), while in Passive Mode this is set by peer
+*/
+void setSn_MSS(SOCKET s, uint16 Sn_MSSR)
+{
+    IINCHIP_WRITE( W5100S_Sn_MSS0(s), (uint8)((Sn_MSSR & 0xff00) >> 8));
+    IINCHIP_WRITE( W5100S_Sn_MSS1(s), (uint8)(Sn_MSSR & 0x00ff));
+}
+
+void setSn_TTL(SOCKET s, uint8 ttl)
+{
+    IINCHIP_WRITE( W5100S_Sn_TTL(s) , ttl);
+}
+
+
+
+/**
+@brief  get socket interrupt status
+
+These below functions are used to read the Interrupt & Soket Status register
+*/
+uint8 getSn_IR(SOCKET s)
+{
+    return IINCHIP_READ(W5100S_Sn_IR(s));
+}
+
+
+/**
+@brief   get socket status
+*/
+uint8 getSn_SR(SOCKET s)
+{
+    return IINCHIP_READ(W5100S_Sn_SR(s)); // MCU??Sn_SR????????????????????
+}
+
+
+/**
+@brief  get socket TX free buf size
+
+This gives free buffer size of transmit buffer. This is the data size that user can transmit.
+User shuold check this value first and control the size of transmitting data
+*/
+uint16 getSn_TX_FSR(SOCKET s)
+{
+    uint16 val=0,val1=0;
+    do
+    {
+        val1 = IINCHIP_READ(W5100S_Sn_TX_FSR0(s));
+        val1 = (val1 << 8) + IINCHIP_READ(W5100S_Sn_TX_FSR1(s));
+        if (val1 != 0)
+        {
+            val = IINCHIP_READ(W5100S_Sn_TX_FSR0(s));
+            val = (val << 8) + IINCHIP_READ(W5100S_Sn_TX_FSR1(s));
+        }
+    } while (val != val1);
+    return val;
+}
+
+
+/**
+@brief   get socket RX recv buf size
+
+This gives size of received data in receive buffer.
+*/
+uint16 getSn_RX_RSR(SOCKET s)		// ???Sn_RX_RSR???н???????????????????,Sn_RX_RSR?б?????????????????????????????С
+{
+    uint16 val=0,val1=0;
+    do
+    {
+        val1 = IINCHIP_READ(W5100S_Sn_RX_RSR0(s));
+        val1 = (val1 << 8) + IINCHIP_READ(W5100S_Sn_RX_RSR1(s));		// MCU????Sn_RX_RSR???????val1
+        if(val1 != 0)																				// ???Sn_RX_RSR??????0???????????????????????
+        {
+            val = IINCHIP_READ(W5100S_Sn_RX_RSR0(s));
+            val = (val << 8) + IINCHIP_READ(W5100S_Sn_RX_RSR1(s));	// MCU????Sn_RX_RSR???????val
+        }
+    }
+    while (val != val1);																	// ??????val=val1,????????????do while???
+    return val;																						// ????val
+}
+
+
+/**
+@brief   This function is being called by send() and sendto() function also.
+
+This function read the Tx write pointer register and after copy the data in buffer update the Tx write pointer
+register. User should read upper byte first and lower byte later to get proper value.
+*/
+void send_data_processing(SOCKET s, uint8 *data, uint16 len)		// MCU??????????W5100S??????W5100S??????д??buf?????????????д??????
+{
+    uint8 s_num;
+    uint16 ptr =0;
+    uint32 addrbsb =0;
+    uint32 offset = 0;
+    uint32  addr_offset = 0;
+    uint32 uper_size;
+    //uint8 i=0;
+    s_num=s;
+    if(len == 0)
+    {
+        printf("CH: %d Unexpected1 length 0\r\n", s);
+        return;
+    }
+
+    ptr = (uint16)IINCHIP_READ( W5100S_Sn_TX_WR0(s) );
+    ptr = (ptr << 8) + IINCHIP_READ(W5100S_Sn_TX_WR1(s));
+
+    /*计算基地址偏移量*/
+    while(s_num>0)
+    {   s_num--;
+        offset += getSn_TXBUF_SIZE( s_num)*1024;
+    }
+    /*计算地址偏移*/
+    addr_offset = (ptr&(getSn_TXBUF_SIZE( s)*1024-1));
+
+    if((addr_offset+len)>getSn_TXBUF_SIZE( s)*1024)
+    {
+        uper_size =  getSn_TXBUF_SIZE( s)*1024 - addr_offset;
+        addrbsb = (uint32)(addr_offset+0x4000+offset);
+        wiz_write_buf(addrbsb, data, uper_size);
+        addrbsb = 0x4000+offset;
+        wiz_write_buf(addrbsb, data+uper_size,len-uper_size);
+    }
+    else
+    {
+        addrbsb = (uint32)((ptr&(getSn_TXBUF_SIZE( s)*1024-1))+0x4000+offset);	// ??????????н??????????????????32λ
+        //printf("sendaddr=%lx\r\n",addrbsb);
+        wiz_write_buf(addrbsb, data, len);														// W5100S??????????д???????????????len
+    }
+    ptr += len;																										// ???????+len????????μ?????
+    IINCHIP_WRITE( W5100S_Sn_TX_WR0(s) ,(uint8)((ptr & 0xff00) >> 8));
+    IINCHIP_WRITE( W5100S_Sn_TX_WR1(s),(uint8)(ptr & 0x00ff));						// ???μ???????????Sn_RX_WR??
+    ptr = (uint16)IINCHIP_READ( W5100S_Sn_TX_WR0(s) );
+    ptr = (ptr << 8) + IINCHIP_READ(W5100S_Sn_TX_WR1(s));
+
+}
+
+
+/**
+@brief  This function is being called by recv() also.
+
+This function read the Rx read pointer register
+and after copy the data from receive buffer update the Rx write pointer register.
+User should read upper byte first and lower byte later to get proper value.
+*/
+void recv_data_processing(SOCKET s, uint8 *data, uint16 len)
+{
+    uint8 s_num;
+    uint16 ptr = 0;
+    uint32 addrbsb = 0;
+    uint16 offset=0;
+    uint32  addr_offset=0;
+    uint32 uper_size;
+    s_num=s;
+    if(len == 0)
+    {
+        return;
+    }
+// Sn_RX_RD?????????????
+    ptr = (uint16)IINCHIP_READ( 	W5100S_Sn_RX_RD0(s) );
+//	printf("addr=%x\r\n",ptr);
+    ptr = (ptr << 8) + IINCHIP_READ( W5100S_Sn_RX_RD1(s) );	// MCU???Sn_RX_RD????????
+//  printf("addr=%x\r\n",ptr);
+    addr_offset = (ptr&(getSn_RXBUF_SIZE( s)*1024-1));
+    while(s_num>0)
+    {   s_num--;
+        offset += getSn_RXBUF_SIZE( s_num)*1024;
+    }
+    if((addr_offset+len)>getSn_RXBUF_SIZE( s)*1024)
+    {
+        uper_size = getSn_RXBUF_SIZE( s)*1024 -addr_offset;
+        addrbsb =(uint32)(addr_offset+0x6000+offset);
+        wiz_read_buf(addrbsb, data, uper_size);
+        addrbsb =(uint32)(0x6000+offset);
+        wiz_read_buf(addrbsb, data+uper_size, len-uper_size);
+    } else
+    {
+        addrbsb =(uint32)((ptr&(getSn_RXBUF_SIZE( s)*1024-1))+0x6000+offset);					// ??????????н??????????????????32λ
+        wiz_read_buf(addrbsb, data, len);										// W5100S??????????????????????????len
+    }
+    ptr += len;																					// ???????+len????????μ?????
+
+    IINCHIP_WRITE( W5100S_Sn_RX_RD0(s), (uint8)((ptr & 0xff00) >> 8));
+    IINCHIP_WRITE( W5100S_Sn_RX_RD1(s), (uint8)(ptr & 0x00ff));		// ???μ???????????Sn_RX_RD??
+}
+/*
+@brief: write 1 to clear IR
+**/
+void setSn_IR(uint8 s, uint8 val)
+{
+    IINCHIP_WRITE(W5100S_Sn_IR(s), val);
+}
+
+
+/****/
+
+void setIR2(uint8 val)
+{
+    IINCHIP_WRITE(W5100S_IR2, val);
+}
+
+uint8 getIR2(void)
+{
+    uint8 val;
+    val = IINCHIP_READ(W5100S_IR2);
+    return val;
+}
+/**
+*@brief:set IMR2 for WOL interrupt
+***/
+void setIMR2(uint8 val)
+{
+    IINCHIP_WRITE(W5100S_IMR2, val);
+}
+
+uint8 getIMR2(void)
+{
+    uint8 val;
+    val = IINCHIP_READ(W5100S_IMR2);
+    return val;
+}
+
+/**
+*@brief:set the time of LCP ECHO
+*****/
+void setPTIMER(uint8 val)
+{
+    IINCHIP_WRITE(W5100S_PTIMER, val);
+}
+/**
+*@BRIEF: set magic number
+**/
+void setPMAGIC(uint8 val)
+{
+    IINCHIP_WRITE(W5100S_PMAGIC, val);
+}
+
+/**
+*@brief:set MR2 for sys_clk,ien
+*******/
+void setMR2(uint8 val)
+{
+    IINCHIP_WRITE(W5100S_MR2, val);
+}
+
+/**
+*@brief: set PPOE dst mac address
+**/
+
+void setPHAR(uint8 * mac)
+{
+    uint8 i;
+    for(i=0; i<6; i++)
+    {
+        IINCHIP_WRITE(W5100S_PHAR0+i,mac[i] );
+    }
+}
+
+/**
+*@brief: SET PPOE ID
+**/
+void setPSDIR(uint16 val)
+{
+    IINCHIP_WRITE(W5100S_PSIDR0, ((val&0XFF00)>>8));
+    IINCHIP_WRITE(W5100S_PSIDR1,( val&0X00FF));
+}
+
+/**
+*@BRIEF:SET THE PPOE MAX RECEIVE UNIT
+**/
+void setPMRUR(uint16 val)
+{
+    IINCHIP_WRITE(W5100S_PMRUR0, ((val&0XFF00)>>8));
+    IINCHIP_WRITE(W5100S_PMRUR1,( val&0X00FF));
+}
+/**
+*@BRIEF:GET PHY STATUS
+**/
+uint8 getPHYSR(void)
+{
+    uint8 val;
+    val = IINCHIP_READ(W5100S_PHYSR);
+    return val;
+}
+
+/**
+*@BRIEF: SET PHY ADDRESS
+**/
+void setPHYRAR(uint8 val)
+{
+    IINCHIP_WRITE(W5100S_PHYRAR, val);
+
+}
+
+/**
+*@BRIEF:
+**/
+void setPHYDIR(uint16 val)
+{
+    IINCHIP_WRITE(W5100S_PHYDIR1, ((val&0XFF00)>>8));
+    IINCHIP_WRITE(W5100S_PHYDIR0,( val&0X00FF));
+}
+
+/**
+*@BRIEF:
+**/
+void setPHYDOR(uint16 val)
+{
+    IINCHIP_WRITE(W5100S_PHYDOR1, ((val&0XFF00)>>8));
+    IINCHIP_WRITE(W5100S_PHYDOR0,( val&0X00FF));
+}
+
+/**
+*@brief:SET ACCESS TYPE
+-------------------
+_TYPE    |   value
+--------------------
+write    |  0x01
+---------------------
+read     |  0x02
+--------------------
+**/
+void setPHYACR(uint8 val)
+{
+    IINCHIP_WRITE(W5100S_PHYACR, val);
+
+}
+/**
+*@brief: set phydivr
+-----------------------
+|  VALUE  |   DIVIDER  |
+-----------------------
+|  0X00   |    1/32    |
+-----------------------
+|  0X01   |    1/64    |
+-----------------------
+| OTHERS  |    1/128   |
+------------------------
+**/
+void setPHYDIVR(uint8 val)
+{
+    IINCHIP_WRITE(W5100S_PHYDIVR, val);
+
+}
+/**
+*@BRIEF: SET PHY OPERATION MODE
+****/
+void setPHYCR0(uint8 val)
+{
+    IINCHIP_WRITE(W5100S_PHYCR0, val);
+
+}
+/**
+*@BRIEF: SET PHY OPERATION MODE
+***/
+void setPHYCR1(uint8 val)
+{
+    IINCHIP_WRITE(W5100S_PHYCR1, val);
+
+}
+/**
+*@BRIEF: SET SLCR
+**/
+void setSLCR(uint8 val)
+{
+    IINCHIP_WRITE(W5100S_SLCR, val);
+
+}
+/**
+*@BRIEF: SET SOCKET-LESS RETR TIME
+**/
+void setSLRTR(uint16 val)
+{
+    IINCHIP_WRITE(W5100S_SLRTR0, ((val&0XFF00)>>8));
+    IINCHIP_WRITE(W5100S_SLRTR1,( val&0X00FF));
+
+}
+
+/**
+* @brief: set retransmission number
+****/
+void setSLRCR(uint8 val)
+{
+
+    IINCHIP_WRITE(W5100S_SLRCR,val);
+
+}
+/**
+*@BRIEF:
+*****/
+void setSLPIPR(uint8 * ip)
+{
+    uint8 i;
+    for(i=0; i<4; i++)
+    {
+        IINCHIP_WRITE(W5100S_SLPIPR+i,ip[i] );
+    }
+}
+/**
+*@brief:SET PEER HARDWARE ADDRESS
+**/
+void setSLPHAR(uint8 * mac)
+{
+    uint8 i;
+    for(i=0; i<6; i++)
+    {
+        IINCHIP_WRITE(W5100S_SLPHAR+i,mac[i] );
+    }
+}
+/**
+*@BRIEF: SET PING SEQ-NUMBER
+****/
+void setPINGSEQR(uint16 val)
+{
+    IINCHIP_WRITE(W5100S_PINGSEQR0, ((val&0XFF00)>>8));
+    IINCHIP_WRITE(W5100S_PINGSEQR1,( val&0X00FF));
+
+}
+/***
+*@BRIEF:SET PING ID
+*****/
+void setPINGIDR(uint16 val)
+{
+    IINCHIP_WRITE(W5100S_PINGIDR0, ((val&0XFF00)>>8));
+    IINCHIP_WRITE(W5100S_PINGIDR1,( val&0X00FF));
+
+}
+
+/**
+* @brief: set SOCKET-LESS MASK
+****/
+void setSLIMR(uint8 val)
+{
+
+    IINCHIP_WRITE(W5100S_SLIMR,val);
+
+}
+/**
+*@BRIEF:SET SOCKET-LESS INTERRUPT IR
+******/
+void setSLIR(uint8 val)
+{
+
+    IINCHIP_WRITE(W5100S_SLIR,val);
+
+}
+/**
+*@brief:GET SOCKET-LESS IR
+***/
+uint8 getSLIR(void)
+{
+    uint8 val;
+    val = IINCHIP_READ(W5100S_SLIR);
+    return val;
+}
+
+/**
+*@BRIEF: SET CLKLCKR
+----------------------
+ UNLOCK   | LOCK
+----------------------
+ 0XCE     |OTHERS
+----------------------
+****/
+void setCLKLCKR(uint8 val)
+{
+
+    IINCHIP_WRITE(W5100S_CLKLCKR,val);
+
+}
+
+/**
+*@BRIEF: SET NET LOCK
+------------------
+UNLOCK   |  LOCK
+------------------
+0XC5     |  0X3A
+------------------
+***/
+void setNETLCKR(uint8 val)
+{
+
+    IINCHIP_WRITE(W5100S_NETLCKR,val);
+
+}
+/*****
+*@BRIEF:SET PHY LOCK
+*---------------------------
+* UNLOCK  |  LOCK
+*------------------
+* 0x53    |  others
+*------------------
+*********/
+void setPHYLCKR(uint8 val)
+{
+
+    IINCHIP_WRITE(W5100S_PHYLCKR,val);
+
+}
+
+/***
+*@BRIEF: GET VERSION
+***/
+uint8 getVERR(void)
+{
+    uint8 val;
+    val = IINCHIP_READ(W5100S_VERR);
+    return val;
+}
+
+/**
+*@brief:get Ticker count
+**/
+uint8 getTCNTR (void)
+{
+    uint8 val1;
+    uint16 val;
+    val1 = IINCHIP_READ(W5100S_TCNTR);
+    val = val1;
+    val1 = IINCHIP_READ(W5100S_TCNTR+1);
+    val = (val<<8)+val1;
+    return val;
+}
+/**
+*@brief:
+**/
+void setTCNTCLR(uint8 val)
+{
+
+    IINCHIP_WRITE(W5100S_TCNTCLR,val);
+
+}
+
+uint8 getSn_TXBUF_SIZE(uint8 s)
+{
+    return IINCHIP_READ(W5100S_Sn_TXBUF_SIZE(s));
+
+}
+uint8 getSn_RXBUF_SIZE(uint8 s)
+{
+    return IINCHIP_READ(W5100S_Sn_RXBUF_SIZE(s));
+
+}
