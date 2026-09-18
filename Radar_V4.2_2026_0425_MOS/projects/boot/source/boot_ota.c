@@ -74,7 +74,53 @@ static int32_t boot_slot_usable(uint32_t u32Slot)
     return (ota_img_check(u32Slot) == 0) ? 0 : -2;   /* 写了 trailer 就必须校验通过 */
 }
 
-/* 跳转：不把配好的 PLL 交出去 —— 退回 HRC、关 PLL、等待周期归 0，让 App 自行初始化 */
+/* 跳转前还原运行环境 —— 与量产 boot_iap 的 fw_jump_helper.c SystemClock_DeInit() 逐行对齐。
+ *
+ * 旧 DDL -> 新 DDL 的寄存器映射(这是唯一改动):
+ *     M4_SYSREG  -> CM_CMU / CM_PWC      (CMU 寄存器在 CM_CMU, 写保护与 FCG 在 CM_PWC)
+ *     M4_MSTP    -> CM_PWC
+ *     PWR_FPRC   -> CM_PWC->FPRC         解锁/加锁码 0xA501 / 0xA500 不变
+ *
+ * 做四件事: ① 解锁 CMU; ② 关掉所有外设时钟 FCG0~3; ③ 切时钟源并复位 CMU 寄存器;
+ * ④ Flash 等待周期归 0; 最后加锁。目的是让 App 从「近似复位态」自行初始化。 */
+static void boot_clock_deinit(void)
+{
+    uint32_t u32Timeout;
+
+    /* 解锁 CMU 寄存器写保护 */
+    CM_PWC->FPRC = 0xA501UL;
+
+    /* 关闭所有外设时钟(FCG0~3) */
+    CM_PWC->FCG0 = 0xFFFFFAEEUL;
+    CM_PWC->FCG1 = 0xFFFFFFFFUL;
+    CM_PWC->FCG2 = 0xFFFFFFFFUL;
+    CM_PWC->FCG3 = 0xFFFFFFFFUL;
+
+    u32Timeout = 0x1000UL; while (u32Timeout-- != 0UL) { ; }
+
+    /* 切时钟源 */
+    CM_CMU->CKSWR = 0x01U;
+
+    u32Timeout = 0x1000UL; while (u32Timeout-- != 0UL) { ; }
+
+    /* CMU 寄存器复位到默认值 */
+    CM_CMU->XTALCFGR = 0x00U;
+    CM_CMU->XTALCR   = 0x01U;
+    CM_CMU->PLLCFGR  = 0x11101300UL;
+    CM_CMU->PLLCR    = 0x01U;
+    CM_CMU->SCFGR    = 0x00UL;
+
+    u32Timeout = 0x1000UL; while (u32Timeout-- != 0UL) { ; }
+
+    (void)EFM_SetWaitCycle(EFM_WAIT_CYCLE0);
+
+    u32Timeout = 0x1000UL; while (u32Timeout-- != 0UL) { ; }
+
+    /* 锁定 CMU */
+    CM_PWC->FPRC = 0xA500UL;
+}
+
+/* 跳转：对齐量产 boot_iap 的 run_app() —— 完整还原时钟/外设后交接，再跳 */
 static void boot_jump(uint32_t u32Slot)
 {
     uint32_t u32Base = OTA_SLOT_BASE(u32Slot);
@@ -83,9 +129,7 @@ static void boot_jump(uint32_t u32Slot)
 
     __disable_irq();
 
-    CLK_SetSysClockSrc(CLK_SYSCLK_SRC_HRC);
-    (void)CLK_PLLCmd(DISABLE);
-    (void)EFM_SetWaitCycle(EFM_WAIT_CYCLE0);
+    boot_clock_deinit();
 
     SCB->VTOR = u32Base;
     __DSB();
