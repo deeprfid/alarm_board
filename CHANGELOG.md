@@ -15,6 +15,15 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 
 ## [Unreleased]
 
+- `[ota]` **docs(设计稿 v0.2: 分发者改为 HC32F4A0 直连 + 升级期链路独占 + 协议定为 OTA1 + 维持 A/B 双槽无搬运)** — 本轮把 OTA 的分发拓扑、协议与槽模型定稿, 全部写入 `docs/ota_boot_design.md` v0.2(含 v0.1→v0.2 修订记录表), 并新增 `docs/decisions_2026-09-18.md` 记录当日决策。**本次不改任何固件代码**, 仅文档。
+  - **分发者变更**: v0.1 的「Linux → STM32 中继 → HC32」改为 **HC32F4A0 直连 RS485 逐板分发** —— 去掉两跳; F4A0(HC32F4A0PITB, 2MB Flash / 512KB RAM)有文件系统 + QSPI + USB-MSC, 可自行存放固件与版本, 现场无 PC 也能升级。STM32F0 中继板与 Linux 主机的 OTA 本次范围外、暂缓。
+  - **升级期口径变更**: v0.1 §12 默认「升级期业务照常」改为 **关闭全部业务帧、链路独占、只跑固件下发** —— 半双工 RS485 上 34KB 下载会饿死业务; 独占后两端状态机大幅简化。超时兜底: 任一方 10s 无进展即退出升级模式恢复业务, 避免链路被永久占死。
+  - **协议定稿**: 采用既有 **OTA1 帧**(魔数 `OTA1`, type 0x50 DATA / 0x51 ACK / 0x52 RESUME, 偏移为 4B LE, CRC16-CCITT-FALSE poly 0x1021 init 0xFFFF, 覆盖 [0:9+len]), 取代 v0.1 §9 建议的自建 0xA5/0xAA OTA 命令族 —— 理由是该协议在 C# 上位机(`OtaUpdater.cs`/`OtaProtocol.cs`)、Python(`tools/ota_send.py`)、F4A0 与扫描板(`ota_transport_uart.c`)三端已实现且经真机调优; 魔数首字节 0x4F 与现有 0xFF/0x55/0xAA 帧头全不冲突, 可在既有 `common.c` 的 `frame_rx_feed()` 上加第三路分支, 不动原两路。
+  - **偏移语义**: 采用**串口语义 = 含 82B 包头的绝对偏移**(total = len(pkg)), 与 USB-CDC/WinUSB 的「载荷相对偏移」严格区分 —— C# 侧曾在串口重复发包头导致包头被写进载荷、卡在 41370, 故串口首帧只发一次。
+  - **载荷粒度定 256B**(非 4096B): 雷达板 RS485 是 512B DMA 窗口(`RS485_RX_WIN`) + 1KB 环形缓冲(`CBUF_SIZE`), 267B 的帧正好落在一个窗口内, **接收路径零改动**; 4096B 需 8 个窗口且环形缓冲 22ms 内被冲掉。34KB 固件 ≈136 帧 ≈1~1.5 秒。
+  - **槽模型维持 A/B 双槽无搬运**(本次确认): 按槽编译两份镜像, **App 启动早期写 `SCB->VTOR = 本槽基址`**; 布局采纳 Boot 32K@0x0 / 槽A 128K@0x8000 / 槽B 128K@0x28000 / 标志双份 8K@0x7E000(该地址按 8KB 扇区对齐选取, 不要沿用扫描板 `boot_iap` 的 0x7F000 —— 它落在扇区中间, 擦除会连带邻区)。
+  - **借鉴来源明确**: 报警板侧借鉴 `Scanner_20260901/boot_iap`(`flash.c` 擦写 / `boot_ota.c` 状态与跳转 / `fw_jump_helper.c` 时钟恢复 / `RW_RAMCODE` RAM 驻留段的链接脚本写法)与 `hc32f46_app/.../ota_transport_uart.c`(设备端 OTA1 帧处理) —— **但 `boot_iap` 是 single_bak(QSPI 暂存 + 备份 + 搬运)模型, 本设计是 A/B 无搬运, 只借鉴机制代码, 不照搬其 QSPI 依赖、备份区与搬运流程**(报警板无 QSPI 外设, 不是未贴片); F4A0 侧借鉴 C# 串口 OTA 的发送主循环(包头握手 / 分块 / ACK 跟随 / 探测 / 10s 卡死保护 / 收尾)。
+  - **实现顺序**: F4A0 侧 host 发送器(纯逻辑, 只依赖「写字节/读字节」回调, 可离线自测) → 报警板侧接收端(OTA1 帧解析 + 写非活动槽) → 报警板侧 A/B Boot(读标志 / 校验 / 跳槽 + TRIAL 回退)。
 - `[hc32f460]` **fix(Release target 的 FPU 选项错误 —— 这是「高优化档就不工作」的真正根因)**: Release target 的 Floating Point Hardware 一直是 **Not Used**, 链接器命令行是 `--cpu=Cortex-M4 --fpu=SoftVFP`(软件浮点 ABI); 而 Debug target 与全部现场固件是 **Single Precision**(`--cpu=Cortex-M4.fp.sp`)。两个 target 的其余功能差异(只有 `__DEBUG` 断言、`DebugInformation`、短枚举三项)经逐项实测**都不影响功能**。
   - **症状与规律**: 同一份源码, Release 在 **-O2 及以上**必然不工作(**AC5 与 AC6 都一样**, 开 LTO 时阈值降到 -O1); 加 `-fno-inline-functions -fno-inline` 或用低优化档(-O0/-O1)则正常 —— 低优化档的保守代码生成把 FP ABI 的差异掩盖了, 所以现象看起来像「编译器/优化档问题」, 实际是**目标配置问题**。
   - **修法**: Release target 的 Floating Point Hardware 改为 **Single Precision**(与 Debug 一致)。修后两个 target 的链接器命令行都是 `--cpu=Cortex-M4.fp.sp`, AC5+O3 与 AC6 各档位均正常(Release Code=25364 / Debug Code=33864, 0 Error / 0 Warning)。
