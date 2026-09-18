@@ -36,21 +36,6 @@ int32_t main(void)
     (void)Board_LED_Init();
     (void)LED_GPIO_Init();
     (void)BEEP_InitHard();
-    /* ===== 上电即把所有输出拉到【已知状态】=====
-     * 三个板载 LED 全灭 + 三色 LED 全灭 + 蜂鸣器静音。
-     *
-     * 为什么必须做：现场要靠 LED 判读「Boot 的编码」和「App 的运行状态」，
-     * 若上电初值不确定（残留电平/随机），灯就是乱的、根本数不清。
-     *
-     * 极性注意：三个板载 LED 并不一致 —— bsp_led.c 的 bsp_LedOn() 映射为
-     *   BOARDLED_RED  -> GPIO_ResetPins  => 低=亮
-     *   BOARDLED_BLUE -> GPIO_ResetPins  => 低=亮
-     *   BOARDLED_GREEN-> GPIO_SetPins    => 高=亮
-     * 所以这里【一律走既有接口】，由它们封装极性，不在此处裸写 GPIO（裸写必错）。 */
-    bsp_LedOff(BOARDLED_RED);
-    bsp_LedOff(BOARDLED_BLUE);
-    bsp_LedOff(BOARDLED_GREEN);
-    BEEP_Stop();
     (void)bsp_InitKey();
     (void)DMA_Config();
     (void)TMR0_Config(USART_TIMEOUT_BITS);
