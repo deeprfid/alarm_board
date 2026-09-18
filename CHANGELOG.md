@@ -15,6 +15,13 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 
 ## [Unreleased]
 
+- `[hc32f460]` **feat(ota): App 槽化收尾 —— 切 A/B 分散加载 + 移除 ICG + 出 A/B 双份产物（第 3 项完成）** — 至此 Boot 与 App 可配套烧录。
+  - **App 工程 4 个 target**：`usart_uart_dma_Debug` / `_Release`（**槽 A**，`HC32F460xE_slotA.sct`）+ 新增 `_Debug_B` / `_Release_B`（**槽 B**，`HC32F460xE_slotB.sct`）。原有两个 target 名字与输出目录（`output\debug`、`output\release`）保持不变以免打断既有流程；B 用 `output\slotb_debug` / `slotb_release` 且 `OutputName` 为 `usart_uart_dma_b`；
+  - **移除 ICG**：App 四个 target 均删掉 `hc32_ll_icg.c` 条目 —— ICG 固定在 `0x400`，App 链接基址改为 0x8000/0x28000 后若继续携带会落到链接区之外；**ICG 归 Boot 独占**（Boot 的 map 已核对 `.ARM.__AT_0x00000400 @0x400/32B`）；
+  - **验证（4 target 全部 0 Error / 0 Warning）**：`RO-data 942 → 910`，**正好 -32 字节 = ICG 段**，从数据上印证已移除；Code 槽A/槽B 完全相同（Debug 38130 / Release 29014），只有基址不同；
+  - **基址逐项核对**：槽 A map `Load Region LR_IROM1 (Base: 0x00008000, Max: 0x00020000)`、`Reset_Handler @0x00008321`；槽 B hex 扩展线性地址 `:02000004 0002` 即 `@0x00028000`，首条数据里复位向量 `0x00028321` —— 两槽正好相差 0x20000，栈顶同为 `0x1FFFB598`；
+  - **产物**：`output\debug`+`output\release` 为槽 A，`output\slotb_debug`+`output\slotb_release` 为槽 B（各 .axf/.hex）；Boot 产物在 `projects\boot\MDK\output\{debug,release}\iap_boot.hex`；
+  - **烧录方式（重要）**：App 已不能单独烧到 0x0 运行 —— **必须 Boot + App 一起烧**（Boot@0x0、App@0x8000 或 0x28000），且**首次烧录要同时写标志区 0x7E000**（否则 Boot 走「无标志 → 按 A→B 扫第一个有效槽」的兜底路径，也能起，但 active 未定）；现场已装板子需整片重烧，旧 0x0 固件不再兼容。
 - `[hc32f460]` **feat(ota): Boot 源码 + A/B 槽分散加载 + App 侧 VTOR（落地第 3、4 项的内容部分）** — 代码已就位并逐文件编译验证；**Keil 工程接线（Boot target、App 切槽分散加载、ICG 移出）尚未做**，故当前两个 target 仍按 0x0 链接、仍带 ICG。
   - **`projects/boot/source/boot_jump.c/h`**：栈顶（须落在 SRAM 0x1FFF8000-0x20027000）+ 复位向量（须落在本槽内）双重校验；交接前 `CLK_SetSysClockSrc(HRC)` → `CLK_PLLCmd(DISABLE)` → `EFM_SetWaitCycle(0)` → `SCB->VTOR`；再用 `__set_MSP` + 跳转。**原则：不把配好的 PLL 交出去**（借鉴 Decoder bootloader 的 `fw_jump_helper.c`，让 App 从近复位态自行初始化），避开「Boot 配好时钟 + App 再配一次」的耦合；
   - **`projects/boot/source/boot_main.c`**：读双份标志 → 选中槽校验（向量表 + 槽镜像 CRC32）→ RUNNABLE 直接跳 / TRIAL 则 `boot_count++`、超 `OTA_FLAG_MAX_BOOT` 标 FAILED 并切另一槽 / 标志无效则按 A→B 取第一个有效槽 / 两槽皆无效则停在 Boot（不跳任何槽 = 不砖）。Boot 刻意最小：**不配时钟、不开串口、不开看门狗、不初始化任何外设**（下载在 App 里做）；
