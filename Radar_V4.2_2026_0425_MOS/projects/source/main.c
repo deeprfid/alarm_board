@@ -50,9 +50,6 @@ int32_t main(void)
     bsp_LedOff(BOARDLED_RED);
     bsp_LedOff(BOARDLED_BLUE);
     bsp_LedOff(BOARDLED_GREEN);
-    LED_R_OFF();
-    LED_G_OFF();
-    LED_B_OFF();
     BEEP_Stop();
     (void)bsp_InitKey();
     (void)DMA_Config();

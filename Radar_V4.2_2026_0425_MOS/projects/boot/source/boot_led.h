@@ -26,6 +26,8 @@
  * 蜂鸣器由 TMRA 的 PWM 驱动(bsp_beep.c)，复位后本就静音，Boot 不处理。 */
 void boot_led_init(void);
 void boot_led_blink(uint8_t cnt);  /* 快闪 cnt 次（约 100ms 亮/灭） */
+/* 闪 cnt 次 + 长停，重复 rounds 轮后返回；用在跳转前，让现场看得清槽号 */
+void boot_led_signal(uint8_t cnt, uint8_t rounds);
 void boot_led_code(uint8_t cnt);   /* 死循环：闪 cnt 次 + 停 1.2s，永不返回 */
 
 /* 编码常量 */

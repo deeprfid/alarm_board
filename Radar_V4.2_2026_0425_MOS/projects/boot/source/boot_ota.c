@@ -147,7 +147,7 @@ void BOOT_OTA_Run(void)
         if (boot_pick_valid(&u32Slot) != 0) {
             boot_halt();
         }
-        boot_led_blink((u32Slot == OTA_SLOT_A) ? BOOT_LED_JUMP_A : BOOT_LED_JUMP_B);
+        boot_led_signal((u32Slot == OTA_SLOT_A) ? BOOT_LED_JUMP_A : BOOT_LED_JUMP_B, 3u);
         boot_jump(u32Slot);
     }
 
@@ -161,7 +161,7 @@ void BOOT_OTA_Run(void)
         stcFlag.active = u32Slot;
         stcFlag.flags &= ~OTA_FLAG_NEED_CONFIRM;
         (void)ota_flag_write(&stcFlag);
-        boot_led_blink((u32Slot == OTA_SLOT_A) ? BOOT_LED_JUMP_A : BOOT_LED_JUMP_B);
+        boot_led_signal((u32Slot == OTA_SLOT_A) ? BOOT_LED_JUMP_A : BOOT_LED_JUMP_B, 3u);
         boot_jump(u32Slot);
     }
 
@@ -184,7 +184,7 @@ void BOOT_OTA_Run(void)
                 if (u32Other == OTA_SLOT_A) { stcFlag.state_a = (uint32_t)OTA_SLOT_RUNNABLE; }
                 else                        { stcFlag.state_b = (uint32_t)OTA_SLOT_RUNNABLE; }
                 (void)ota_flag_write(&stcFlag);
-                boot_led_blink((u32Other == OTA_SLOT_A) ? BOOT_LED_JUMP_A : BOOT_LED_JUMP_B);
+                boot_led_signal((u32Other == OTA_SLOT_A) ? BOOT_LED_JUMP_A : BOOT_LED_JUMP_B, 3u);
                 boot_jump(u32Other);
             }
             (void)ota_flag_write(&stcFlag);
@@ -193,12 +193,12 @@ void BOOT_OTA_Run(void)
 
         (void)ota_flag_write(&stcFlag);
         SWDT_FeedDog();
-        boot_led_blink((u32Slot == OTA_SLOT_A) ? BOOT_LED_JUMP_A : BOOT_LED_JUMP_B);
+        boot_led_signal((u32Slot == OTA_SLOT_A) ? BOOT_LED_JUMP_A : BOOT_LED_JUMP_B, 3u);
         boot_jump(u32Slot);
     }
 
     /* RUNNABLE：直接跳，不再动 Flash */
-    boot_led_blink((u32Slot == OTA_SLOT_A) ? BOOT_LED_JUMP_A : BOOT_LED_JUMP_B);
+    boot_led_signal((u32Slot == OTA_SLOT_A) ? BOOT_LED_JUMP_A : BOOT_LED_JUMP_B, 3u);
     boot_jump(u32Slot);
 }
 

@@ -64,6 +64,18 @@ void boot_led_blink(uint8_t cnt)
     }
 }
 
+/* 可读的槽号指示：闪 cnt 次 + 长停，重复 rounds 轮后返回。
+ * 为什么需要：跳转后 App 会立刻接管这些灯，现场就没机会看清 Boot 给的编码了。 */
+void boot_led_signal(uint8_t cnt, uint8_t rounds)
+{
+    uint8_t i;
+
+    for (i = 0u; i < rounds; i++) {
+        boot_led_blink(cnt);
+        boot_wait(1500000UL);           /* 约 1.2s 长停分隔 */
+    }
+}
+
 void boot_led_code(uint8_t cnt)
 {
     for (;;) {
