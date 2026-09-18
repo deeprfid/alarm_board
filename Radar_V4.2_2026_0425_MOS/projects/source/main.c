@@ -4,7 +4,7 @@
  ******************************************************************************/
 #include "main.h"
 #include "ota_layout.h"   /* OTA_SLOT_SIZE£¨²Û¶ÔÆë³ß´ç£© */
-#include "ota_app.h"        /* ota_app_boot_confirm */
+#include "ota_flash.h"      /* ota_app_boot_confirm / OTA_APP_ENABLE */
 
 /*******************************************************************************
  * Local variable definitions ('static')

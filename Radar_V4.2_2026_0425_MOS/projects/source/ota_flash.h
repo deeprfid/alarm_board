@@ -42,4 +42,22 @@ void    ota_img_read_hdr(uint32_t slot, uint32_t *version, uint32_t *img_len, ui
 /* 写槽尾元数据（CRC32 由 Flash 实际内容算出）；先由 App 写完二进制再调用。返回 0 成功 */
 int32_t ota_img_write_trailer(uint32_t slot, uint32_t img_len, uint32_t version);
 
+/* ===== OTA 总开关 =====
+ * 0 = 关闭（默认）：App 启动不调用 ota_app_boot_confirm()，即不擦写标志扇区。
+ *     此时 Boot 恒走兜底路径（按 A->B 扫第一个可用槽）-> 恒跳槽 A。
+ *     用途：先单独验证「Boot 能否跳到 App」，把 OTA 这条链路的变量整体排除。
+ * 1 = 打开：完整 OTA（App 自检后写标志把本槽置 RUNNABLE）。 */
+#ifndef OTA_APP_ENABLE
+#define OTA_APP_ENABLE   0
+#endif
+
+/* App 自检确认：把本槽置 RUNNABLE、清 NEED_CONFIRM、boot_count 归零。slot 传本槽号。
+ *
+ * 【为什么放在本文件而不是单独的 ota_app.c】
+ *   它内部会擦写 Flash，所以【必须与 ota_flash.o 一起放进 scatter 的 RW_RAMCODE 执行区】。
+ *   若单独成文件而该文件被链接器判为未使用（例如 OTA 关闭时），scatter 里的 ota_app.o 选择器就会落空，
+ *   将来重开 OTA 时一旦忘了把它加回 RAMCODE，就会重现「擦写期间取指失败把 CPU 卡死」。
+ *   并入本文件后，ota_flash.o 因 ota_recv 用到 ota_flag_read/ota_img_check 而【恒被链接】，不再有这个隐患。 */
+int32_t ota_app_boot_confirm(uint32_t slot);
+
 #endif /* OTA_FLASH_H */
