@@ -326,6 +326,60 @@ EFM_REG_Lock();
 | F4A0 工程 `hc32f4a0_app/projects/app/{inc,src}/` | `ota_host.h/.c` | 上位机端发送器 |
 | 本仓库 `ota/` | 同上一组 + `ota_frame.*` | 可移植副本（主机侧） |
 
+
+## 15. 实现决定记录（2026-09-18 · 上板联调阶段）
+
+> 本节记录在真机联调中**定下来、且不宜再反复**的决定，避免以后重复讨论。
+
+### 15.1 Flash 擦写：统一走共享 DDL 的新版 EFM 驱动
+
+**决定**：Boot 与 App 的片内 Flash 擦写**都经 `ota_flash.c` 封装，底层直接调用共享 DDL（Rev3.3.0）的 `hc32_ll_efm.c`**。
+**不**恢复扫描板量产 bootloader（`boot_iap`）里那份 `flash.c`。
+
+理由：
+- `boot_iap` 的 `flash.c` 是按**它自带的旧 DDL** 写的（用 `EFM_Unlock()`/`EFM_Lock()` 命名），
+  而共享 DDL 是 `EFM_REG_Unlock()`，且**每个擦写操作前都要 `EFM_FWMC_Cmd(ENABLE)`**
+  （`hc32_ll_efm.c` 实测：`EFM_Program`/`EFM_SectorErase` 退出时会把 `PEMOD` 复位成只读）。
+  → 那份 `flash.c` **无法原样编译**，恢复它等于既要改 API 又要拆契约。
+- 全工程**一套 OTA 契约**（`ota_layout.h` 定义布局/标志/槽尾，`ota_flash.c` 实现读写）比两份独立维护更不容易出错 ——
+  App 与 Boot 一旦对标志记录或槽尾结构的理解不一致，后果是升级静默失败。
+
+**必须同时满足的硬约束（否则 CPU 会在擦写期间取指失败而卡死）**：
+两个工程的 scatter **都要有 `RW_RAMCODE` 执行区，并把 `hc32_ll_efm.o` 与 `ota_flash.o` 放进去**。
+- Boot：`projects/boot/MDK/config/linker/HC32F460xE.sct` → `RW_RAMCODE 0x20018000`
+- App：`projects/MDK/config/linker/HC32F460xE_slot{A,B}.sct` → `RW_RAMCODE 0x20018000`
+
+> 教训：只把标了 `__RAM_FUNC` 的函数放进 `.ANY (RAMCODE)` **不够** —— 收不到它们的**调用者**。
+> App 曾因此缺 `RW_RAMCODE`，启动时擦标志扇区直接把 CPU 卡死（现象是「蜂鸣器长鸣 + 三灯常亮」）。
+> 复核方法：在 `.map` 里确认 `ota_flag_write` / `EFM_Program` / `EFM_SectorErase` 的地址是 `0x20018xxx` 而**不是** `0x0000xxxx`。
+
+### 15.2 Boot 使用量产时钟配置
+
+`main.c` 的 `SystemClockConfig()` 与 `boot_iap` **逐行一致**（XTAL 8MHz → MPLL 200MHz），
+唯一改动是 `EFM_CacheRamReset` → `EFM_DataCacheResetCmd`（新版 DDL 命名）。
+本板 8MHz 晶振（PH0/PH1）确认已焊接，App 一直靠它跑 PLL —— Boot 没有理由偏离量产路径。
+
+### 15.3 诊断手段：只有 LED
+
+本板**没有可接 printf 的调试口**（唯一串口是 RS485 业务口，日志发出去无人接收且占用业务线）。
+故一切诊断走 LED，且编码必须**不用数数**：
+
+| 现象 | 含义 |
+| --- | --- |
+| 跳转前**绿灯常亮 2 秒** | Boot 判定跳**槽 A** |
+| 跳转前**蓝灯常亮 2 秒** | Boot 判定跳**槽 B** |
+| **红灯** 1 秒亮 / 1 秒灭，一直闪 | 两槽都不可用，卡在 Boot |
+| 三灯都不动 | Boot 没跑到 `main` |
+
+灯节拍用 `DDL_DelayMS()`（按 `SystemCoreClock` 实测值计时），**不要用按频率估算的忙等循环** ——
+曾因按 200MHz 拍而实际跑在 HRC 20MHz，闪得又快又糊、现场数不清。
+
+### 15.4 OTA 总开关
+
+`ota_flash.h` 的 `OTA_APP_ENABLE`（默认 **0 = 关闭**）。
+关闭时 App 启动不写任何 Flash，Boot 恒走兜底路径（按 A→B 扫）→ **恒跳槽 A**。
+用于把「Boot 能否跳到 App」与「OTA 整条链」这两件事分开验证。
+
 ### 14.9 尚未接线
 
 - `ota_recv` 目前是**独立模块**，尚未挂到业务收帧入口 `Check_Uart_Pdu()`；「进入升级」请求的承载帧仍待定（§12）；
