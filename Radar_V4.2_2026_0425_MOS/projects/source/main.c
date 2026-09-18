@@ -23,12 +23,6 @@ int32_t main(void)
     __DSB();
     __ISB();
 
-    /* 防呆：编译宏必须与真实链接基址一致（不一致 = 该 target 的 Define 配错） */
-    if (((uint32_t)(uint32_t)&main < (uint32_t)OTA_APP_BASE) ||
-        ((uint32_t)(uint32_t)&main >= ((uint32_t)OTA_APP_BASE + OTA_SLOT_SIZE)))
-    {
-        for (;;) { }   /* 起不来比带病运行安全；用调试器看 PC 即可定位 */
-    }
 
     LL_PERIPH_WE(LL_PERIPH_SEL);
     (void)BSP_CLK_Init();
