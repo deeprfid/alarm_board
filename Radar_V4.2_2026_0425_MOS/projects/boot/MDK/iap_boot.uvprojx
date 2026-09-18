@@ -404,11 +404,6 @@
               <FilePath>..\source\main.c</FilePath>
             </File>
             <File>
-              <FileName>com.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../source/com.c</FilePath>
-            </File>
-            <File>
               <FileName>ota_flash.c</FileName>
               <FileType>1</FileType>
               <FilePath>../../source/ota_flash.c</FilePath>
@@ -417,6 +412,11 @@
               <FileName>boot_ota.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\source\boot_ota.c</FilePath>
+            </File>
+            <File>
+              <FileName>boot_led.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\boot_led.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -492,8 +492,6 @@
         </Group>
         <Group>
           <GroupName>iap</GroupName>
-          <Files>
-          </Files>
         </Group>
         <Group>
           <GroupName>Readme</GroupName>
@@ -905,11 +903,6 @@
               <FilePath>..\source\main.c</FilePath>
             </File>
             <File>
-              <FileName>com.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../source/com.c</FilePath>
-            </File>
-            <File>
               <FileName>ota_flash.c</FileName>
               <FileType>1</FileType>
               <FilePath>../../source/ota_flash.c</FilePath>
@@ -918,6 +911,11 @@
               <FileName>boot_ota.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\source\boot_ota.c</FilePath>
+            </File>
+            <File>
+              <FileName>boot_led.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\boot_led.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -993,8 +991,6 @@
         </Group>
         <Group>
           <GroupName>iap</GroupName>
-          <Files>
-          </Files>
         </Group>
         <Group>
           <GroupName>Readme</GroupName>

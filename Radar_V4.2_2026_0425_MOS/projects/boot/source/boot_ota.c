@@ -6,22 +6,25 @@
  *   契约（与 App 侧 ota_recv.c / ota_flash.c 一致，见 docs/ota_boot_design.md v0.2）：
  *     App 下载完 -> 写【非活动槽】+ 整镜像 CRC32 校验 -> 一次标志写入激活
  *                   (active 切目标槽 + TRIAL + NEED_CONFIRM) -> 复位
- *     Boot: 读双份标志 -> 选中槽校验(向量表 + 槽镜像 CRC32)
+ *     Boot: 读双份标志 -> 选中槽可用性判定
  *             RUNNABLE -> 直接跳
  *             TRIAL    -> boot_count++；超 OTA_FLAG_MAX_BOOT 则标 FAILED 并切另一槽
- *             无标志   -> 按 A -> B 取第一个有效槽
- *             两槽皆无效 -> 停在 Boot（不跳任何槽 = 不砖）
+ *             无标志   -> 按 A -> B 取第一个可用槽
+ *             两槽皆不可用 -> 停在 Boot（不跳任何槽 = 不砖）
+ *
+ *   【调试手段】本板没有可接 printf 的调试口（唯一的串口是 RS485 业务口），
+ *   故一切诊断改由 LED 编码输出，见 boot_led.h 的编码表。
  *
  *   A/B 无搬运：Boot 不做任何拷贝，激活只是一个标志翻转 —— 没有搬运中断窗口。
  *   擦写代码（ota_flash.o / hc32_ll_efm.o / boot_ota.o）由 scatter 放 RAM 执行。
  *******************************************************************************
  */
-#include <stdio.h>
 #include "hc32_ll.h"
 #include "hc32_ll_clk.h"     /* CLK_SetSysClockSrc / CLK_PLLCmd / CLK_SYSCLK_SRC_HRC */
 #include "hc32_ll_efm.h"     /* EFM_SetWaitCycle / EFM_WAIT_CYCLE0 */
 #include "boot_ota.h"
-#include "ota_flash.h"       /* ota_flag_read/write, ota_img_check（App 同一个模块） */
+#include "boot_led.h"
+#include "ota_flash.h"       /* ota_flag_read/write, ota_img_check, ota_flash_read */
 
 extern void SWDT_FeedDog(void);
 
@@ -43,6 +46,32 @@ static int32_t boot_vec_ok(uint32_t u32Slot)
         return -2;
     }
     return 0;
+}
+
+/* 槽是否可用：
+ *   向量表必须有效（能挡掉擦除态：栈顶 0xFFFFFFFF 不在 SRAM 内）；
+ *   槽尾元数据若【存在】则必须 CRC32 通过；若【为空】(=0xFF, 从未写过)则以向量表为准。
+ *
+ *   为什么允许「元数据为空」：trailer 只在 OTA 下载完成时由 App 写入，而产线/调试器
+ *   直接烧录 App 时没人写它 —— 若强制要求 CRC，首次烧录的板子会永远卡在 Boot。
+ *   OTA 路径安全性不受影响：App 激活前已用 OTA1 包头的 CRC32 校验过整镜像。 */
+static int32_t boot_slot_usable(uint32_t u32Slot)
+{
+    uint8_t  u8Magic[4];
+    uint32_t u32Magic;
+
+    if (boot_vec_ok(u32Slot) != 0) {
+        return -1;
+    }
+
+    ota_flash_read(OTA_SLOT_BASE(u32Slot) + OTA_IMG_TRAILER_OFF, u8Magic, 4UL);
+    u32Magic = ((uint32_t)u8Magic[0]) | ((uint32_t)u8Magic[1] << 8U) |
+               ((uint32_t)u8Magic[2] << 16U) | ((uint32_t)u8Magic[3] << 24U);
+    if (u32Magic == 0xFFFFFFFFUL) {
+        return 0;   /* 从未写过 trailer：以向量表为准 */
+    }
+
+    return (ota_img_check(u32Slot) == 0) ? 0 : -2;   /* 写了 trailer 就必须校验通过 */
 }
 
 /* 跳转：不把配好的 PLL 交出去 —— 退回 HRC、关 PLL、等待周期归 0，让 App 自行初始化 */
@@ -73,33 +102,7 @@ static void boot_jump(uint32_t u32Slot)
     }
 }
 
-/* 槽是否可用：
- *   向量表必须有效（这条能挡掉擦除态：栈顶 0xFFFFFFFF 不在 SRAM 内）；
- *   槽尾元数据若【存在】则必须 CRC32 通过；若【为空】(=0xFF, 从未写过)则以向量表为准。
- *
- *   为什么允许「元数据为空」：trailer 只在 OTA 下载完成时由 App 写入，而产线/调试器
- *   直接烧录 App 时没人写它 —— 若强制要求 CRC，首次烧录的板子会永远卡在 Boot。
- *   （这就是第一次上板「都不跳转」的第二个原因。）
- *   OTA 路径安全性不受影响：App 激活前已用 OTA1 包头的 CRC32 校验过整镜像。 */
-static int32_t boot_slot_usable(uint32_t u32Slot)
-{
-    uint8_t  u8Magic[4];
-    uint32_t u32Magic;
-
-    if (boot_vec_ok(u32Slot) != 0) {
-        return -1;
-    }
-
-    ota_flash_read(OTA_SLOT_BASE(u32Slot) + OTA_IMG_TRAILER_OFF, u8Magic, 4UL);
-    u32Magic = ((uint32_t)u8Magic[0]) | ((uint32_t)u8Magic[1] << 8U) |
-               ((uint32_t)u8Magic[2] << 16U) | ((uint32_t)u8Magic[3] << 24U);
-    if (u32Magic == 0xFFFFFFFFUL) {
-        return 0;   /* 从未写过 trailer：以向量表为准 */
-    }
-
-    return (ota_img_check(u32Slot) == 0) ? 0 : -2;   /* 写了 trailer 就必须校验通过 */
-}
-
+/* 按 A -> B 顺序取第一个可用槽；找不到返回 -1 */
 static int32_t boot_pick_valid(uint32_t *pu32Slot)
 {
     uint32_t u32S;
@@ -113,11 +116,18 @@ static int32_t boot_pick_valid(uint32_t *pu32Slot)
     return -1;
 }
 
+/* 找不到可启动槽：LED 反复闪 BOOT_LED_HALT 次（永不返回），并喂狗 */
 static void boot_halt(void)
 {
-    printf("BOOT: no runnable slot - halt (debugger recovery required)\r\n");
+    uint32_t u32Guard = 0UL;
+
     for (;;) {
-        SWDT_FeedDog();
+        boot_led_blink(BOOT_LED_HALT);
+        /* 长停期间喂狗，避免被看门狗打断 LED 编码的可读性 */
+        while (u32Guard++ < 200000UL) {
+            SWDT_FeedDog();
+        }
+        u32Guard = 0UL;
     }
 }
 
@@ -129,19 +139,21 @@ void BOOT_OTA_Run(void)
     ota_flag_t stcFlag;
     uint32_t   u32Slot;
 
-    printf("=========== BOOT (A/B no-copy) ===========\r\n");
+    boot_led_init();
+    boot_led_blink(BOOT_LED_BOOT);      /* 闪 1 次 = Boot 跑起来了 */
 
     if (ota_flag_read(&stcFlag) != 0) {
-        /* 标志无效：按 A -> B 找第一个能跑的槽 */
+        /* 标志无效（首次烧录未写标志区）：按 A -> B 找第一个可用槽 */
         if (boot_pick_valid(&u32Slot) != 0) {
             boot_halt();
         }
+        boot_led_blink((u32Slot == OTA_SLOT_A) ? BOOT_LED_JUMP_A : BOOT_LED_JUMP_B);
         boot_jump(u32Slot);
     }
 
     u32Slot = (stcFlag.active == OTA_SLOT_B) ? OTA_SLOT_B : OTA_SLOT_A;
 
-    /* 选中槽必须可用，否则换另一槽 */
+    /* 选中槽不可用则换另一槽 */
     if (boot_slot_usable(u32Slot) != 0) {
         if (boot_pick_valid(&u32Slot) != 0) {
             boot_halt();
@@ -149,6 +161,7 @@ void BOOT_OTA_Run(void)
         stcFlag.active = u32Slot;
         stcFlag.flags &= ~OTA_FLAG_NEED_CONFIRM;
         (void)ota_flag_write(&stcFlag);
+        boot_led_blink((u32Slot == OTA_SLOT_A) ? BOOT_LED_JUMP_A : BOOT_LED_JUMP_B);
         boot_jump(u32Slot);
     }
 
@@ -171,6 +184,7 @@ void BOOT_OTA_Run(void)
                 if (u32Other == OTA_SLOT_A) { stcFlag.state_a = (uint32_t)OTA_SLOT_RUNNABLE; }
                 else                        { stcFlag.state_b = (uint32_t)OTA_SLOT_RUNNABLE; }
                 (void)ota_flag_write(&stcFlag);
+                boot_led_blink((u32Other == OTA_SLOT_A) ? BOOT_LED_JUMP_A : BOOT_LED_JUMP_B);
                 boot_jump(u32Other);
             }
             (void)ota_flag_write(&stcFlag);
@@ -179,11 +193,12 @@ void BOOT_OTA_Run(void)
 
         (void)ota_flag_write(&stcFlag);
         SWDT_FeedDog();
-        printf("BOOT: trial boot_count=%u\r\n", (unsigned int)stcFlag.boot_count);
+        boot_led_blink((u32Slot == OTA_SLOT_A) ? BOOT_LED_JUMP_A : BOOT_LED_JUMP_B);
         boot_jump(u32Slot);
     }
 
     /* RUNNABLE：直接跳，不再动 Flash */
+    boot_led_blink((u32Slot == OTA_SLOT_A) ? BOOT_LED_JUMP_A : BOOT_LED_JUMP_B);
     boot_jump(u32Slot);
 }
 
