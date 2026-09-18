@@ -1,0 +1,65 @@
+diff --git a/hc32f4a0_app/projects/MDK/hc32f4a0_app.uvprojx b/hc32f4a0_app/projects/MDK/hc32f4a0_app.uvprojx
+index 5b11d41..5ae58e6 100644
+--- a/hc32f4a0_app/projects/MDK/hc32f4a0_app.uvprojx
++++ b/hc32f4a0_app/projects/MDK/hc32f4a0_app.uvprojx
+@@ -819,6 +819,16 @@
+               <FileType>1</FileType>
+               <FilePath>..\app\src\ota_frame.c</FilePath>
+             </File>
++            <File>
++              <FileName>ota_host.c</FileName>
++              <FileType>1</FileType>
++              <FilePath>..\app\src\ota_host.c</FilePath>
++            </File>
++            <File>
++              <FileName>ota_dist.c</FileName>
++              <FileType>1</FileType>
++              <FilePath>..\app\src\ota_dist.c</FilePath>
++            </File>
+             <File>
+               <FileName>ota_flag.c</FileName>
+               <FileType>1</FileType>
+diff --git a/hc32f4a0_app/projects/app/src/alarm.c b/hc32f4a0_app/projects/app/src/alarm.c
+index 27f022b..98fe86b 100644
+--- a/hc32f4a0_app/projects/app/src/alarm.c
++++ b/hc32f4a0_app/projects/app/src/alarm.c
+@@ -1,6 +1,7 @@
+ 
+ 
+ #include "ipc.h"
++#include "ota_dist.h"
+ #include "tag_csv.h"   /* v9.81cj-k */
+ 
+ extern rfidcfg mycfgdata;
+@@ -116,6 +117,9 @@ void ipc_lkt_message(uint8_t *SBuffer, uint8_t slen, uint8_t *RBuffer)
+ 
+ void ipc_hpm_message(uint8_t *upload, uint8_t dlen, uint8_t antid)
+ {
++    /* OTA 分发期间：全系统停发业务帧（链路独占，见 docs/ota_boot_design.md v0.2 §0） */
++    if (ota_dist_busy() != 0) { return; }
++
+     switch (antid)
+     {
+         case 0x1:
+diff --git a/hc32f4a0_app/projects/app/src/mqtt_interface.c b/hc32f4a0_app/projects/app/src/mqtt_interface.c
+index cdeb533..9a29812 100644
+--- a/hc32f4a0_app/projects/app/src/mqtt_interface.c
++++ b/hc32f4a0_app/projects/app/src/mqtt_interface.c
+@@ -1,6 +1,7 @@
+ 
+ 
+ #include "ipc.h"
++#include "ota_dist.h"
+ 
+ extern rfidcfg mycfgdata;
+ extern LTNode *g_Uploadtag;
+@@ -110,6 +111,9 @@ void ipc_lkt_message(uint8_t *SBuffer, uint8_t slen, uint8_t *RBuffer)
+ 
+ void ipc_hpm_message(uint8_t *upload, uint8_t dlen, uint8_t antid)
+ {
++    /* OTA 分发期间：全系统停发业务帧（链路独占，见 docs/ota_boot_design.md v0.2 §0） */
++    if (ota_dist_busy() != 0) { return; }
++
+     switch (antid)
+     {
+         case 0x1:
