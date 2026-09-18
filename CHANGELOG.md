@@ -15,6 +15,16 @@ Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/�
 
 ## [Unreleased]
 
+- `[hc32f460]` **feat(ota): 报警板侧 OTA 接收端 + 片内 Flash 擦写层 + 布局/标志（设计稿 §14 落地第 1~3 项）** — A/B 双槽无搬运模型的设备端第一批模块；两个 target 均 0 Error / 0 Warning，且因暂无调用点被链接器整体回收，**现有固件体积一字未变**。
+  - `ota_layout.h`：分区常量（Boot 32K@0x0 / 槽A 128K@0x8000 / 槽B 128K@0x28000 / 标志双份 8K@0x7E000）、槽镜像头（17B，magic `SLOT`）、选择器标志记录（40B，crc32 覆盖 [0,36)）；
+  - `ota_flash.c/h`：EFM 擦/写（标 `__RAM_FUNC` 使其 RAM 驻留）、回读校验、IEEE CRC32（与 `tools/ota_pack.py` 的 `zlib.crc32` 一致）、标志双份读写（择 seq 更大且 CRC 有效的一份）、槽镜像校验；
+  - `ota_recv.c/h`：OTA1 接收端 —— 包头帧受理回 ACK(82) / 数据帧按 8KB 扇区**惰性擦写** + 每块回读校验 + 回 ACK(已写绝对偏移) / 帧 CRC16 错回 RESUME(当前偏移) 请重发 / 收满做整镜像 CRC32 校验后**一次标志写入**完成激活（active 切目标槽 + TRIAL + NEED_CONFIRM）/ 会话 10s 空闲自动退出升级模式；
+  - `ota_frame.c/h`：帧核心，与 F4A0 工程**逐字节一致**（同一份源码两端共用）；
+  - **不需要改 scatter**：本工程两套 scatter 的 `RW_IRAM2` 已含 `.ANY (RAMCODE)`，且 DDL `hc32_ll_def.h` 已定义 `__RAM_FUNC = __attribute__((section("RAMCODE")))` —— 扫描板 `boot_iap` 另加 `RW_RAMCODE` 执行段的做法在本工程**不必要**；
+  - **EFM 调用序列（本工程 DDL 实测）**：`EFM_REG_Unlock` → 每个操作前 `EFM_FWMC_Cmd(ENABLE)` → `EFM_SectorErase`/`EFM_Program` → `DISABLE` → `REG_Lock`。`EFM_Program`/`SectorErase` 退出时会把 PEMOD 复位为只读，**故每个操作前都要重新 ENABLE**；
+  - **设计稿一处修订（§14）**：原写「槽镜像头由设备端生成」，实现改为【包 payload 即槽镜像（含槽头），由打包侧生成、设备原样落盘】—— 免去设备侧按偏移搬移，TargetSlot 随镜像走；代价是**主机须先查目标槽再选 A/B 镜像**，为此新增附加式查询帧 `RESUME(payload="SLOT")` → ACK(当前运行槽)；
+  - **尚未接线**：`ota_recv` 未挂到业务收帧入口 `Check_Uart_Pdu()`，且「进入升级」请求的承载帧仍待定（§12）→ **本步只验证了编译**，链接与运行需接线后验证；
+  - 构建：Debug Code=33864 / Release Code=25364（与改动前同值），两个 target 均 0 Error / 0 Warning。
 - `[ota]` **feat(ota/): 新增 OTA1 帧协议可移植核心 + 上位机端发送器(非阻塞状态机)** — 为「把 C# 上位机的固件下发功能由 HC32F4A0 实现」落第一块代码: 纯逻辑、零硬件依赖, 4 个文件可整体拷进 F4A0 工程。
   - `ota/ota_frame.h/.c`: OTA1 帧核心(CRC16-CCITT-FALSE 查表 / 组帧 / 解析 / 流式状态机), 与 F4A0 工程既有 `ota_frame.*` **逐字一致**(平台无关纯逻辑, 报警板接收端复用同一份);
   - `ota/ota_host.h/.c`: **上位机端发送器**, 移植自 C# `ReaderUI_v1_MCU/OtaUpdater.cs` 的 `Update()` 串口分支与 `OtaProtocol.cs`, 与 `tools/ota_send.py` 语义一致 —— 包头握手(只发一次/4s) → 分块(停等/3s) → 超时发 len=0 探测帧(2.5s)跟随设备偏移 → 设备确认偏移 10s 不推进则中止 → 进度满发探测帧兜底;

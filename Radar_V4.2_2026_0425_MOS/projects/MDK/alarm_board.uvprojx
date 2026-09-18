@@ -415,6 +415,21 @@
               <FilePath>..\source\common.c</FilePath>
             </File>
             <File>
+              <FileName>ota_frame.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\ota_frame.c</FilePath>
+            </File>
+            <File>
+              <FileName>ota_flash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\ota_flash.c</FilePath>
+            </File>
+            <File>
+              <FileName>ota_recv.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\ota_recv.c</FilePath>
+            </File>
+            <File>
               <FileName>ring_buf.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\source\ring_buf.c</FilePath>
@@ -1125,6 +1140,21 @@
               <FileName>common.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\source\common.c</FilePath>
+            </File>
+            <File>
+              <FileName>ota_frame.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\ota_frame.c</FilePath>
+            </File>
+            <File>
+              <FileName>ota_flash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\ota_flash.c</FilePath>
+            </File>
+            <File>
+              <FileName>ota_recv.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\ota_recv.c</FilePath>
             </File>
             <File>
               <FileName>ring_buf.c</FileName>

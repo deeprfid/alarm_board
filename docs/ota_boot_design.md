@@ -253,3 +253,82 @@ Boot 跳槽前校验：Magic 正确 → ImageLen 在合法区间 → 整镜像 C
 - 「进入升级」请求的承载帧（§12）；
 - 升级期间是否**只停该通道**还是停全部通道的业务：本次按「只停该通道」实现，全局停作为可配项（全局停会让读写器主功能整体停顿数秒）；
 - F4A0 自身 OTA 与「分发他人 OTA」的互斥策略（两者不得并发）。
+
+## 14. 实现约定（v0.2 补充 · 2026-09-18 实现时定稿）
+
+> **一处修订**：§4 附注原写「槽头由设备端在写入过程中生成」，实现改为 **包 payload 即槽镜像（含槽头），由打包侧生成、设备原样落盘**。
+> 理由：免去设备侧按偏移搬移，且 TargetSlot 天然随镜像走；设备侧收满后校验 magic/长度/TargetSlot/CRC32，任一不过即拒绝。
+> 代价：**主机必须先查目标槽再选对应 A/B 镜像下发**（见下方 SLOT 查询）。
+
+### 14.1 槽镜像头（`ota_layout.h`）
+
+- magic = `0x534C4F54`（'SLOT' LE）；头长 17B；
+- 偏移：Version@4 / ImageLen@8 / CRC32@12 / TargetSlot@16。
+
+### 14.2 CRC32
+
+- **IEEE**：poly `0xEDB88320`，init/xorout `0xFFFFFFFF`（即 `zlib.crc32`），与 `tools/ota_pack.py` 一致；
+- 用于：整镜像校验、标志记录 CRC。
+
+### 14.3 选择器标志记录（40B）
+
+| 顺序 | 字段 | 说明 |
+| --- | --- | --- |
+| 0 | magic | `0x4F544131`（"OTA1" LE） |
+| 1 | seq | 写入序号，双份择新 |
+| 2 | active | 当前运行槽 |
+| 3,4 | state_a / state_b | EMPTY / RUNNABLE / TRIAL / FAILED |
+| 5,6 | fail_a / fail_b | 连续启动失败计数 |
+| 7 | boot_count | TRIAL 启动计数 |
+| 8 | flags | NEED_CONFIRM（A/B 无搬运模式下 **不使用 NEED_COMMIT**） |
+| 9 | crc32 | 覆盖 [0,36) |
+
+双份各 4KB，同处 8KB 扇区 `0x7E000`；读时取「CRC 有效且 seq 更大」的一份；写时**先擦整扇区再写两份**（同扇区擦除会同时清掉两份）。
+
+### 14.4 「激活」= 一次标志写入
+
+`active = 目标槽`、该槽 `TRIAL`、`fail=0`、`boot_count=0`、`flags=NEED_CONFIRM`；另一槽若仍停在 TRIAL 则回落 RUNNABLE 作为回退。
+**v0.1 的 `boot_state_t`（NEED_COMMIT + 搬运）语义未采用** —— A/B 无搬运下没有搬运阶段。
+
+### 14.5 RAM 驻留：**不需要改 scatter**
+
+- 本工程两套 scatter 的 `RW_IRAM2` **均已含** `.ANY (RAMCODE)`；
+- DDL `hc32_ll_def.h` 已定义 `__RAM_FUNC = __attribute__((section("RAMCODE")))`；
+- 直接把擦/写函数标 `__RAM_FUNC` 即可 —— 扫描板 `boot_iap` 另加 `RW_RAMCODE` 执行段的做法在本工程**不需要**。
+
+### 14.6 EFM 调用序列（本工程 DDL 实测）
+
+```
+EFM_REG_Unlock();
+  每个操作前: EFM_FWMC_Cmd(ENABLE);      <- 置 FWMC.PEMODE=1
+              EFM_SectorErase() / EFM_Program();
+EFM_FWMC_Cmd(DISABLE);
+EFM_REG_Lock();
+```
+
+**每个操作前都要重新 ENABLE**：`EFM_Program`/`EFM_SectorErase` 退出时会把 PEMOD 复位成只读态（`hc32_ll_efm.c` 实测）。
+
+### 14.7 查询扩展（附加式，不影响旧语义）
+
+| 请求 | 响应 |
+| --- | --- |
+| `RESUME(payload="VER1")` | ACK(固件版本) —— 既有 |
+| `RESUME(payload="SLOT")` | ACK(当前运行槽 0/1) —— **新增**，供主机选择 A/B 镜像 |
+
+### 14.8 落地清单
+
+| 位置 | 文件 | 角色 |
+| --- | --- | --- |
+| 本仓库 `Radar_V4.2_2026_0425_MOS/projects/source/` | `ota_layout.h` | 布局 / 标志记录 / 槽镜像头 |
+| 同上 | `ota_frame.c/h` | 帧核心（与 F4A0 工程**逐字节一致**） |
+| 同上 | `ota_flash.c/h` | EFM 擦写（RAM 驻留）+ CRC32 + 标志读写 + 槽校验 |
+| 同上 | `ota_recv.c/h` | 接收端（写非活动槽 + ACK/RESUME） |
+| F4A0 工程 `hc32f4a0_app/projects/app/{inc,src}/` | `ota_host.h/.c` | 上位机端发送器 |
+| 本仓库 `ota/` | 同上一组 + `ota_frame.*` | 可移植副本（主机侧） |
+
+### 14.9 尚未接线
+
+- `ota_recv` 目前是**独立模块**，尚未挂到业务收帧入口 `Check_Uart_Pdu()`；「进入升级」请求的承载帧仍待定（§12）；
+- 因此当前**无调用点**，链接器会整体回收：两个 target 体积与改动前**一字不差**（Debug Code=33864 / Release Code=25364，均 0 Error / 0 Warning）；
+- 即：本步只验证了**编译**，链接与运行需在接线后验证。
+
