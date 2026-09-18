@@ -125,18 +125,10 @@ static int32_t boot_pick_valid(uint32_t *pu32Slot)
 }
 
 /* 找不到可启动槽：LED 反复闪 BOOT_LED_HALT 次（永不返回），并喂狗 */
+/* 找不到可启动槽：红灯一直闪（内部喂狗），不返回 */
 static void boot_halt(void)
 {
-    uint32_t u32Guard = 0UL;
-
-    for (;;) {
-        boot_led_blink(BOOT_LED_HALT);
-        /* 长停期间喂狗，避免被看门狗打断 LED 编码的可读性 */
-        while (u32Guard++ < 200000UL) {
-            SWDT_FeedDog();
-        }
-        u32Guard = 0UL;
-    }
+    boot_led_error();
 }
 
 /**
@@ -148,14 +140,13 @@ void BOOT_OTA_Run(void)
     uint32_t   u32Slot;
 
     boot_led_init();
-    boot_led_blink(BOOT_LED_BOOT);      /* 闪 1 次 = Boot 跑起来了 */
 
     if (ota_flag_read(&stcFlag) != 0) {
         /* 标志无效（首次烧录未写标志区）：按 A -> B 找第一个可用槽 */
         if (boot_pick_valid(&u32Slot) != 0) {
             boot_halt();
         }
-        boot_led_signal((u32Slot == OTA_SLOT_A) ? BOOT_LED_JUMP_A : BOOT_LED_JUMP_B, 3u);
+        boot_led_slot(u32Slot);
         boot_jump(u32Slot);
     }
 
@@ -169,7 +160,7 @@ void BOOT_OTA_Run(void)
         stcFlag.active = u32Slot;
         stcFlag.flags &= ~OTA_FLAG_NEED_CONFIRM;
         (void)ota_flag_write(&stcFlag);
-        boot_led_signal((u32Slot == OTA_SLOT_A) ? BOOT_LED_JUMP_A : BOOT_LED_JUMP_B, 3u);
+        boot_led_slot(u32Slot);
         boot_jump(u32Slot);
     }
 
@@ -192,7 +183,7 @@ void BOOT_OTA_Run(void)
                 if (u32Other == OTA_SLOT_A) { stcFlag.state_a = (uint32_t)OTA_SLOT_RUNNABLE; }
                 else                        { stcFlag.state_b = (uint32_t)OTA_SLOT_RUNNABLE; }
                 (void)ota_flag_write(&stcFlag);
-                boot_led_signal((u32Other == OTA_SLOT_A) ? BOOT_LED_JUMP_A : BOOT_LED_JUMP_B, 3u);
+                boot_led_slot(u32Other);
                 boot_jump(u32Other);
             }
             (void)ota_flag_write(&stcFlag);
@@ -201,12 +192,12 @@ void BOOT_OTA_Run(void)
 
         (void)ota_flag_write(&stcFlag);
         SWDT_FeedDog();
-        boot_led_signal((u32Slot == OTA_SLOT_A) ? BOOT_LED_JUMP_A : BOOT_LED_JUMP_B, 3u);
+        boot_led_slot(u32Slot);
         boot_jump(u32Slot);
     }
 
     /* RUNNABLE：直接跳，不再动 Flash */
-    boot_led_signal((u32Slot == OTA_SLOT_A) ? BOOT_LED_JUMP_A : BOOT_LED_JUMP_B, 3u);
+    boot_led_slot(u32Slot);
     boot_jump(u32Slot);
 }
 
