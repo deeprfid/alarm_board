@@ -22,7 +22,9 @@
 
 #include <stdint.h>
 
-void boot_led_init(void);          /* PB3 输出，先置灭 */
+/* 初始化：把三个 LED(R PB3 / PA12 红 / PA11 蓝)全部配成输出并压灭，只留绿灯做编码。
+ * 蜂鸣器由 TMRA 的 PWM 驱动(bsp_beep.c)，复位后本就静音，Boot 不处理。 */
+void boot_led_init(void);
 void boot_led_blink(uint8_t cnt);  /* 快闪 cnt 次（约 100ms 亮/灭） */
 void boot_led_code(uint8_t cnt);   /* 死循环：闪 cnt 次 + 停 1.2s，永不返回 */
 
