@@ -47,7 +47,9 @@ int32_t main(void)
      * 放在 WDT_Config()【之前】：ota_flag_write 要擦 8KB 标志扇区(约 20-30ms), 此时看门狗还没开,
      * 避免在擦写窗口里被狗咬。
      * 本槽号由 SCB->VTOR 反推 —— 与上面 VTOR 的设置同源, 不会不一致。 */
+#if (OTA_APP_ENABLE != 0)
     (void)ota_app_boot_confirm(OTA_SLOT_OF_ADDR(SCB->VTOR));
+#endif
 
     (void)WDT_Config();
 	  LL_PERIPH_WP(LL_PERIPH_SEL);
