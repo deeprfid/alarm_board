@@ -91,6 +91,14 @@ static void boot_jump(uint32_t u32Slot)
     __DSB();
     __ISB();
 
+    /* 【必须在跳转前恢复中断】
+     * 本函数开头调了 __disable_irq(), 它置的是内核的 PRIMASK —— 而 PRIMASK【不会被跳转清掉】,
+     * App 会带着「全程中断屏蔽」运行: SysTick 中断永不触发 -> m_u32Tickms 冻结 ->
+     * LED_Pro()/BEEP_Pro() 再也不被推进 -> 谁开的灯一直亮、谁启的蜂鸣一直响。
+     * 现场表现就是「三灯常亮(白) + 蜂鸣器长鸣」, 而 CPU 其实在正常跑主循环 —— 极难定位。
+     * Boot 自己没有使能任何中断源, 此处不会有挂起中断, 直接开中断是安全的。 */
+    __enable_irq();
+
     u32Sp  = *(volatile uint32_t *)(u32Base);
     pfnApp = (void (*)(void))(*(volatile uint32_t *)(u32Base + 4UL));
 
