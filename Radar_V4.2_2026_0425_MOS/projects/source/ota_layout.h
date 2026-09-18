@@ -90,4 +90,15 @@ typedef struct
 
 #define OTA_FLAG_CRC_OFF        36u            /* = offsetof(ota_flag_t, crc32) */
 
+/* ---------------- App 本槽基址 ----------------
+ * 由 target 的编译宏选择：槽 B 的 target 定义裸宏 OTA_APP_SLOT_B，槽 A 的不定义。
+ * 为什么用「裸宏选择器」而不是直接 -DOTA_APP_BASE=0x8000UL：
+ *   Keil 的 <Define> 会同时传给 armasm，而带值写法(NAME=VALUE) armasm 不认，
+ *   会报 A1137E: Unexpected characters at end of line。裸宏则两边都能接受。 */
+#ifdef OTA_APP_SLOT_B
+#define OTA_APP_BASE            OTA_SLOT_B_BASE
+#else
+#define OTA_APP_BASE            OTA_SLOT_A_BASE
+#endif
+
 #endif /* OTA_LAYOUT_H */

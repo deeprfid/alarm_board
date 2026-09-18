@@ -73,12 +73,39 @@ static void boot_jump(uint32_t u32Slot)
     }
 }
 
+/* 槽是否可用：
+ *   向量表必须有效（这条能挡掉擦除态：栈顶 0xFFFFFFFF 不在 SRAM 内）；
+ *   槽尾元数据若【存在】则必须 CRC32 通过；若【为空】(=0xFF, 从未写过)则以向量表为准。
+ *
+ *   为什么允许「元数据为空」：trailer 只在 OTA 下载完成时由 App 写入，而产线/调试器
+ *   直接烧录 App 时没人写它 —— 若强制要求 CRC，首次烧录的板子会永远卡在 Boot。
+ *   （这就是第一次上板「都不跳转」的第二个原因。）
+ *   OTA 路径安全性不受影响：App 激活前已用 OTA1 包头的 CRC32 校验过整镜像。 */
+static int32_t boot_slot_usable(uint32_t u32Slot)
+{
+    uint8_t  u8Magic[4];
+    uint32_t u32Magic;
+
+    if (boot_vec_ok(u32Slot) != 0) {
+        return -1;
+    }
+
+    ota_flash_read(OTA_SLOT_BASE(u32Slot) + OTA_IMG_TRAILER_OFF, u8Magic, 4UL);
+    u32Magic = ((uint32_t)u8Magic[0]) | ((uint32_t)u8Magic[1] << 8U) |
+               ((uint32_t)u8Magic[2] << 16U) | ((uint32_t)u8Magic[3] << 24U);
+    if (u32Magic == 0xFFFFFFFFUL) {
+        return 0;   /* 从未写过 trailer：以向量表为准 */
+    }
+
+    return (ota_img_check(u32Slot) == 0) ? 0 : -2;   /* 写了 trailer 就必须校验通过 */
+}
+
 static int32_t boot_pick_valid(uint32_t *pu32Slot)
 {
     uint32_t u32S;
 
     for (u32S = 0UL; u32S < 2UL; u32S++) {
-        if ((boot_vec_ok(u32S) == 0) && (ota_img_check(u32S) == 0)) {
+        if (boot_slot_usable(u32S) == 0) {
             *pu32Slot = u32S;
             return 0;
         }
@@ -114,8 +141,8 @@ void BOOT_OTA_Run(void)
 
     u32Slot = (stcFlag.active == OTA_SLOT_B) ? OTA_SLOT_B : OTA_SLOT_A;
 
-    /* 选中槽必须过校验，否则换另一槽 */
-    if ((boot_vec_ok(u32Slot) != 0) || (ota_img_check(u32Slot) != 0)) {
+    /* 选中槽必须可用，否则换另一槽 */
+    if (boot_slot_usable(u32Slot) != 0) {
         if (boot_pick_valid(&u32Slot) != 0) {
             boot_halt();
         }
@@ -139,7 +166,7 @@ void BOOT_OTA_Run(void)
             stcFlag.boot_count = 0UL;
             stcFlag.flags &= ~OTA_FLAG_NEED_CONFIRM;
 
-            if ((boot_vec_ok(u32Other) == 0) && (ota_img_check(u32Other) == 0)) {
+            if (boot_slot_usable(u32Other) == 0) {
                 stcFlag.active = u32Other;
                 if (u32Other == OTA_SLOT_A) { stcFlag.state_a = (uint32_t)OTA_SLOT_RUNNABLE; }
                 else                        { stcFlag.state_b = (uint32_t)OTA_SLOT_RUNNABLE; }

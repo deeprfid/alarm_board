@@ -1460,7 +1460,7 @@
         </Group>
       </Groups>
     </Target>
-  <Target>
+    <Target>
       <TargetName>usart_uart_dma_Debug_B</TargetName>
       <ToolsetNumber>0x4</ToolsetNumber>
       <ToolsetName>ARM-ADS</ToolsetName>
@@ -1792,7 +1792,7 @@
             <v6Rtti>0</v6Rtti>
             <VariousControls>
               <MiscControls></MiscControls>
-              <Define>__DEBUG,HC32F460,USE_DDL_DRIVER,</Define>
+              <Define>__DEBUG,HC32F460,USE_DDL_DRIVER,OTA_APP_SLOT_B,</Define>
               <Undefine></Undefine>
               <IncludePath>../source;../../../../../../drivers/cmsis/Device/HDSC/hc32f4xx/Include;../../../../../../drivers/cmsis/Include;../../../../../../drivers/hc32_ll_driver/inc;../../../../../../drivers/bsp/ev_hc32f460_lqfp100_v2;..\..\drivers\cmsis\Device\HDSC\hc32f4xx\Include;..\..\drivers\cmsis\Include;..\..\drivers\hc32_ll_driver\inc;..\..\drivers\bsp\ev_hc32f460_lqfp100_v2</IncludePath>
             </VariousControls>
@@ -1810,7 +1810,7 @@
             <ClangAsOpt>4</ClangAsOpt>
             <VariousControls>
               <MiscControls></MiscControls>
-              <Define></Define>
+              <Define>OTA_APP_SLOT_B,</Define>
               <Undefine></Undefine>
               <IncludePath></IncludePath>
             </VariousControls>
@@ -2187,7 +2187,7 @@
         </Group>
       </Groups>
     </Target>
-<Target>
+    <Target>
       <TargetName>usart_uart_dma_Release_B</TargetName>
       <ToolsetNumber>0x4</ToolsetNumber>
       <ToolsetName>ARM-ADS</ToolsetName>
@@ -2519,7 +2519,7 @@
             <v6Rtti>0</v6Rtti>
             <VariousControls>
               <MiscControls></MiscControls>
-              <Define>HC32F460,USE_DDL_DRIVER,</Define>
+              <Define>HC32F460,USE_DDL_DRIVER,OTA_APP_SLOT_B,</Define>
               <Undefine></Undefine>
               <IncludePath>../source;../../../../../../drivers/cmsis/Device/HDSC/hc32f4xx/Include;../../../../../../drivers/cmsis/Include;../../../../../../drivers/hc32_ll_driver/inc;../../../../../../drivers/bsp/ev_hc32f460_lqfp100_v2;..\..\drivers\cmsis\Device\HDSC\hc32f4xx\Include;..\..\drivers\cmsis\Include;..\..\drivers\hc32_ll_driver\inc;..\..\drivers\bsp\ev_hc32f460_lqfp100_v2</IncludePath>
             </VariousControls>
@@ -2537,7 +2537,7 @@
             <ClangAsOpt>1</ClangAsOpt>
             <VariousControls>
               <MiscControls></MiscControls>
-              <Define></Define>
+              <Define>OTA_APP_SLOT_B,</Define>
               <Undefine></Undefine>
               <IncludePath></IncludePath>
             </VariousControls>
@@ -2914,7 +2914,7 @@
         </Group>
       </Groups>
     </Target>
-      </Targets>
+  </Targets>
 
   <RTE>
     <apis/>

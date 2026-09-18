@@ -13,13 +13,22 @@
 int32_t main(void)
 {
     /* OTA 槽化：向量表指向本槽基址。
-     * 槽按 OTA_SLOT_SIZE(128KB) 对齐，且链接区 ER_IROM1 被限死在 128KB 内，
-     * 故把本函数地址向下对齐到 128KB 边界即得本槽基址 —— 无需 per-slot 编译宏，
-     * 也就无从配错；未槽化(仍链接在 0x0)时该式为 0，与复位默认一致。
-     * Boot 跳转前也会设一次，这里是 App 侧的自我保证（含 App 启动早期异常）。 */
-    SCB->VTOR = ((uint32_t)(uint32_t)&main) & ~((uint32_t)OTA_SLOT_SIZE - 1UL);
+     * 用 per-target 编译宏 OTA_APP_BASE（槽A=0x8000 / 槽B=0x28000，见各 target 的 Define）。
+     *
+     * 【踩坑记录 · 上板实测抓到】原先写的是 ((uint32_t)&main) & ~(OTA_SLOT_SIZE-1)，
+     * 前提是「槽按 128KB 对齐」—— 但槽 A=0x8000、槽 B=0x28000 都【不是】128KB 的倍数，
+     * 掩码算出来是 0x0 / 0x20000：等于把向量表指到 Boot 自己或槽 A 内部，App 一启动就死。
+     * 教训：槽基址必须显式给，绝不要用对齐掩码去「推导」。 */
+    SCB->VTOR = (uint32_t)OTA_APP_BASE;
     __DSB();
     __ISB();
+
+    /* 防呆：编译宏必须与真实链接基址一致（不一致 = 该 target 的 Define 配错） */
+    if (((uint32_t)(uint32_t)&main < (uint32_t)OTA_APP_BASE) ||
+        ((uint32_t)(uint32_t)&main >= ((uint32_t)OTA_APP_BASE + OTA_SLOT_SIZE)))
+    {
+        for (;;) { }   /* 起不来比带病运行安全；用调试器看 PC 即可定位 */
+    }
 
     LL_PERIPH_WE(LL_PERIPH_SEL);
     (void)BSP_CLK_Init();
