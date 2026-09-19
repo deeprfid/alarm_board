@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+- `[hc32f460]` **change(boot): 槽B 指示灯由【蓝】改【红】—— 蓝灯与 App 的雷达信号指示混淆** —— 双 target 重编 0 Error / 0 Warning，**待上板复测**。
+  - **现场背景**：`BOOT_DEFAULT_SLOT = OTA_SLOT_B` 的改动**上板已验证通过**（蓝灯亮 2 秒 -> 跳 B 槽 -> App 起来）。但蓝灯与 App 的雷达信号指示混在一起看不懂。
+  - **改法**：`boot_led_slot()` 里槽 B 用 `BOOT_LED_RED` 取代原来的蓝灯（`3u`）。灯语变为 —— **跳 A = 绿灯常亮 2 秒；跳 B = 红灯常亮 2 秒**。
+  - **与「Boot 卡住」告警的区分（同色但不同形态，不会认错）**：槽指示是「常亮 2 秒 -> 熄灭 -> 立刻跳转」，告警是「1 秒亮/1 秒灭**无限循环**、永不跳转」—— 即「亮 2 秒就走」vs「一直闪」。已在 `boot_led.h` 的判读规则里写明。
+  - **顺带清理**：`boot_led.c` 里裸的 `2u`/`3u` 魔法数字命名化为 `BOOT_LED_GREEN/RED/BLUE`（此前极易看错，是 LED 分组/极性搞错那类事故的温床）。蓝灯已不用于任何状态，但 `boot_led_init()` 仍把它压灭，避免悬空或残留点亮。
+  - **验证**：`iap_boot_Debug` / `iap_boot_Release` 均 **UV4 exit 0、0 Error / 0 Warning**；Code Debug 5632（不变）、Release 3800 -> **3796**；`.uvprojx` 注册数 6；RAMCODE 复核 `BOOT_OTA_Run @0x20018032`、`EFM_Program @0x2001822c`、`EFM_SectorErase @0x20018448`、`FLASH_EraseSector @0x20018684`、`ota_flag_write @0x20018b44`，**全在 0x20018xxx**。
+
 - `[hc32f460]` **feat(boot): 新增 BOOT_DEFAULT_SLOT —— 兜底路径的优先启动槽改为槽 B** —— 双 target 重编 0 Error / 0 Warning，**待上板复测**。
   - **动机**：把板子钉在 B 槽上做调试（槽 B 此前从未上过板）。
   - **改法**：`boot_ota.c` 新增 `#define BOOT_DEFAULT_SLOT (OTA_SLOT_B)`，`boot_pick_valid()` 从「按 A->B 顺序扫」改为「**优先槽 -> 另一个槽**」：`u32First = BOOT_DEFAULT_SLOT`，不可用才回退 `OTA_SLOT_OTHER(u32First)`。要切回 A 槽只改这一行。
