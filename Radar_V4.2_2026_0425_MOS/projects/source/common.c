@@ -23,6 +23,15 @@ extern stc_ring_buf_t g_AlarmRing;
 #define FRAME_EV_NONE          (0)
 #define FRAME_EV_LEGACY        (1)
 #define FRAME_EV_VAR           (2)
+/* USART_UART_Trans 的第 4 个参数是【自旋次数】不是时间 —— 见 DDL hc32_ll_usart.c:277
+ * USART_WaitStatus 的原文 "Maximum count of trying to get status"：
+ *     while (flag != SET) { if (u32To > u32Timeout) { LL_ERR_TIMEOUT; break; } u32To++; }
+ * 原来这里传 100：Release 的循环比 Debug 紧凑得多，100 次自旋只有几 us，而 460800bps 下一个
+ * 字节 ≈ 10/460800 = 21.7us —— 会在 TX_EMPTY / TX_CPLT 置位前就 break，帧被【静默截断】
+ * （原调用还把返回值丢了，(void) 掉）。Debug 因为循环更慢，恰好蒙对。
+ * 取值依据：200MHz 下自旋约 4~8 周期/次，覆盖 21.7us 需 ~1100 次；这里给 20000 次
+ * （≈0.5ms/字节，约 25 倍余量）。发送正常时根本到不了这个上限。 */
+#define FRAME_TX_SPIN         (20000UL)
 typedef struct
 {
     uint8_t  state;
@@ -115,7 +124,8 @@ static int frame_var_send(uint8_t cmd, uint8_t addr, const uint8_t *pl, uint8_t 
     c = fr_crc16(out, (uint16_t)(total - 2u));
     out[total - 2u] = (uint8_t)(c & 0xFFu);
     out[total - 1u] = (uint8_t)(c >> 8);
-    USART_UART_Trans(USART_UNIT, out, total, 100);
+    /* 超时必须给够并检查返回值：失败 = 帧没发全，静默丢会表现为「主机收不到 / 收到坏帧」 */
+    if (USART_UART_Trans(USART_UNIT, out, total, FRAME_TX_SPIN) != LL_OK) { return 0; }
     return (int)total;
 }
 

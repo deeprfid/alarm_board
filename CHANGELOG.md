@@ -1,5 +1,14 @@
 ## [Unreleased]
 
+- `[hc32f460]` **fix(rs485): USART 发送超时给够并检查返回值 —— Release 专有的「静默截断」** —— 4 个 App target 重编 0 Error / 0 Warning，**待上板复测**。
+  - **现场症状**：Release 上电后 STM32 **只收到 1 个正确上传包，之后失效**；Debug A/B 均正常；`for(;;)` 主循环仍在转，**无看门狗复位** —— 即**不是崩溃，是收发链路状态问题**。
+  - **先确认一个事实（否则会往错误方向查）**：反汇编 `CalcCRC` 证明 **Debug 本身就是 -O3**（`PUSH {r3-r10}` + `IT/ITT` + 常量寄存器分配），两 target 的 `<Optim>` 都是 4，Code 差 9116 字节**全部来自 `__DEBUG` 打开的 `DDL_ASSERT`**（`DDL_ASSERT` 全工程只出现在驱动里）。**所以「Release 失败 / Debug 正常」= 断言代码把某个潜在缺陷掩盖了**，方向是**时序**而不是优化等级。
+  - **缺陷**：`USART_UART_Trans(USART_UNIT, out, total, 100)` 的第 4 个参数**是自旋次数，不是时间** —— DDL `hc32_ll_usart.c:277 USART_WaitStatus` 原文：*"Maximum count of trying to get status"*，即 `while (flag != SET) { if (u32To > u32Timeout) { LL_ERR_TIMEOUT; break; } u32To++; }`。
+    460800bps 下**一个字节 ≈ 10/460800 = 21.7us**，而 100 次自旋在 Release 的紧凑循环里只有**几 us** → 会在 `TX_EMPTY` / `TX_CPLT` 置位前 `break`，**帧被静默截断**；原调用还把返回值 `(void)` 丢了，失败**完全不可见**。Debug 因为循环更慢，恰好蒙对。
+  - **改法**：新增 `FRAME_TX_SPIN`（`common.c`）/ `OTA_TX_SPIN`（`ota_recv.c`）= **20000** 次（200MHz 下自旋约 4~8 周期/次，覆盖 21.7us 需 ~1100 次，此处约 25 倍余量，≈0.5ms/字节；发送正常时根本到不了上限），并**检查返回值**：`if (USART_UART_Trans(...) != LL_OK) { return 0; }` —— 失败不再静默。
+  - **验证**：4 个 target 均 **UV4 exit 0、0 Error / 0 Warning**；Code Debug 38446 → **38458**、Release 29322 → **29334**；`.uvprojx` 关键源注册数仍为 12（3 文件 × 4 target）。
+  - **仍在查（未改）**：RS485 **RX 取数路径的不对称** —— `RX_DMA_TC_IrqCallback()` 把**整个 512 字节窗口**推入环形缓冲（`BUF_Write(..., RS485_RX_WIN)`），而 `USART_RxTimeout_IrqCallback()` 只推 `got = 512 - DMA_GetTransCount()` 字节，**两个回调都没有复位 DMA 传输计数**。若自链接的 LLP 描述符没有自动重装，则第 2 帧起 `got` 会包含历史字节 → 环形缓冲被重复数据灌满 → 解析彻底失步，**恰好表现为「第 1 帧正常、之后失效」**。需上板确认（读 `DMA_GetTransCount` 在帧间的变化）。
+
 - `[hc32f460]` **fix(ota): OTA 嗅探器在业务态吞字节 —— 「App 能启动但通信不正常」的根因** —— 4 个 App target 重编 0 Error / 0 Warning，**待上板复测**。
   - **先纠正一个错误前提**：原本怀疑「Release 与 Debug 优化等级不同」。反汇编 `CalcCRC` 后否定 —— Debug 就是 `PUSH {r3-r10}` + `IT/ITT` 条件执行 + 寄存器分配，**Debug 本身就是 -O3**；两 target 的 `<Optim>` 都是 4，Code 差 9116 字节**全部来自 `__DEBUG` 打开的 `DDL_ASSERT`**（`DDL_ASSERT` 在整个工程里只出现在驱动中，业务源码一处都没有）。**所以这不是 Release 特有现象，问题在代码里。**
   - **缺陷**：`ota_recv.c` 的 `consume_byte()` 设计上「先解析后进入」（只有 CRC16 合法的 DATA 帧才切升级态），**但它在业务态（`s_state == OTA_RX_OFF`）就已经返回 1**：

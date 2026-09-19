@@ -36,6 +36,15 @@ static void put_u32(uint8_t *p, uint32_t v)
     p[3] = (uint8_t)((v >> 24) & 0xFFu);
 }
 
+/* USART_UART_Trans 的第 4 个参数是【自旋次数】不是时间 —— 见 DDL hc32_ll_usart.c:277
+ * USART_WaitStatus 原文 "Maximum count of trying to get status"。原来传 100：Release 的循环
+ * 比 Debug 紧凑得多，100 次自旋只有几 us，而 460800bps 下一个字节 ≈ 21.7us —— 会在
+ * TX_EMPTY / TX_CPLT 置位前 break，帧被【静默截断】（返回值还被 (void) 丢了）。
+ * 这里给 20000 次（≈0.5ms/字节，约 25 倍余量）；与 common.c 的 FRAME_TX_SPIN 同源同值。 */
+#ifndef OTA_TX_SPIN
+#define OTA_TX_SPIN     (20000UL)
+#endif
+
 /* 回一帧（ACK/RESUME，载荷 4B LE 偏移）。15B @460800 约 0.33ms，阻塞发送可接受 */
 static void tx_frame(uint8_t type, const uint8_t *payload, uint16_t plen)
 {
@@ -45,7 +54,7 @@ static void tx_frame(uint8_t type, const uint8_t *payload, uint16_t plen)
     flen = ota_frame_build(type, 0u, payload, plen, frame);
     if (flen > 0)
     {
-        (void)USART_UART_Trans(USART_UNIT, frame, (uint32_t)flen, 100UL);
+        (void)USART_UART_Trans(USART_UNIT, frame, (uint32_t)flen, OTA_TX_SPIN);
     }
 }
 
