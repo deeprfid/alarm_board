@@ -23,8 +23,9 @@
 #include "ota_usb.h"
 #include "ota_usb_stream.h"
 #include "usb_msc_ota.h"
+#include "radar_ota.h"      /* F4A0 -> F460 ������ַ���RADAR.BIN�� */
 
-/* USB 回环测试模式：定义 USB_ECHO_TEST 即回显收据（临时诊断用），默认关闭走 OTA */
+/* USB 回环测试模式：定�?USB_ECHO_TEST 即回显收据（临时诊断用），默认关闭走 OTA */
 
 extern int ispassive;   /* user_main.c ????1=??????0=????????????????????? UART1?? */
 extern volatile int g_usb_winusb_mode;   /* v1.10: WinUSB 独立模式 */
@@ -52,6 +53,11 @@ void ota_init_all(void)
     ota_agent_boot();   /* check staged fw (FlashDB KV ready) */
     if (usb_msc_ota_check() > 0)   /* USB ??? fw.bin ???????? */
         system_reset();            /* ?????? bootloader ??????? */
+
+    /* F4A0 -> F460 ������ַ���FAT ������ RADAR.BIN �ͷ���һ�Ρ�
+     * ���� usb_msc_ota_check() ֮�����߶�ͬһ�� FAT ��������ִ�б������ã�
+     * �� FW.BIN �� F4A0 �������������̸�λ�����������������ꡣ */
+    (void)radar_ota_check();
     ota_usb_start();    /* init_usb??CDC+MSC ?? HID??????????? */
     ota_dispatch_start();   /* ?? OTA ???????USB + HTTP + ???????? */
 }
@@ -66,11 +72,11 @@ void ota_confirm_after_init(void)
 static void ota_dispatch_task(void *arg)
 {
     TRACE("[ota] dispatch task started\n");
-    uint8_t buf[512];   /* v9.82d: 512B 大缓冲排空（原 128B+阻塞5ms 排空极慢） */   /* v1.0: 128B read batch - short irq-disable in usb_recv (2048 disabled USB IRQ too long -> USB FIFO overrun dropped packets) */   /* v1.0: 2048-byte USB read batch - drain cdc_rx_buf faster (was 256, RX buffer overflow dropped OTA frames) */
+    uint8_t buf[512];   /* v9.82d: 512B 大缓冲排空（�?128B+阻塞5ms 排空极慢�?*/   /* v1.0: 128B read batch - short irq-disable in usb_recv (2048 disabled USB IRQ too long -> USB FIFO overrun dropped packets) */   /* v1.0: 2048-byte USB read batch - drain cdc_rx_buf faster (was 256, RX buffer overflow dropped OTA frames) */
     int rtimeout = 50;
     int hrtm = 5000;
     int n, fd;
-    int nb = 1;              /* v9.82e-FIX: 非阻塞=O_NONBLOCK=1！0 是 O_BLOCK（阻塞，WinUSB 下 timeout=-1 永久卡死 HTTP） */
+    int nb = 1;              /* v9.82e-FIX: 非阻�?O_NONBLOCK=1�? �?O_BLOCK（阻塞，WinUSB �?timeout=-1 永久卡死 HTTP�?*/
     int http_cnt = 0;   /* v1.0: HTTP poll throttle - avoid W5100S SPI every loop (was stalling USB/UART) */
     int uart_timeout = 10;   /* v1.0: active-mode UART1 short poll (was 50ms, stalled USB) */
     uint64 lastacttm = 0;
@@ -100,8 +106,8 @@ static void ota_dispatch_task(void *arg)
     }
 
 #ifdef USB_ECHO_TEST
-    /* ===== 回环测试模式：当前 USB 通道收什么回什么（高速验证 USB 双向通路，不喂 OTA） =====
-     * v1.15: WinUSB(USB2) 也支持回显——验证 winusb 连续流是否也有 ~500ms 取走周期 */
+    /* ===== 回环测试模式：当�?USB 通道收什么回什么（高速验�?USB 双向通路，不�?OTA�?=====
+     * v1.15: WinUSB(USB2) 也支持回显——验�?winusb 连续流是否也�?~500ms 取走周期 */
     for (;;) {
         if (g_usb_winusb_mode) {
             n = read(COMMON_INTERFACE_USB2, buf, sizeof(buf));
@@ -118,10 +124,11 @@ static void ota_dispatch_task(void *arg)
         }
     }
 #else
-    /* v9.82e-diag: 循环入口打点（排查 HTTP/分发线程用，可放开） */
+    /* v9.82e-diag: 循环入口打点（排�?HTTP/分发线程用，可放开�?*/
     // TRACE("[ota] dispatch loop enter, usb_winusb=%d\n", g_usb_winusb_mode);
+    radar_ota_poll();   /* F4A0 -> F460 ������ַ��ƽ�������ʱֻ��һ�� if �жϣ� */
     for (;;) {
-        /* 1) USB OTA——CDC(USB1) 或 WinUSB(USB2, v1.10) */
+        /* 1) USB OTA——CDC(USB1) �?WinUSB(USB2, v1.10) */
         if (g_usb_winusb_mode) {
             while ((n = read(COMMON_INTERFACE_USB2, buf, sizeof(buf))) > 0) {
                 if (ota_usb_stream_feed(COMMON_INTERFACE_USB2, buf, (uint32_t)n) > 0)
@@ -151,7 +158,7 @@ static void ota_dispatch_task(void *arg)
         fd = apt_single_select_nob(COMMON_INTERFACE_SOCKET2,   /* v1.0: non-blocking - do not stall USB/UART polling */
                                (unsigned short)(hw_netconf()->listenPort + 1),
                                &lastacttm, 100);
-        /* v9.82e-diag: HTTP select 诊断（排查用，可放开）——fd>=0=收到连接 / -1=监听失败 / -2=无活动 */
+        /* v9.82e-diag: HTTP select 诊断（排查用，可放开）——fd>=0=收到连接 / -1=监听失败 / -2=无活�?*/
         // if (http_cnt == 10 || fd >= 0 || (http_cnt % 200) == 0)
         //     TRACE("ota http: fd=%d port=%u\n", fd, (unsigned)(hw_netconf()->listenPort + 1));
         if (fd >= 0) {
@@ -161,11 +168,11 @@ static void ota_dispatch_task(void *arg)
         }
         /* fd==-2: no conn activity, keep polling USB/UART; fd==-1 socket err retry */
         }
-        /* v9.82d-fix: 让出必须每轮执行（原在 http 块内 → 被动模式 9/10 轮忙转，
-         * 饿死 W5100S 网络栈任务 → 升级重启后 HTTP 建连失败） */
-        /* 真让出修复（同 F460）：sleep_ms(1)=osDelay(0) 不阻塞（tick 2ms，1/2=0），
-         * 空载（无 USB/串口/网络的新板）时 High 忙转饿死业务/初始化线程 → 系统卡死；
-         * 改 osDelay(1) = RTX 硬阻塞 1 tick(2ms)，每轮真正让出 */
+        /* v9.82d-fix: 让出必须每轮执行（原�?http 块内 �?被动模式 9/10 轮忙转，
+         * 饿死 W5100S 网络栈任�?�?升级重启�?HTTP 建连失败�?*/
+        /* 真让出修复（�?F460）：sleep_ms(1)=osDelay(0) 不阻塞（tick 2ms�?/2=0），
+         * 空载（无 USB/串口/网络的新板）�?High 忙转饿死业务/初始化线�?�?系统卡死�?
+         * �?osDelay(1) = RTX 硬阻�?1 tick(2ms)，每轮真正让�?*/
         osDelay(1);
 }
 #endif   /* USB_ECHO_TEST */
@@ -175,7 +182,7 @@ void ota_dispatch_start(void)
 {
     osThreadAttr_t thAttr_t;
 
-    init_osThreadAttr_t(&thAttr_t, 1024 * 16, osPriorityNormal);   /* v1.35: 回退 v1.32 High——新板无连接时 dispatch 空转抢占 main 致初始化无法完成 */
+    init_osThreadAttr_t(&thAttr_t, 1024 * 16, osPriorityNormal);   /* v1.35: 回退 v1.32 High——新板无连接�?dispatch 空转抢占 main 致初始化无法完成 */
     osThreadNew(ota_dispatch_task, NULL, &thAttr_t);
 }
 

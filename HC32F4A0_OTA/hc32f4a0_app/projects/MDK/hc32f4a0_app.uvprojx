@@ -825,6 +825,11 @@
               <FilePath>..\app\src\ota_host.c</FilePath>
             </File>
             <File>
+              <FileName>radar_ota.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\app\src\radar_ota.c</FilePath>
+            </File>
+            <File>
               <FileName>ota_dist.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\app\src\ota_dist.c</FilePath>

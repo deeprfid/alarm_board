@@ -1,5 +1,14 @@
 ## [Unreleased]
 
+- `[hc32f4a0]` **feat(ota): 接通 F4A0 -> F460 报警板分发 —— MSC 的 FAT 卷放 `RADAR.BIN` 即自动下发** —— 工程构建 **0 Error / 1 Warning**（唯一警告是既有的 `ota_usb_stream.c(47)` 未使用变量），**待上板联调**。
+  - **补齐了此前一直空着的触发入口**：`ota_dist_start()` / `ota_dist_poll()` 此前**零调用点**（发送器写好了但没人发起、也没人推进，被链接器整个回收）。
+  - **新增 `radar_ota.c/h`**（L4 层）：挂载 FAT -> 打开 `RADAR.BIN` -> 整体读进堆 -> 校验包头与长度自洽 -> **卸载 FAT** -> `ota_dist_start()` 发起；`radar_ota_poll()` 负责周期推进，成功后删掉 `RADAR.BIN`（避免每次上电重复分发），**失败不删**（留着复位重试/排查）。
+  - **为什么先整包读进内存再卸载 FAT**：分发是长过程（30KB 包在 460800bps 上要好几秒），期间不该一直占着 FAT 卷（USB MSC 侧可能也要访问）；包只有几十 KB，堆放得下，一次读完更简单。
+  - **与 `usb_msc_ota.c` 的分工（刻意用不同文件名）**：`FW.BIN` = **F4A0 自己**升级（暂存 QSPI -> 写标志 -> 重启 -> bootloader）；`RADAR.BIN` = **F460 报警板**升级（本模块，直接把 OTA1 帧写到 RS485，不碰本机 Flash）。同一个文件被两边抢会导致「插上盘就重启、板子却升不上去」。
+  - **接线**：`ota_integration.c` 的 `ota_init_all()` 里在 `usb_msc_ota_check()` **之后**调 `radar_ota_check()`（两者读同一个 FAT 卷，串行避免争用；且 FW.BIN 会立刻复位，必须先让它判完）；`radar_ota_poll()` 挂在已有 `ota_dispatch_task` 循环顶部；`radar_ota.c` 已注册进 `hc32f4a0_app.uvprojx`。
+  - **目标通道**：`COMMON_INTERFACE_RS485_1`（= 104），依据 `alarm.c` 的 `ipc_hpm_message()` 分发关系（antid 0x1->RS485_3、0x2/0x3->RS485_2、0x4/0x0->RS485_1）。**雷达板挂哪个口如果不对，改 `radar_ota.c` 的 `RADAR_OTA_IFACE` 一行即可。**
+  - **验证**：Code 378524 -> **381460**（+2936B，即新模块）。
+
 - `[hc32f460]` **chore(ota): `OTA_APP_ENABLE` 置 1（打开 OTA 自检确认）** —— 上板实测**能启动**。
   - 打开后 App 每次启动会调 `ota_app_boot_confirm(SCB->VTOR 反推的本槽)`：把本槽置 RUNNABLE、清 NEED_CONFIRM、boot_count 归零。
   - 配合本笔之前补的**短路判断**，只有「本槽非 RUNNABLE / 带 NEED_CONFIRM / boot_count != 0 / active 不符」时才擦写标志扇区，正常运行态下不再每次上电都擦 8KB。
