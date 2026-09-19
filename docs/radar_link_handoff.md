@@ -5,6 +5,42 @@
 
 ---
 
+## 0. 新会话开场白（直接复制粘贴）
+
+```
+工作目录 J:\dsh\alarm_board（HC32F4A0 + HC32F460 报警板两个项目在同一仓库）。
+
+先完整读一遍 docs/radar_link_handoff.md，然后按它的 §3.1 修驱动的三处 RX 断点：
+  ① hc32f4a0_driver/projects/user/src/rs485_1.c / rs485_2.c / rs485_3.c
+     的 RX 中断回调里 BUF_Write 被注释掉了，恢复它
+  ② usart_driver.c 的 hc32f460_uart_get_bytes_cnt() 只认 uartid 0..3，
+     要补 4/5/6（对应 RS485_1/2/3）
+  ③ io_stream.c 的 read() switch 缺 COMMON_INTERFACE_RS485_1/2/3 三个 case
+改完重编 hc32f4a0_driver 工程生成 hc32f4a_driver.lib，再链回 app。
+
+要求：完全兼容项目 1（STM32F0_linux_v4.31）的协议，不要另起炉灶；
+代码要能移植到其它平台（按 §4.3 拆 radar_proto / radar_plat）。
+板子上接了 3 块雷达板，LED2/3/4 是状态灯（BOARD_LED1 被 app 占用）。
+现在无论怎么改三个灯都不亮，TRACE 刷屏 read--invalid interface number。
+
+不要先问我，直接做；做完编译验证并报告。
+```
+
+### 新会话必须知道的 5 个环境事实
+
+1. **工作目录** `J:\dsh\alarm_board`；F4A0 工程在 `HC32F4A0_OTA/hc32f4a0_app`，
+   驱动源码在 `HC32F4A0_OTA/hc32f4a0_driver`（**自己写的，可以改**）。
+2. **Keil 无头编译**：`D:\Keil_v5\UV4\UV4.exe -r <uvprojx> -j0 -o <log>`，
+   验收标准是 log 里 `0 Error(s)`。
+3. **判断模块有没有真被链接**：看 map 里的 `Removing ... radar_link`，
+   以及 `Program Size: Code=` 有没有增长。**没接线 = 被链接器回收 = 白做**。
+4. **git 推送需要代理**：`git -c http.proxy=http://127.0.0.1:7890 -c http.sslBackend=openssl push origin main`。
+   本地领先 origin 若干提交，**推送由用户自己做**。
+5. **文件编码不统一**：`main.c` 是 GBK（fs 工具读不了，要用 pwsh 做 GBK 往返），
+   `ota_*.c` / `radar_*.c` 是 UTF-8。改错编码会让中注释变乱码。
+
+---
+
 ## 1. 背景与目标
 
 这是**项目 2**：**HC32F4A0 直接驱动 HC32F460 报警板**（没有 STM32 中继板）。
