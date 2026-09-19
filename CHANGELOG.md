@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+- `[hc32f460]` **feat(boot): 新增 BOOT_DEFAULT_SLOT —— 兜底路径的优先启动槽改为槽 B** —— 双 target 重编 0 Error / 0 Warning，**待上板复测**。
+  - **动机**：把板子钉在 B 槽上做调试（槽 B 此前从未上过板）。
+  - **改法**：`boot_ota.c` 新增 `#define BOOT_DEFAULT_SLOT (OTA_SLOT_B)`，`boot_pick_valid()` 从「按 A->B 顺序扫」改为「**优先槽 -> 另一个槽**」：`u32First = BOOT_DEFAULT_SLOT`，不可用才回退 `OTA_SLOT_OTHER(u32First)`。要切回 A 槽只改这一行。
+  - **作用范围（重要，别误以为覆盖一切）**：只影响两类兜底 —— ① 标志区无效（首次烧录/被擦）；② 标志指定的槽不可用需换槽。**一旦标志区有效且 active 已定，仍以标志为准** —— 这是 OTA 的正确性前提：升级完必须听标志，否则 Boot 会把刚升上去的槽抢回旧槽，升级等于白做。当前 `OTA_APP_ENABLE = 0`，App 从不写标志，故标志区始终无效 → **Boot 恒走兜底路径 → 恒定跳 B 槽**。
+  - **失效安全**：`boot_slot_usable()` 先验向量表，**槽 B 没烧时自动回退 A 槽**（不会卡在 Boot）。现场灯语：跳 B = **蓝灯亮 2 秒**（`boot_led_slot(1)` -> id 3 -> 蓝），跳 A = 绿灯 2 秒 —— 一眼可辨。
+  - **验证**：`iap_boot_Debug` / `iap_boot_Release` 均 **UV4 exit 0、0 Error / 0 Warning**；Code Debug 5892 → **5632**、Release 4056 → **3800**（循环展开成直路，反而变小）；`.uvprojx` 关键源注册数仍为 6；RAMCODE 复核 —— `BOOT_OTA_Run @0x20018032`、`EFM_Program @0x2001822c`、`EFM_SectorErase @0x20018448`、`FLASH_EraseSector @0x20018684`、`ota_flag_write @0x20018b44`，**全在 0x20018xxx**。槽宏核对：`OTA_SLOT_A=0 / OTA_SLOT_B=1`、`OTA_SLOT_BASE(1)=0x00028000`、`OTA_SLOT_OTHER` 定义正确。
+
 - `[hc32f460]` **fix(rs485): USART 发送超时给够并检查返回值 —— Release 专有的「静默截断」** —— 4 个 App target 重编 0 Error / 0 Warning，**已上板实测：A 槽 Release 运行正常**。
   - **现场症状**：Release 上电后 STM32 **只收到 1 个正确上传包，之后失效**；Debug A/B 均正常；`for(;;)` 主循环仍在转，**无看门狗复位** —— 即**不是崩溃，是收发链路状态问题**。
   - **先确认一个事实（否则会往错误方向查）**：反汇编 `CalcCRC` 证明 **Debug 本身就是 -O3**（`PUSH {r3-r10}` + `IT/ITT` + 常量寄存器分配），两 target 的 `<Optim>` 都是 4，Code 差 9116 字节**全部来自 `__DEBUG` 打开的 `DDL_ASSERT`**（`DDL_ASSERT` 全工程只出现在驱动里）。**所以「Release 失败 / Debug 正常」= 断言代码把某个潜在缺陷掩盖了**，方向是**时序**而不是优化等级。

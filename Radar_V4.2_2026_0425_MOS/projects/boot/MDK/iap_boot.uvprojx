@@ -507,7 +507,7 @@
       <TargetName>iap_boot_Release</TargetName>
       <ToolsetNumber>0x4</ToolsetNumber>
       <ToolsetName>ARM-ADS</ToolsetName>
-      <pCCUsed>5060020::V5.06 (build 20)::ARMCC</pCCUsed>
+      <pCCUsed>5060960::V5.06 update 7 (build 960)::.\ARMCC</pCCUsed>
       <uAC6>0</uAC6>
       <TargetOption>
         <TargetCommonOption>
@@ -836,7 +836,7 @@
               <MiscControls></MiscControls>
               <Define>HC32F460,USE_DDL_DRIVER,</Define>
               <Undefine></Undefine>
-              <IncludePath>..\source;..\..\source;..\..\..\drivers\hc32_ll_driver\inc;..\..\..\drivers\cmsis\Device\HDSC\hc32f4xx\Include;..\..\..\drivers\cmsis\Include;..\..\source;</IncludePath>
+              <IncludePath>..\source;..\..\source;..\..\..\drivers\hc32_ll_driver\inc;..\..\..\drivers\cmsis\Device\HDSC\hc32f4xx\Include;..\..\..\drivers\cmsis\Include;..\..\source</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>

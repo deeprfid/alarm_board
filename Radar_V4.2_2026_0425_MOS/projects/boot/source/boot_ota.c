@@ -9,7 +9,7 @@
  *     Boot: 读双份标志 -> 选中槽可用性判定
  *             RUNNABLE -> 直接跳
  *             TRIAL    -> boot_count++；超 OTA_FLAG_MAX_BOOT 则标 FAILED 并切另一槽
- *             无标志   -> 按 A -> B 取第一个可用槽
+ *             无标志   -> 按 BOOT_DEFAULT_SLOT 优先，另一个槽作回退
  *             两槽皆不可用 -> 停在 Boot（不跳任何槽 = 不砖）
  *
  *   【调试手段】本板没有可接 printf 的调试口（唯一的串口是 RS485 业务口），
@@ -154,16 +154,31 @@ static void boot_jump(uint32_t u32Slot)
     }
 }
 
-/* 按 A -> B 顺序取第一个可用槽；找不到返回 -1 */
+/* 兜底路径的【优先启动槽】。
+ *
+ * 两槽都可用、又拿不到有效标志时，Boot 先跳这个槽；它不可用再回退到另一个槽。
+ *
+ * 【作用范围 —— 别指望它覆盖一切】只影响两类兜底：
+ *   ① 标志区无效（首次烧录 / 标志区被擦）；
+ *   ② 标志指定的槽不可用、需要换槽。
+ * 一旦标志区【有效且 active 已定】，仍以标志为准 —— 这是 OTA 的正确性前提：
+ * 升级完必须听标志的，否则 Boot 会把刚升上去的槽抢回旧槽，升级等于白做。
+ * 要临时把板子钉在某个槽上做调试就改这一行；量产按标志走时不必动它。 */
+#define BOOT_DEFAULT_SLOT   (OTA_SLOT_B)
+
+/* 优先槽 -> 另一个槽，取第一个可用槽；找不到返回 -1 */
 static int32_t boot_pick_valid(uint32_t *pu32Slot)
 {
-    uint32_t u32S;
+    uint32_t u32First = (uint32_t)BOOT_DEFAULT_SLOT;
+    uint32_t u32Other = OTA_SLOT_OTHER(u32First);
 
-    for (u32S = 0UL; u32S < 2UL; u32S++) {
-        if (boot_slot_usable(u32S) == 0) {
-            *pu32Slot = u32S;
-            return 0;
-        }
+    if (boot_slot_usable(u32First) == 0) {
+        *pu32Slot = u32First;
+        return 0;
+    }
+    if (boot_slot_usable(u32Other) == 0) {
+        *pu32Slot = u32Other;
+        return 0;
     }
     return -1;
 }
@@ -185,7 +200,7 @@ void BOOT_OTA_Run(void)
     boot_led_init();
 
     if (ota_flag_read(&stcFlag) != 0) {
-        /* 标志无效（首次烧录未写标志区）：按 A -> B 找第一个可用槽 */
+        /* 标志无效（首次烧录未写标志区）：按 BOOT_DEFAULT_SLOT 优先找可用槽 */
         if (boot_pick_valid(&u32Slot) != 0) {
             boot_halt();
         }
