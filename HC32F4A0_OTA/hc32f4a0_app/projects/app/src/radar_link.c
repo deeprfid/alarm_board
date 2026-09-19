@@ -43,6 +43,8 @@ typedef struct {
     uint16_t     plen;
     uint8_t      legacy;        /* 1 = 正在收 0xFF 定长 32B 帧 */
     uint32_t     next_query_ms;
+    uint8_t      led_on;        /* 1 = 本口状态灯当前被我们占着（有人）。只释放自己占的通道，
+                                 * 从不去灭别人的灯 —— 灯是共用脚，见 radar_link_poll 第 4 步 */
 } radar_ctx_t;
 
 static radar_ctx_t s_ctx[RADAR_LINK_NUM];
@@ -209,23 +211,44 @@ static void feed_byte(uint8_t idx, uint8_t b)
 
 void radar_link_init(void)
 {
+    commonUartPara para;
     int nb = 1;      /* 1 = 非阻塞（见 ota_integration.c 的同款用法） */
     int tmo = 10;
     uint8_t i;
 
     (void)memset(s_ctx, 0, sizeof(s_ctx));
 
-    /* 【不要在这里 uart_open】这三个口是驱动自己开的：
-     *   ipc.c:271  Tag_update_thread() -> Usart_RS485_init() -> uart_open(RS485_1/2/3, 460800)
-     * 我们再开一次是重复打开（可能失败或重配），更糟的是 Usart_RS485_init() 设的是
-     * 【O_BLOCK】—— 若它在本函数之后执行，端口会变回阻塞，radar_link_poll() 里的
-     * read(fd) 就会永久阻塞，整条轮询线程卡死（现象：既不发查询、灯也不亮）。
-     * 所以这里只做 ioctl 配置，把非阻塞和超时再钉一遍。 */
+    /* 【次序：先 open、再 ioctl —— 与 ota_integration.c:102-104 的既有写法一致】
+     *
+     * 这三个口本来由 ipc.c:271 Tag_update_thread() -> Usart_RS485_init() 以 【O_BLOCK】 打开，
+     * 我们只补 ioctl 的话会有一个次序洞：若我们的 ioctl 跑在它前面，随后的 uart_open()
+     * 会用 O_BLOCK 把 isBlock 覆盖回去，read() 就走阻塞分支（§9.3.3 第 3 条风险）。
+     *
+     * 所以这里自己也 uart_open() 一次，参数与 ipc 对齐、isBlock 取 O_NONBLOCK：
+     *   · io_stream.c:291 的 uart_open() 对【已打开】的口是 no-op（`if (paraLoc->isOpen != 1)`），
+     *     所以谁先跑都不会被覆盖 —— 它先开就沿用它的，我们先开就沿用我们的，两边结果都是非阻塞。
+     *   · 之前注释里担心的"再开一次会被改回 O_BLOCK / read() 永久阻塞"不会发生：
+     *     覆盖只发生在【首次】打开时；而 Usart_RS485_init() 给的是 timeout=20，
+     *     即使真的落到 O_BLOCK 分支也只会 ~25ms 后返回 -2，不会死等。
+     *   · 结论：两条时序路径都收敛到"非阻塞"，SET_ISBLOCK(1) 一定生效。 */
+    (void)memset(&para, 0, sizeof(para));
+    para.baudrate = 460800;        /* 必须与 Usart_RS485_init() 的 460800 一致，否则静默错帧 */
+    para.isBlock  = O_NONBLOCK;
+    para.timeout  = 10;
+    para.isRdam   = 0;
+    para.isPrintf = 1;
+
     for (i = 0u; i < RADAR_LINK_NUM; i++) {
+        (void)uart_open(s_link_fd[i], &para);
         (void)ioctl(s_link_fd[i], COMMON_INTERFACE_SET_ISBLOCK, &nb);
         (void)ioctl(s_link_fd[i], COMMON_INTERFACE_SET_TIMEOUT, &tmo);
         (void)ioctl(s_link_fd[i], COMMON_INTERFACE_CLEAR_REVBUF, NULL);
         s_ctx[i].next_query_ms = now_ms();
+
+        /* 上电【不】去灭这三盏灯 —— 它们是共用脚，一进来就写电平等于抢别人的指示。
+         * led_on 由上面 memset(s_ctx) 清零：表示"这三盏灯不是我们点亮的，别去收"，
+         * 只有雷达真的"有人"时我们才会碰它们（见 radar_link_poll 第 4 步）。 */
+        s_ctx[i].led_on = 0u;
     }
     TRACE("radar_link: 3 links up (485_1 ant1 / 485_2 ant2,3 / 485_3 ant4)\n");
 }
@@ -236,21 +259,9 @@ void radar_link_poll(void)
     uint32_t t = now_ms();
     uint8_t  i;
     int      n, k;
-    static uint32_t s_hb_ms = 0UL;
 
-    /* ===== 【临时诊断】三级定位，验证完请删掉这一段 =====
-     *   LED2 —— 轮询线程活着：无条件每秒闪一次（只要线程在转就会闪）；
-     *   LED3 —— 查询帧发出去了：每次 radar_send_query 闪一次；
-     *   LED4 —— 收到了任何字节：read() 返回 >0 就闪（不管 CRC/帧格式对不对）。
-     * 判读：
-     *   三个都不闪        -> 线程没跑起来（wait_init_ok 未返回 / osThreadNew 失败 / 线程被饿死）
-     *   只有 LED2 闪      -> 线程活着，但查询发不出去（发送路径或端口问题）
-     *   LED2+LED3 闪      -> 发出去了但板子没回（方向控制/接线/波特率/帧格式）
-     *   LED2+LED3+LED4 闪 -> 收得到字节，问题在帧解析（CRC/长度/地址） */
-    if ((int32_t)(t - s_hb_ms) >= 0) {
-        Alarm_Output(BOARD_LED2, 5u, 5u, 1u);
-        s_hb_ms = t + 1000UL;
-    }
+    /* 【临时诊断已删】原来这里的三级 LED 定位（LED2 心跳 / LED3 发查询 / LED4 收到字节）
+     * 已在链路打通后移除（handoff §4.2）。现在 LED2/3/4 只做一件事：本口雷达"有人"常亮。 */
 
     for (i = 0u; i < RADAR_LINK_NUM; i++) {
         radar_ctx_t *p = &s_ctx[i];
@@ -259,8 +270,6 @@ void radar_link_poll(void)
         for (k = 0; k < 4; k++) {
             n = read(s_link_fd[i], buf, (uint32_t)sizeof(buf));
             if (n <= 0) { break; }
-            /* 【临时诊断】收到任何字节都闪 LED4（不管 CRC 对不对）——用来把"收不到"和"收得到但解析不过"分开 */
-            Alarm_Output(BOARD_LED4, 5u, 5u, 1u);
             {
                 int j;
                 for (j = 0; j < n; j++) { feed_byte(i, buf[j]); }
@@ -276,25 +285,38 @@ void radar_link_poll(void)
 
         /* 3) 周期发查询 */
         if ((int32_t)(t - p->next_query_ms) >= 0) {
-            /* 【临时诊断】每发一次查询闪 LED3 —— 用来确认发送路径真的被执行了 */
-            Alarm_Output(BOARD_LED3, 5u, 5u, 1u);
             (void)radar_send_query(i);
             p->next_query_ms = t + QUERY_PERIOD_MS;
         }
 
         /* 4) 雷达状态灯：BOARD_LED2/3/4 = 链路 485_1/485_2/485_3。
-         *    【为什么从 LED2 起】BOARD_LED1 已被占用（现场确认），故依次用 2/3/4。
+         *    【为什么从 LED2 起】BOARD_LED1 已被 app 占用（现场确认），故依次用 2/3/4。
          *
-         *    口径（现场指定，不要再改）：收到雷达"有人"就调
-         *        Alarm_Output(BOARD_LED2 + i, 5, 5, 1);   // 50ms亮 / 50ms灭 / 1次
-         *    即时间参数单位 10ms，第 4 参是重复次数。
+         *    口径（现场指定）：雷达"有人"就【常亮】，人走了【灭】—— 不闪。
          *
-         *    只要有"有人"就直接调，不做任何计时/去重：
-         *      · 重复调用是安全的 —— GPIO_Start() 在 ucEnalbe==1（灯正在闪）时会直接返回，
-         *        等这一轮 50/50 走完、ucEnalbe 归 0，下一次调用自然重新起一轮，接着闪；
-         *      · 所以这里不需要任何延时、节流或"新帧"判断。 */
+         *    【这三个脚是和 app 其它功能复用的，所以走共用 API，不直接写引脚】
+         *      ipc.c(586-588) / Lan2Uart.c(526) / alarm.c(110) / bsp_led.c(567 报警路径)
+         *      都用 Alarm_Output / Alarm_Disable 这套通道。我们也用它，理由：
+         *        · 每个通道有 ucEnalbe 门 + 互斥锁：占用期间别人的 Alarm_Output 直接早退，
+         *          不会出现"我写引脚、它按状态机翻转"的对打；
+         *        · 释放用 Alarm_Disable（别人随后就能正常申请），不长期霸占；
+         *        · Alarm_Off() 只停 Buzz/Relay/RGB，不碰 LED1..4，不会误清我们的通道。
+         *
+         *      参数用 (1, 0, 0) 而不是 (5, 5, 1)：
+         *        (5,5,1) = 50ms 亮 / 50ms 灭、循环 1 次 —— 配合每拍重调就是【一直闪】，
+         *        正是现场要去掉的那个现象。而 GPIO_Pro() 在 usStopTime==0 时直接 return
+         *        （bsp_led.c:223 的判断），所以这里传 OFF=0、Cycle=0 就能：
+         *          · 通道保持占用（别人抢不走）；
+         *          · 引脚一直亮、不翻转 —— 真正的"有人就常亮"，且全程在共用状态机里。
+         *      每拍重调是幂等的：ucEnalbe==1 时 GPIO_Start 直接早退，只在别人显式
+         *      Alarm_Disable 抢走通道后才会重新占回来（有人期间以雷达为准）。 */
         if (p->st.radar_val != 0u) {
-            Alarm_Output((uint8_t)(BOARD_LED2 + i), 5u, 5u, 1u);
+            Alarm_Output((uint8_t)(BOARD_LED2 + i), 1u, 0u, 0u);
+            p->led_on = 1u;
+        }
+        else if (p->led_on != 0u) {
+            Alarm_Disable((uint8_t)(BOARD_LED2 + i));
+            p->led_on = 0u;
         }
     }
 }

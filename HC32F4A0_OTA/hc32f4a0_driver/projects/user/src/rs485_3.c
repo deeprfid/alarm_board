@@ -29,19 +29,28 @@
 
 
 
-//stc_ring_buf_t Uart4RingBuf;
 
 static void USART5_RxFull_IrqCallback(void)
 {
     uint8_t u8Data = (uint8_t)USART_ReadData(USART_RS485_3);
 
-   // (void)BUF_Write(&Uart4RingBuf, &u8Data, 1UL);
+    /* RX 通路（三处断点之一）：中断里必须把字节落到 gUartParams[6].recvbuf
+     * = gRs485_3RecvBuf，并把写指针 rs485_3reccount 往前推——
+     * 它就是 hc32f460_uart_get_bytes_cnt() 返回给 read()/uart_recv() 的尾指针。
+     * 之前这行被注释掉，读出来的字节直接丢弃，read() 永远取不到数据。 */
+    gRs485_3RecvBuf[rs485_3reccount] = u8Data;
+    rs485_3reccount++;
+
+    if (rs485_3reccount >= MAX_RS485_3_BUF_SIZE)
+        rs485_3reccount = 0;
 }
 
 static void USART5_RxError_IrqCallback(void)
 {
     (void)USART_ReadData(USART_RS485_3);
-	   uart_err_clear(3);
+    /* uart_err_clear(s) 清的是 gUartParams[s].uart_head —— 必须传【本口】下标。
+     * RS485_3 = COMMON_INTERFACE_RS485_3(106)，即下标 6（原来写的是 3，清到 RFID 模块口去了）。 */
+    uart_err_clear(6);
 
     USART_ClearStatus(USART_RS485_3, (USART_FLAG_PARITY_ERR | USART_FLAG_FRAME_ERR | USART_FLAG_OVERRUN));
 }
@@ -55,7 +64,6 @@ int uart5_Init(uart_cfg_para_st *ucpst)//串口初始化配置函数，即是上
 
 	  USART_DeInit(USART_RS485_3);
 	
-//    (void)BUF_Init(&Uart4RingBuf, gUart3RecvBuf, MAX_UART3_BUF_SIZE);
 
     USART5_FCG_ENABLE();
 

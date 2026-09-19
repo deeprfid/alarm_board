@@ -345,6 +345,9 @@ int uart_close(int uart)
         case COMMON_INTERFACE_UART1:
         case COMMON_INTERFACE_UART2:
         case COMMON_INTERFACE_UART3:
+        case COMMON_INTERFACE_RS485_1:
+        case COMMON_INTERFACE_RS485_2:
+        case COMMON_INTERFACE_RS485_3:
         {
             int intuid = uart - COMMON_INTERFACE_UART_BASE;
             paraLoc = &gUartParams[intuid];
@@ -396,6 +399,9 @@ int ioctl(int s, uint32 cmd, void *paraAddr)
         case COMMON_INTERFACE_UART1:
         case COMMON_INTERFACE_UART2:
         case COMMON_INTERFACE_UART3:
+        case COMMON_INTERFACE_RS485_1:
+        case COMMON_INTERFACE_RS485_2:
+        case COMMON_INTERFACE_RS485_3:
         {
             int intuid = s - COMMON_INTERFACE_UART_BASE;
             value = *((int *)paraAddr);
@@ -798,7 +804,13 @@ int read(int s, void *buf, uint32 len)
         case COMMON_INTERFACE_UART1:
         case COMMON_INTERFACE_UART2:
         case COMMON_INTERFACE_UART3:
+        case COMMON_INTERFACE_RS485_1:
+        case COMMON_INTERFACE_RS485_2:
+        case COMMON_INTERFACE_RS485_3:
         {
+            /* 三处断点之三：RS485_1/2/3(104/105/106) → gUartParams 下标 4/5/6，与 UART0..3 同一条分支。
+             * 尾指针来自 hc32f460_uart_get_bytes_cnt()，数据来自 uart_recv() → gUartParams[4/5/6].recvbuf。
+             * 之前缺这三个 case，直接掉 default 打 "read--invalid interface number"，RX 永远取不到字节。 */
             int intuid = s - COMMON_INTERFACE_UART_BASE;
             commonUartParaLocal *uartpara = &gUartParams[intuid];
 
@@ -946,6 +958,24 @@ int write(int s, const void *buf, uint32 len)
             }
 
             ret = uart_send(intuid, buf, len, uartpara->basepara.t485);
+            break;
+        }
+
+        case COMMON_INTERFACE_RS485_1:
+        case COMMON_INTERFACE_RS485_2:
+        case COMMON_INTERFACE_RS485_3:
+        {
+            /* RS485_1/2/3 的 TX 只能走 Uart_RS485_send()（usart_driver.c:115 有独立 switch，认 104/105/106）；
+             * 不能走 uart_send() —— 它只认 0..3，传 4/5/6 会一个字节都不发却返回 len（静默假成功）。
+             * 与 alarm.c / mqtt_interface.c / radar_link.c 同一入口。
+             * 用途：radar_ota.c -> ota_dist.c 的 io_write() 就是 write(RADAR_OTA_IFACE=104, ...)（原来必失败）。 */
+            if (gUartParams[s - COMMON_INTERFACE_UART_BASE].isOpen == 0)
+            {
+                TRACE("write--uart is not open\n");
+                return -1;
+            }
+
+            ret = Uart_RS485_send(s, buf, len);
             break;
         }
 

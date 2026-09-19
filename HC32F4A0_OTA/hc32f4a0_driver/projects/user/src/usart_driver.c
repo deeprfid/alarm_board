@@ -21,6 +21,16 @@ volatile uint16_t  uart2reccount = 0;
 volatile uint16_t  uart3reccount = 0;
 volatile uint16_t  uart4reccount = 0;
 
+/* RS485_1/2/3 = COMMON_INTERFACE_RS485_1/2/3(104/105/106) = gUartParams 下标 4/5/6。
+ * RX 中断（rs485_1/2/3.c）按 rs485_Nreccount 当写指针填这三个缓冲；
+ * 用静态数组而非 malloc_hexp：中断里挂 NULL 缓冲会直接 HardFault，静态数组上电即有效。 */
+uint8_t gRs485_1RecvBuf[MAX_RS485_1_BUF_SIZE];
+uint8_t gRs485_2RecvBuf[MAX_RS485_2_BUF_SIZE];
+uint8_t gRs485_3RecvBuf[MAX_RS485_3_BUF_SIZE];
+volatile uint16_t  rs485_1reccount = 0;
+volatile uint16_t  rs485_2reccount = 0;
+volatile uint16_t  rs485_3reccount = 0;
+
 
 void INTC_IrqInstalHandler(const stc_irq_signin_config_t *pstcConfig, uint32_t u32Priority)
 {
@@ -85,14 +95,31 @@ int hc32f460_uart_init(uart_cfg_para_st *ucpst)
     }
     else if(ucpst->uartid == 4)
     {
+        /* 注意顺序：先挂缓冲、再 uart_rs485_Init()（它里面才使能 RX 中断），
+         * 否则第一个字节进来时 recvbuf 还是 NULL。 */
+        gUartParams[ucpst->uartid].recvbuf = gRs485_1RecvBuf;
+        gUartParams[ucpst->uartid].recvbufsize = MAX_RS485_1_BUF_SIZE;
+        gUartParams[ucpst->uartid].uart_head = 0;
+        gUartParams[ucpst->uartid].uart_tail = 0;
+        rs485_1reccount = 0;
         uart_rs485_Init(ucpst);
     }
     else if(ucpst->uartid == 5)
     {
+        gUartParams[ucpst->uartid].recvbuf = gRs485_2RecvBuf;
+        gUartParams[ucpst->uartid].recvbufsize = MAX_RS485_2_BUF_SIZE;
+        gUartParams[ucpst->uartid].uart_head = 0;
+        gUartParams[ucpst->uartid].uart_tail = 0;
+        rs485_2reccount = 0;
         uart8_Init(ucpst);
     }
     else if(ucpst->uartid == 6)
     {
+        gUartParams[ucpst->uartid].recvbuf = gRs485_3RecvBuf;
+        gUartParams[ucpst->uartid].recvbufsize = MAX_RS485_3_BUF_SIZE;
+        gUartParams[ucpst->uartid].uart_head = 0;
+        gUartParams[ucpst->uartid].uart_tail = 0;
+        rs485_3reccount = 0;
         uart5_Init(ucpst);
     }
     else
@@ -198,6 +225,20 @@ int hc32f460_uart_get_bytes_cnt(int uartid, int isrdma)
     else if(uartid == 3)
     {
         return uart4reccount;
+    }
+    /* RS485_1/2/3（104/105/106）→ 下标 4/5/6：返回各自的写指针当尾指针。
+     * 原来落到 else return 0，read() 永远认为"没数据"。 */
+    else if(uartid == 4)
+    {
+        return (int)rs485_1reccount;
+    }
+    else if(uartid == 5)
+    {
+        return (int)rs485_2reccount;
+    }
+    else if(uartid == 6)
+    {
+        return (int)rs485_3reccount;
     }
     else
         return 0;
@@ -315,6 +356,21 @@ int hc32f460_uart_clear_buf(int uartid, int isrdma)
         uart4reccount = 0;
         return 0;
     }
+    else if(uartid == 4)
+    {
+        rs485_1reccount = 0;
+        return 0;
+    }
+    else if(uartid == 5)
+    {
+        rs485_2reccount = 0;
+        return 0;
+    }
+    else if(uartid == 6)
+    {
+        rs485_3reccount = 0;
+        return 0;
+    }
     else
         return -1;
 }
@@ -346,6 +402,21 @@ int  hc32f460_init_uart_close(int uartid)
     {
         USART_FuncCmd(USART4_UNIT, USART_RX, DISABLE);
         USART_FuncCmd(USART4_UNIT, USART_TX, DISABLE);
+        return 0;
+    }
+    else if(uartid == 4)
+    {
+        USART_FuncCmd(USART_RS485_1, (USART_RX | USART_TX | USART_INT_RX), DISABLE);
+        return 0;
+    }
+    else if(uartid == 5)
+    {
+        USART_FuncCmd(USART_RS485_2, (USART_RX | USART_TX | USART_INT_RX), DISABLE);
+        return 0;
+    }
+    else if(uartid == 6)
+    {
+        USART_FuncCmd(USART_RS485_3, (USART_RX | USART_TX | USART_INT_RX), DISABLE);
         return 0;
     }
     else

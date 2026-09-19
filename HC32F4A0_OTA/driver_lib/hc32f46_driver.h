@@ -185,6 +185,10 @@ void firmware_version(uint8 *version);
 
 //void *align8byte(void *addr, int size, int *newsize);
 void wait_fin_init(void);
+/* app 侧（user_main.c:64）实现的"等系统初始化完成"：gIsFinInit==1 才返回。
+ * 符号由 app 提供（驱动 lib 里没有），但 radar_link.c / send_tags 都要用它，
+ * 在此声明以免隐式声明（radar_link.c 原来报 warning #223-D）。 */
+void wait_init_ok(void);
 
 void pre_DNS_init(void);
 void aft_DNS_run(void);

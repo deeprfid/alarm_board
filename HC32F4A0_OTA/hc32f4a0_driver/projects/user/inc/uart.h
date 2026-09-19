@@ -15,6 +15,13 @@
 #define MAX_UART2_BUF_SIZE 2048
 #define MAX_UART3_BUF_SIZE 1536
 
+/* RS485_1/2/3（COMMON_INTERFACE_RS485_1/2/3 = 104/105/106，即 gUartParams 下标 4/5/6）的 RX 缓冲。
+ * 与 UART0..3 同一套模型：RX 中断按 rs485_Nreccount 当写指针填 recvbuf，
+ * hc32f460_uart_get_bytes_cnt() 把该写指针当尾指针返回，read()/uart_recv() 按 head/tail 取数。 */
+#define MAX_RS485_1_BUF_SIZE 2048
+#define MAX_RS485_2_BUF_SIZE 2048
+#define MAX_RS485_3_BUF_SIZE 2048
+
 #define USART1_UNIT                      (CM_USART4)
 #define USART2_UNIT                      (CM_USART1)
 #define USART3_UNIT                      (CM_USART2)
@@ -32,6 +39,13 @@ extern volatile uint16_t  uart1reccount;
 extern volatile uint16_t  uart2reccount;
 extern volatile uint16_t  uart3reccount;
 extern volatile uint16_t  uart4reccount;
+
+extern uint8_t gRs485_1RecvBuf[];
+extern uint8_t gRs485_2RecvBuf[];
+extern uint8_t gRs485_3RecvBuf[];
+extern volatile uint16_t  rs485_1reccount;
+extern volatile uint16_t  rs485_2reccount;
+extern volatile uint16_t  rs485_3reccount;
 
 typedef struct
 {

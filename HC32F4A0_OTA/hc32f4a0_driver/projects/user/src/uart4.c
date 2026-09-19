@@ -45,7 +45,9 @@ static void USART4_RxFull_IrqCallback(void)
 static void USART4_RxError_IrqCallback(void)
 {
     (void)USART_ReadData(USART4_UNIT);
-	   uart_err_clear(2);
+    /* 本文件是 id 3（COMMON_INTERFACE_UART3 / USART4_UNIT=CM_USART10，模块口），
+     * 原来传的 2 会去清 COMMON_INTERFACE_UART2 的读指针（uart3.c 拷过来的手误）。 */
+    uart_err_clear(3);
 
     USART_ClearStatus(USART4_UNIT, (USART_FLAG_PARITY_ERR | USART_FLAG_FRAME_ERR | USART_FLAG_OVERRUN));
 }
