@@ -370,8 +370,38 @@ App 自己 `BSP_CLK_Init()` 配到 PLL 200MHz；跳转前 `boot_jump()` 把时�
 | 配置顺序 | 与 App 的 `BSP_CLK_Init()`（**本板实测能跑**）逐行同序 |
 | 参数 | `CLK_XTAL_MD_OSC/DRV_ULOW/ON/STB_2MS`、`PLLM=1/PLLN=50/PLLP=2/PLLQ=2/PLLR=2/PLLSRC=XTAL` —— 完全相同 |
 
-**同一套配置 App 能跑、Boot 不能** —— 至今无法从代码解释。**再试必须分步，每步上板验证**：
+**同一套配置 App 能跑、Boot 不能** —— 至今无法从代码解释。
 
+**2026-09-19 补充：上面的三项比对【漏了一处真实差异】。** 重新逐行读量产 `boot_iap` 的 `SystemClockConfig()`
+（`HC32F4A0_OTA/Scanner_20260901/boot_iap/source/main.c:43-96`）发现，它里面有 **3 处 `SWDT_FeedDog()`**：
+
+| 位置 | boot_iap 原文 | 说明 |
+| --- | --- | --- |
+| 等 PLL 稳定【之前】 | `SWDT_FeedDog(); while (SET != CLK_GetStableStatus(CLK_STB_FLAG_PLL)) {;}` | 进死循环前先喂一次 |
+| 等 PLL 稳定【之后】 | `SWDT_FeedDog();` | 出来再喂一次 |
+| `main()` 里配置完立刻 | `SWDT_FeedDog();` 注释「立即喂狗（对照 App/driver main）」 | 在 `LL_PERIPH_WP` 前后 |
+
+原比对表只比了**引脚 / 顺序 / 参数**三类，**没比喂狗** —— 而 ICG（`ICG_REG_CFG0_CONST`）在复位后是**带 SWDT 预装**的。
+**但注意：这一条暂不能定为根因** —— 按 ICG 取值反推（`SWDT_CNT_PERIOD65536` + `CLK/2048`），SWDT 周期是**秒级**，
+比 XTAL 起振（`CLK_XTAL_STB_2MS`）+ PLL 锁定的耗时长了几个数量级，未必够得着。**要坐实只能上板测**：
+按下面的第 1 步加时钟后，若现象从「不运行」变成「周期性重启」，就是它。
+
+**另一处结构性风险（这一条比喂狗更值得警惕）**：`BSP_CLK_Init()` / `SystemClockConfig()` 等 PLL 稳定用的是
+**没有超时的死循环**：
+
+```c
+while (SET != CLK_GetStableStatus(CLK_STB_FLAG_PLL)) { ; }
+```
+
+PLL 一旦不锁，CPU 就**永远停在这里** —— 没有任何逃生路径，**也不会亮灯**（LED 初始化在其后），
+现场表现就是「上电不运行、绿灯都不亮」，**并且连"是复位还是挂死"都分不出来**。
+当前这版 Boot（跑 HRC）没有这个单点故障。**所以再试时必须先给这个等待加超时 + 失败点亮红灯**，
+否则又会回到「只能靠猜」的状态。
+
+**再试必须分步，每步上板验证**：
+
+0. **（新增·前置条件）** 先给「等 PLL 稳定」加超时 + 失败走 LED 报错；并按 boot_iap 补上 3 处 `SWDT_FeedDog()`。
+   这一步不改时钟，只保证**以后每一步失败都看得见**，否则又是黑盒。
 1. 只加 `GPIO_AnalogCmd(PH0/PH1)` + `CLK_XtalInit`（**不开 PLL**）
 2. 再加 `CLK_PLLInit` + 等 PLL 稳定
 3. 再加 `SRAM/EFM/GPIO` 等待周期 + `PWC_HighSpeedToHighPerformance` + 切 PLL 源
