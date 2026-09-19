@@ -1,0 +1,75 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Windows;
+using System.Windows.Controls;
+
+public partial class MainWindow : Window
+{
+    private UdpClient udpClient;
+    private IPEndPoint remoteEP;
+
+    public MainWindow()
+    {
+        InitializeComponent();
+
+        udpClient = new UdpClient(12345); // 指定UDP端口号
+        remoteEP = new IPEndPoint(IPAddress.Any, 0);
+
+        // 开始接收UDP数据
+        udpClient.BeginReceive(new AsyncCallback(ReceiveCallback), null);
+    }
+
+    private void ReceiveCallback(IAsyncResult ar)
+    {
+        byte[] receivedBytes = udpClient.EndReceive(ar, ref remoteEP);
+        string receivedData = Encoding.ASCII.GetString(receivedBytes);
+
+        // 更新UI线程上的控件
+        Dispatcher.Invoke(() =>
+        {
+            // 将接收到的UDP数据显示在TextBox中
+            textBox.Text = receivedData;
+        });
+
+        // 继续接收下一条UDP数据
+        udpClient.BeginReceive(new AsyncCallback(ReceiveCallback), null);
+    }
+}
+
+/////////////////////////////////////////////////////////////
+using Windows.UI.Xaml.Controls;
+using System.Net;
+using System.Net.Sockets;
+using System.Threading.Tasks;
+
+namespace UdpExample
+{
+    public sealed partial class MainPage : Page
+    {
+        public MainPage()
+        {
+            this.InitializeComponent();
+            StartListening();
+        }
+
+        private async void StartListening()
+        {
+            UdpClient udpClient = new UdpClient(1234); // Listen on port 1234
+            while (true)
+            {
+                UdpReceiveResult result = await udpClient.ReceiveAsync();
+                string receivedData = System.Text.Encoding.UTF8.GetString(result.Buffer);
+                UpdateUI(receivedData);
+            }
+        }
+
+        private async void UpdateUI(string data)
+        {
+            await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+            {
+                udpDataTextBlock.Text = data;
+            });
+        }
+    }
+}

@@ -1,0 +1,19 @@
+﻿<Window x:Class="ReaderManager.SuccessWnd"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{DynamicResource Msg_Title}" 
+        Height="85" Width="300"
+        WindowStartupLocation="Manual"
+        ResizeMode="NoResize">
+
+
+    <Grid>
+        <Label x:Name="lbTip"  HorizontalAlignment="Center"
+                   VerticalAlignment="Top"        
+                   HorizontalContentAlignment="Center"
+                   VerticalContentAlignment="Center"
+                   Foreground="{DynamicResource MahApps.Brushes.AccentBase}"
+                   FontSize="16"/>
+    </Grid>
+</Window>
+

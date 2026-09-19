@@ -1,0 +1,57 @@
+              <TextBox  Grid.Row="10"  Grid.Column="1" 
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Left"
+                             Width="200"
+                          HorizontalContentAlignment="Center"
+                            BorderBrush="#600E3193"
+                             mah:TextBoxHelper.ClearTextButton="True"
+                             mah:TextBoxHelper.IsWaitingForData="True"
+                             mah:TextBoxHelper.UseFloatingWatermark="True"
+                             mah:TextBoxHelper.Watermark="请输入IP/串口号"
+                             mah:TextBoxHelper.WatermarkAlignment="Right"
+                             SpellCheck.IsEnabled="True"
+                             ToolTip="Default alignment">
+                </TextBox>
+                
+                
+                
+                
+<SolidColorBrush x:Key="PrimaryHueLightBrush" Color="#349fda"/>
+            <SolidColorBrush x:Key="PrimaryHueLightForegroundBrush" Color="#333333"/>
+            <SolidColorBrush x:Key="PrimaryHueMidBrush" Color="#0288d1"/>
+            <SolidColorBrush x:Key="PrimaryHueMidForegroundBrush" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="PrimaryHueDarkBrush" Color="#015f92"/>
+            <SolidColorBrush x:Key="PrimaryHueDarkForegroundBrush" Color="#FFFFFF"/>
+            <!--ACCENT-->
+            <SolidColorBrush x:Key="SecondaryAccentBrush" Color="#689f38"/>
+            <SolidColorBrush x:Key="SecondaryAccentForegroundBrush" Color="#FFFFFF"/>
+            
+            
+            
+            
+
+
+ <RadioButton GroupName="GW1" 
+                                 Height="30"
+                                 Content="单天线"
+                                 FontSize="13"
+                             IsChecked="True"
+                             IsEnabled="True" />
+                    <RadioButton GroupName="GW1" Margin="25, 0, 0, 0"
+                                 Height="30"
+                                 Content="四天线"
+                                 FontSize="13"
+                             IsChecked="False"
+                             IsEnabled="True" />
+                    <RadioButton GroupName="GW1" Margin="25, 0, 0, 0"
+                                 Height="30"
+                                 Content="八天线"
+                                 FontSize="13"
+                             IsChecked="False"
+                             IsEnabled="True" />
+                    <RadioButton GroupName="GW1" Margin="25, 0, 0, 0"
+                                 Height="30"
+                                 Content="十六单天线"
+                                 FontSize="13"
+                             IsChecked="False"
+                             IsEnabled="True" />

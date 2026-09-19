@@ -1,0 +1,177 @@
+﻿<UserControl x:Class="ReaderManager.ParamStoreView"
+          xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+          xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+          xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+          xmlns:local="clr-namespace:ReaderManager" 
+          xmlns:sys="clr-namespace:System;assembly=mscorlib"
+          xmlns:local_Models="clr-namespace:ReaderManager.Models"
+          xmlns:mah="clr-namespace:MahApps.Metro.Controls;assembly=MahApps.Metro"
+          xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"  
+          xmlns:controlzex="urn:controlzex" 
+          xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
+          mc:Ignorable="d" 
+          d:DesignHeight="450" d:DesignWidth="800">
+    <UserControl.Resources>
+        <x:Array x:Key="Qos" Type="{x:Type sys:String}">
+            <sys:String>QOS0</sys:String>
+            <sys:String>QOS1</sys:String>
+            <sys:String>QOS2</sys:String>
+        </x:Array>
+    </UserControl.Resources>
+    <Grid>
+        <Grid x:Name="gdMain" Cursor="" >
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" >
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="50*"/>
+                    <ColumnDefinition Width="50*"/>
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0">
+                    <Label Content="{DynamicResource Mqtt_HostAddress}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0"/>
+                    <TextBox x:Name="tbAddress" Style ="{StaticResource paramTextBoxStyle}" Width="150" HorizontalAlignment="Center" />
+                </Grid>
+                <Grid Grid.Column="1">
+                    <Label Content="{DynamicResource Mqtt_PortNumber}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0"/>
+                    <TextBox x:Name="tbPort"  Style ="{StaticResource paramTextBoxStyle}" Width="150" HorizontalAlignment="Center"/>
+                </Grid>
+            </Grid>
+
+            <Grid Grid.Row="1" >
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="50*"/>
+                    <ColumnDefinition Width="50*"/>
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0">
+                    <Label Content="{DynamicResource Mqtt_Username}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0"/>
+                    <TextBox x:Name="tbUser" Style ="{StaticResource paramTextBoxStyle}" Width="150"  HorizontalAlignment="Center" />
+                </Grid>
+                <Grid Grid.Column="1">
+                    <Label Content="{DynamicResource Mqtt_Password}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0"/>
+                    <TextBox x:Name="tbPwd"  Style ="{StaticResource paramTextBoxStyle}"  Width="150" HorizontalAlignment="Center" Cursor=""/>
+                </Grid>
+            </Grid>
+
+            <Grid Grid.Row="2" >
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="50*"/>
+                    <ColumnDefinition Width="50*"/>
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0">
+                    <Label Content="{DynamicResource ParamSettings_mqtt_storecode}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0"/>
+                    <TextBox x:Name="tbStoreCode" Style ="{StaticResource paramTextBoxStyle}" Width="150"  HorizontalAlignment="Center" />
+                </Grid>
+                <Grid Grid.Column="1">
+                    <Label Content="{DynamicResource ParamSettings_mqtt_storetype}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0"/>
+                    <TextBox x:Name="tbStoreType"  Style ="{StaticResource paramTextBoxStyle}" Text="SHOP" Width="150" HorizontalAlignment="Center" Cursor=""/>
+                </Grid>
+            </Grid>
+
+            <Grid Grid.Row="3" >
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="50*"/>
+                    <ColumnDefinition Width="50*"/>
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0">
+                    <Label Content="{DynamicResource ParamSettings_mqtt_devicetype}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0"/>
+                    <TextBox x:Name="tbDeviceType" Style ="{StaticResource paramTextBoxStyle}" Text="ANTI_THEFT" Width="150"  HorizontalAlignment="Center" />
+                </Grid>
+                <Grid Grid.Column="1">
+                    <Label Content="{DynamicResource ParamSettings_mqtt_devicesn}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0"/>
+                    <TextBox x:Name="tbDeviceSn"  Style ="{StaticResource paramTextBoxStyle}"  Width="150" HorizontalAlignment="Center" Cursor=""/>
+                </Grid>
+            </Grid>
+
+            <Grid Grid.Row="4" >
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="50*"/>
+                    <ColumnDefinition Width="50*"/>
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0">
+                    <Label Content="{DynamicResource ParamSettings_mqtt_devicemodel}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0"/>
+                    <TextBox x:Name="tbDeviceModel" Style ="{StaticResource paramTextBoxStyle}" Text="CL501" Width="150"  HorizontalAlignment="Center" />
+                </Grid>
+                <Grid Grid.Column="1">
+                    <Label Content="{DynamicResource ParamSettings_mqtt_devicebrand}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0"/>
+                    <TextBox x:Name="tbBrand"  Style ="{StaticResource paramTextBoxStyle}"  Width="150" HorizontalAlignment="Center" Cursor=""/>
+                </Grid>
+            </Grid>
+            <Grid Grid.Row="5" >
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="50*"/>
+                    <ColumnDefinition Width="50*"/>
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0">
+                    <Label Content="{DynamicResource ParamSettings_mqtt_software}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0"/>
+                    <TextBox x:Name="tbSoftware" Style ="{StaticResource paramTextBoxStyle}" Width="150"  HorizontalAlignment="Center" IsEnabled="False" />
+                </Grid>
+                <Grid Grid.Column="1">
+                    <Label Content="{DynamicResource ParamSettings_mqtt_staff}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0"/>
+                    <TextBox x:Name="tbStaff"  Style ="{StaticResource paramTextBoxStyle}"  Width="150" HorizontalAlignment="Center" Cursor=""/>
+                </Grid>
+            </Grid>
+            <Grid Grid.Row="6" >
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="50*"/>
+                    <ColumnDefinition Width="50*"/>
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0">
+                    <Label Content="{DynamicResource ParamSettings_mqtt_softname}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0"/>
+                    <TextBox x:Name="tbSoftname" Style ="{StaticResource paramTextBoxStyle}" Width="150"  HorizontalAlignment="Center" />
+                </Grid>
+                <Grid Grid.Column="1">
+                    <Label Content="{DynamicResource ParamSettings_mqtt_remake}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0"/>
+                    <TextBox x:Name="tbRemark"  Style ="{StaticResource paramTextBoxStyle}"  Width="150" HorizontalAlignment="Center" Cursor=""/>
+                </Grid>
+            </Grid>
+         
+
+            <Grid Grid.Row="7" Margin="0,15,0,0" Cursor="">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="50*"/>
+                    <ColumnDefinition Width="50*"/>
+                </Grid.ColumnDefinitions>
+                <Grid Grid.Column="0">
+                    <Button x:Name="btnGet" Style="{StaticResource AccentSettingButtonStyle}" Content="{DynamicResource ParamSettings_button_get}" Grid.Column="0" VerticalAlignment="Center" Width="70" Click="btnGet_Click" FontWeight="Normal"/>
+                </Grid>
+                <Grid Grid.Column="1">
+                    <Button x:Name="btnSet" Style="{StaticResource AccentSettingButtonStyle}" Content="{DynamicResource ParamSettings_button_set}" Grid.Column="1"  VerticalAlignment="Center"  Width="70" Click="btnSet_Click" FontWeight="Normal"/>
+                </Grid>
+
+            </Grid>
+            <Grid Grid.Row="8" >
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="50*"/>
+                    <ColumnDefinition Width="50*"/>
+                </Grid.ColumnDefinitions>
+                <Grid Grid.Column="0">
+                    <Label  Style="{StaticResource paramLabelStyle}" FontSize="13" Content="{DynamicResource ParamSettings_ParamInter_ipaddr}" HorizontalAlignment="Left" Margin="2,10,0,0" HorizontalContentAlignment="Center"  />
+                    <ComboBox x:Name="cbDevIp" Style="{StaticResource paramComboBoxStyle}"   IsEnabled="{Binding EnableFreqHopMode}"  Width="140" VerticalAlignment="Center" HorizontalAlignment="Center" IsEditable="True" />
+                </Grid>
+                <Grid Grid.Column="1">
+                    <TextBox x:Name="tbResult" Text="" VerticalAlignment="Center" Width="389" FontSize="20" BorderThickness="0,0,0,0" controlzex:KeyboardNavigationEx.AlwaysShowFocusVisual="True" HorizontalContentAlignment="Center" HorizontalAlignment="Center" />
+                </Grid>
+            </Grid>
+
+        </Grid>
+    </Grid>
+</UserControl>

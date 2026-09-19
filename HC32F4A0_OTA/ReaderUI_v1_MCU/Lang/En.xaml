@@ -1,0 +1,789 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:system="clr-namespace:System;assembly=mscorlib">
+
+    <system:String x:Key="HamburgerMenu_devconnect">Connect</system:String>
+    <system:String x:Key="HamburgerMenu_settings">Settings</system:String>
+    <system:String x:Key="HamburgerMenu_inventory">Inventory</system:String>
+    <system:String x:Key="HamburgerMenu_tagop">Tag Access</system:String>
+    <system:String x:Key="HamburgerMenu_firmwareload">Firmware</system:String>
+    <system:String x:Key="HamburgerMenu_tools">Tools</system:String>
+    <system:String x:Key="HamburgerMenu_peripherals">Peripherals</system:String>
+    <system:String x:Key="HamburgerMenu_activemode">Auto Mode</system:String>
+
+    <system:String x:Key="Connect_unknown">Unknown</system:String>
+    <system:String x:Key="Connect_label_mainboardtype">Mainboard Type</system:String>
+    <system:String x:Key="Connect_button_connecttip">Click to connect reader</system:String>
+    <system:String x:Key="Connect_button_disconnecttip">Click to disconnect reader</system:String>
+    
+    <system:String x:Key="Connect_label_hwinfo">Hardware Information</system:String>
+    <system:String x:Key="Connect_label_modtype">RFID Module</system:String>
+    <system:String x:Key="Connect_label_verinfo">Version Information</system:String>
+    <system:String x:Key="Connect_label_hwversion">Module Hardware</system:String>
+    <system:String x:Key="Connect_label_swversion">Module Software</system:String>
+    <system:String x:Key="Connect_label_mainboard_hwversion">Mainboard Hardware</system:String>
+    <system:String x:Key="Connect_label_mainboard_swversion">Mainboard Software</system:String>
+    <system:String x:Key="Connect_label_unknown">Unknown</system:String>
+    <system:String x:Key="Connect_label_connectsetting">Connection Settings</system:String>
+    <system:String x:Key="Connect_label_ipaddr">IP/Serial Port Number</system:String>
+    <system:String x:Key="Connect_label_ip">IP</system:String>
+    <system:String x:Key="Connect_label_com">Serial Port Number</system:String>
+    <system:String x:Key="Connect_label_devtype">Device Type</system:String>
+    <system:String x:Key="Connect_textbox_iphint">The default IP is 192.168.1.100</system:String>
+    <system:String x:Key="Connect_combobox_devhint">The number of antenna ports</system:String>
+
+    <system:String x:Key="Connect_label_software">Software Version</system:String>
+    <system:String x:Key="Connect_label_software_VersionUpdates">Download the latest version</system:String>
+    
+    <x:Array x:Key="List_DevAntPortType" Type="system:String">
+        <system:String>1 Antenna</system:String>
+        <system:String>2 Antennas</system:String>
+        <system:String>4 Antennas</system:String>
+        <system:String>8 Antennas</system:String>
+        <system:String>16 Antennas</system:String>
+    </x:Array>
+    <x:Array x:Key="quickModeType" Type="system:String">
+        <system:String>Fast Mode-Standard</system:String>
+        <system:String>Fast Mode-Reading Distance</system:String>
+        <system:String>Fast Mode-Reading Count</system:String>
+        <system:String>Ex10 Fast Mode</system:String>
+    </x:Array>
+
+    <system:String x:Key="Inventory_listview_colum_tabamount">Number of labels read</system:String>
+    <system:String x:Key="Inventory_listview_colum_tabcount">Number of times a label was read</system:String>
+    <system:String x:Key="Inventory_listview_colum_tabtime">Tag reading time</system:String>
+
+    <system:String x:Key="Inventory_listview_colum_StartInventory">Start Inventory</system:String>
+    <system:String x:Key="Inventory_listview_colum_StopInventory">Stop Inventory</system:String>
+    <system:String x:Key="Inventory_listview_colum_ClearData">Clear Inventory Results</system:String>
+    <system:String x:Key="Inventory_listview_colum_ExportData">Export Inventory Results in XLSX Format</system:String>
+
+    <system:String x:Key="Inventory_listview_colum_epc">EPC</system:String>
+    <system:String x:Key="Inventory_listview_colum_readcount">Reads</system:String>
+    <system:String x:Key="Inventory_listview_colum_ant">Ant</system:String>
+    <system:String x:Key="Inventory_listview_colum_bankdata">Bank Data</system:String>
+    <system:String x:Key="Inventory_listview_colum_prot">Prot</system:String>
+    <system:String x:Key="Inventory_listview_colum_freq">Freq</system:String>
+
+
+
+    <system:String x:Key="ParamSettings_tabitem_setting_ant">Antennas</system:String>
+    <system:String x:Key="ParamSettings_tabitem_setting_inventory">Invenory</system:String>
+    <system:String x:Key="ParamSettings_tabitem_setting_network">Network</system:String>
+    <system:String x:Key="ParamSettings_tabitem_setting_advance">Advance</system:String>
+    <system:String x:Key="ParamSettings_tabitem_setting_eas">EasSetting</system:String>
+
+    <system:String x:Key="ParamSettings_tabitem_setting_white">Alarm list</system:String>
+    <system:String x:Key="ParamSettings_tabitem_setting_tag">Current tag</system:String>
+    <system:String x:Key="ParamSettings_tabitem_setting_log">Alarm log</system:String>
+    <system:String x:Key="ParamSettings_tabitem_setting_mptt">MQTT</system:String>
+    <system:String x:Key="ParamSettings_tabitem_setting_tagdisplay">Tag Display</system:String>
+    <system:String x:Key="TagDisplay_interface">Interface</system:String>
+    <system:String x:Key="TagDisplay_ch_serial">Serial</system:String>
+    <system:String x:Key="TagDisplay_ch_cdc">USB-CDC</system:String>
+    <system:String x:Key="TagDisplay_ch_winusb">WinUSB</system:String>
+    <system:String x:Key="TagDisplay_ch_httptcp">HTTP/TCP</system:String>
+    <system:String x:Key="TagDisplay_addr_hint">Addr (COMx / IP / USB)</system:String>
+    <system:String x:Key="TagDisplay_port_hint">Port</system:String>
+    <system:String x:Key="TagDisplay_btn_start">Start</system:String>
+    <system:String x:Key="TagDisplay_btn_stop">Stop</system:String>
+    <system:String x:Key="TagDisplay_btn_clear">Clear</system:String>
+    <system:String x:Key="TagDisplay_state_idle">Idle</system:String>
+    <system:String x:Key="TagDisplay_col_no">No</system:String>
+    <system:String x:Key="TagDisplay_col_epc">EPC</system:String>
+    <system:String x:Key="TagDisplay_col_reads">Reads</system:String>
+    <system:String x:Key="TagDisplay_col_ant">Ant</system:String>
+    <system:String x:Key="TagDisplay_col_bankdata">Data</system:String>
+    <system:String x:Key="TagDisplay_col_prot">Prot</system:String>
+    <system:String x:Key="TagDisplay_col_rssi">RSSI</system:String>
+    <system:String x:Key="TagDisplay_col_freq">Freq</system:String>
+    <system:String x:Key="TagDisplay_col_phase">Phase</system:String>
+    <system:String x:Key="TagDisplay_col_time">Time</system:String>
+
+
+    <system:String x:Key="ParamSettings_white_listNo">No</system:String>
+    <system:String x:Key="ParamSettings_white_listCode">Epc code</system:String>
+    <system:String x:Key="ParamSettings_white_listMem">Remark</system:String>
+    <system:String x:Key="ParamSettings_white_readfile">Import File</system:String>
+    <system:String x:Key="ParamSettings_white_writefile">Export File</system:String>
+
+    <system:String x:Key="ParamSettings_tag_start">Start</system:String>
+    <system:String x:Key="ParamSettings_tag_stop">Stop</system:String>
+    <system:String x:Key="ParamSettings_tag_listNo">Count</system:String>
+    <system:String x:Key="ParamSettings_tag_listCode">Epc code</system:String>
+    <system:String x:Key="ParamSettings_tag_listFlag">Flag</system:String>
+    <system:String x:Key="ParamSettings_tag_listWhite">Alarm</system:String>
+
+    <system:String x:Key="ParamSettings_eas_leida">Radar range</system:String>
+    <system:String x:Key="ParamSettings_eas_volume">Volume</system:String>
+    <system:String x:Key="ParamSettings_eas_alarmlength">Alarm time</system:String>
+    <system:String x:Key="ParamSettings_eas_alarmthreshold">Alarm Thresh.</system:String>
+    <system:String x:Key="ParamSettings_eas_alarmswitch">Alarm switch</system:String>
+
+    <system:String x:Key="ParamSettings_eas_days">Storage days</system:String>
+    <system:String x:Key="ParamSettings_eas_rule">Filtering rules</system:String>
+    <system:String x:Key="ParamSettings_eas_code">Filter mask</system:String>
+    <system:String x:Key="ParamSettings_eas_address">Address</system:String>
+    <system:String x:Key="ParamSettings_eas_total">Total Tags</system:String>
+    <system:String x:Key="ParamSettings_eas_dtime">System time</system:String>
+    <system:String x:Key="ParamSettings_eas_people">Customer</system:String>
+    <system:String x:Key="ParamSettings_eas_stime">Acc. Time</system:String>
+    <system:String x:Key="ParamSettings_eas_scount">Frequency</system:String>
+    <system:String x:Key="ParamSettings_eas_starttime">Act. Time</system:String>
+    <system:String x:Key="ParamSettings_eas_stoptime">Shutdown Time</system:String>
+    
+    <system:String x:Key="ParamSettings_eas_atotal">Total Alarms</system:String>
+    <system:String x:Key="ParamSettings_eas_devid">Device ID</system:String>
+    <system:String x:Key="ParamSettings_eas_restart">Restart</system:String>
+    <system:String x:Key="ParamSettings_eas_getsucc">Get execution successful</system:String>
+    <system:String x:Key="ParamSettings_eas_getalarmsucc">Get data successful Total:</system:String>
+    
+    <system:String x:Key="ParamSettings_eas_getfail">Get execution failed</system:String>
+    <system:String x:Key="ParamSettings_eas_setsucc">Set execution successful</system:String>
+    <system:String x:Key="ParamSettings_eas_setfail">Set execution failed</system:String>
+    <system:String x:Key="ParamSettings_eas_rebootsucc">Reboot execution successful</system:String>
+    <system:String x:Key="ParamSettings_eas_rebootfail">Reboot execution failed</system:String>
+    <system:String x:Key="ParamSettings_eas_setresult">Not operated</system:String>
+    
+    <system:String x:Key="ParamSettings_eas_listNo">Dev. No</system:String>
+    <system:String x:Key="ParamSettings_eas_listTime">Time</system:String>
+    <system:String x:Key="ParamSettings_eas_listCode">Epc</system:String>
+    <system:String x:Key="ParamSettings_eas_listMem">Remark</system:String>
+    
+    <system:String x:Key="ParamSettings_eas_listSearch">Alarm Data</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule">Epc Tag Filter Rule</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule1">Filter rule1</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule2">Filter rule2</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule3">Filter rule3</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule4">Filter rule4</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule5">Filter rule5</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule6">Filter rule6</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule7">Filter rule7</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule8">Filter rule8</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule9">Filter rule9</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule10">Filter rule10</system:String>
+    <system:String x:Key="ParamSettings_eas_epcstart">Position</system:String>
+    <system:String x:Key="ParamSettings_eas_epcduibi">Match Len.</system:String>
+    <system:String x:Key="ParamSettings_eas_epcvalue">Mask</system:String>
+
+    <system:String x:Key="ParamSettings_eas_logstart">Log Start</system:String>
+    <system:String x:Key="ParamSettings_eas_logend">Log End</system:String>
+    <system:String x:Key="ParamSettings_eas_easflag">Eas Flag</system:String>
+    <system:String x:Key="ParamSettings_eas_easClear">Clear</system:String>
+
+    <system:String x:Key="ParamSettings_mqtt_storecode">WarehouseCode</system:String>
+    <system:String x:Key="ParamSettings_mqtt_storetype">WarehouseType</system:String>
+    <system:String x:Key="ParamSettings_mqtt_devicetype">Device Type</system:String>
+    <system:String x:Key="ParamSettings_mqtt_devicemodel">Device Model</system:String>
+    <system:String x:Key="ParamSettings_mqtt_devicesn">Device Sn</system:String>
+    <system:String x:Key="ParamSettings_mqtt_devicebrand">Device Brand</system:String>
+    <system:String x:Key="ParamSettings_mqtt_software">Software Version</system:String>
+    <system:String x:Key="ParamSettings_mqtt_staff">EmpCode</system:String>
+    <system:String x:Key="ParamSettings_mqtt_softname">Software Name</system:String>
+    <system:String x:Key="ParamSettings_mqtt_remake">Remark</system:String>
+    <system:String x:Key="ParamSettings_mqtt_longitude">Longitude</system:String>
+    <system:String x:Key="ParamSettings_mqtt_latitude">Latitude</system:String>
+
+    <system:String x:Key="ParamSettings_button_get">Get</system:String>
+    <system:String x:Key="ParamSettings_button_set">Set</system:String>
+    <system:String x:Key="ParamSettings_button_test">Test</system:String>
+    <system:String x:Key="ParamSettings_button_set_perpetual">Perpetual Set</system:String>
+    <system:String x:Key="ParamSettings_button_set_clicktoset">Click to Set Parameters</system:String>
+    <system:String x:Key="ParamSettings_button_set_clicktoget">Click to Get Parameters</system:String>
+
+    <system:String x:Key="ParamSettings_button_set_clicktoClear">Clear all parameters and return to passive mode</system:String>
+    <system:String x:Key="ParamSettings_button_set_clicktoChange">Retain the current parameters and switch the device mode</system:String>
+
+    <system:String x:Key="ParamSettings_ParamInv_adddata_toggleswitch_on">Enable Additional Data</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_adddata_toggleswitch_off">Disable Additional Data</system:String>
+
+    <system:String x:Key="ParamSettings_ParamInv_buzzer_on">Trigger the buzzer</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_buzzer_off">Does not trigger the buzzer</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_buzzer_time">Trigger duration(ms)</system:String>
+
+    <system:String x:Key="ParamSettings_ParamInv_adddata_combobox_bank_hint">Bank</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_adddata_combobox_startaddr_hint">Start Address</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_adddata_combobox_blocks_hint">Number of Read Blocks</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_adddata_combobox_pwd_hint">Access Password, Optional</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_adddata_combobox_pwd">Access Password</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_fastmode_toggleswitch_on">Enable Fast Mode</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_fastmode_toggleswitch_off">Disable Fast Mode</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_readdur">Read Cycle(ms)</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_sleepdur">Interval(ms)</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_quickModeType">Fast Mode Type</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_commonparams">Common Parameters of Inventory</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_stopparams_on">Enable Automatic stop count</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_stopparams_off">Disable Automatic stop count</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_hopmode">Hop Mode</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_antdwelltime">Max Dwell Time of Ant</system:String>
+    
+    
+    <system:String x:Key="ParamSettings_ParamInter_ipsettings">IP Settings</system:String>
+    <system:String x:Key="ParamSettings_ParamInter_ipaddr">IP Address</system:String>
+    <system:String x:Key="ParamSettings_ParamInter_subnetmask">Subnet Mask</system:String>
+    <system:String x:Key="ParamSettings_ParamInter_gateway">Gateway</system:String>
+    <system:String x:Key="ParamSettings_ParamInter_tsWirelessSettings_on">Enable Wireless Network</system:String>
+    <system:String x:Key="ParamSettings_ParamInter_tsWirelessSettings_off">Disable Wireless Network</system:String>
+    <system:String x:Key="ParamSettings_ParamInter_authmode">Authentication Mode</system:String>
+    <system:String x:Key="ParamSettings_ParamInter_keytype">Key Type</system:String>
+
+    <system:String x:Key="ParamSettings_ParamAdvance_gen2potlparams">Special Parameters</system:String>
+    <system:String x:Key="ParamSettings_ParamAdvance_gen2writemode">Gen2 Write Mode</system:String>
+    <system:String x:Key="ParamSettings_ParamAdvance_tagdatacache">Tag Data Cache Settings</system:String>
+    <system:String x:Key="ParamSettings_ParamAdvance_tdc_ant">Antenna Uniqueness</system:String>
+    <system:String x:Key="ParamSettings_ParamAdvance_tdc_bank">Bank Data Uniqueness</system:String>
+    <system:String x:Key="ParamSettings_ParamAdvance_tdc_rssi">Record the Highest RSSI</system:String>
+    <system:String x:Key="ParamSettings_ParamAdvance_hoptabandregion">Region and Frequency Hopping Table</system:String>
+    <system:String x:Key="ParamSettings_ParamAdvance_hoptab">Frequency Hopping Table</system:String>
+    <system:String x:Key="ParamSettings_ParamAdvance_region">Working Region</system:String>
+    <system:String x:Key="ParamSettings_ParamAdvance_selall">Select All</system:String>
+
+    <system:String x:Key="TagOpView_Exec">Execute</system:String>
+    <system:String x:Key="TagOpView_ExecuteTip">Click to perform tag operation</system:String>
+    <system:String x:Key="TagOpView_OpCommonParams">Operation Common Parameters</system:String>
+    <system:String x:Key="TagOpView_OpType">Operation Type</system:String>
+    <system:String x:Key="TagOpView_OpAnt">Antenna</system:String>
+    <system:String x:Key="TagOpView_KillPwd">Kill Password,Optional</system:String>
+    <system:String x:Key="TagOpView_AcsPwd">Access Password,Optional</system:String>
+    <system:String x:Key="TagOpView_ReadWriteParams">Read and Write Operation Parameters</system:String>
+    <system:String x:Key="TagOpView_ReadBlkCnt">Block Count, Not Required for Write Operations</system:String>
+    <system:String x:Key="TagOpView_PureReadBlkCnt">Block Count</system:String>
+    <system:String x:Key="TagOpView_PureWriteData">Data to Write</system:String>
+    <system:String x:Key="TagOpView_LockParams">Lock Operation Parameters</system:String>
+    <system:String x:Key="TagOpView_LockObj">Lock Target</system:String>
+    <system:String x:Key="TagOpView_LockType">Lock Type</system:String>
+    <system:String x:Key="TagOpView_DataAndResult">Operation Result/Data to Write</system:String>
+
+    <system:String x:Key="PeripheralView_GPIstatus">GPI Status</system:String>
+    <system:String x:Key="PeripheralView_GPOstatus">GPO Status</system:String>
+    <system:String x:Key="PeripheralView_GPIOstate_High">High</system:String>
+    <system:String x:Key="PeripheralView_GPIOstate_Low">Low</system:String>
+    <system:String x:Key="PeripheralView_ClickToChangeState">Click to change state</system:String>
+    <system:String x:Key="PeripheralView_Psam_SendCmd">Command Sent</system:String>
+    <system:String x:Key="PeripheralView_Psam_RecvCmd">Command Received</system:String>
+    <system:String x:Key="PeripheralView_Psam_bntSend">Send</system:String>
+    <system:String x:Key="PeripheralView_Psam_bntSendTip">Click to send command</system:String>
+    <system:String x:Key="PeripheralView_Psam_PsamSlot">PSAM Card Slot</system:String>
+
+    <x:Array x:Key="List_PeripheralView_PsamSlot" Type="system:String">
+        <system:String>Card Slot 1</system:String>
+        <system:String>Card Slot 2</system:String>
+    </x:Array>
+
+    <system:String x:Key="FirmwareUpdateView_btnGetTip">Click to get the software version</system:String>
+    <system:String x:Key="FirmwareUpdateView_btnUpdate">Update</system:String>
+    <system:String x:Key="FirmwareUpdateView_btnUpdateTip">Click to upgrade firmware</system:String>
+    <system:String x:Key="FirmwareUpdateView_UpdateGuide">Firmware Update Guide</system:String>
+    <system:String x:Key="FirmwareUpdateView_Tip_UpdateFw">Firmware Update</system:String>
+    <system:String x:Key="FirmwareUpdateView_Tip_UpdateFwDetails">Fill in the address of the reader, serial port number (such as com1) or IP address, then click the 'Browse' button to select the firmware file, finally click the 'Update' button and wait for the successful prompt window to pop up. </system:String>
+    <system:String x:Key="FirmwareUpdateView_Tip_GetVer">Getting Firmware Version</system:String>
+    <system:String x:Key="FirmwareUpdateView_Tip_GetVerDetails">Fill in the reader address, serial port number (eg com1) or IP address, and then click the 'Get' button.</system:String>
+    <system:String x:Key="FirmwareUpdateView_UpdateParams">Update Parameters</system:String>
+    <system:String x:Key="FirmwareUpdateView_Parmas_RdAddr">Reader Address</system:String>
+    <system:String x:Key="FirmwareUpdateView_Parmas_FwFile">Firmware File</system:String>
+    <system:String x:Key="FirmwareUpdateView_btnBrowse">Browse</system:String>
+    <system:String x:Key="FirmwareUpdateView_btnBrowse_tip">Click to select firmware file</system:String>
+    <system:String x:Key="FirmwareUpdateView_Progress">Update Progress</system:String>
+    <system:String x:Key="FirmwareUpdateView_FwVersion">Version</system:String>
+    <system:String x:Key="FirmwareUpdateView_UpdFwParams">Update Parameters</system:String>
+    
+    <system:String x:Key="ParamSettings_ParamAnts_datagrid_header_index">#</system:String>
+    <system:String x:Key="ParamSettings_ParamAnts_datagrid_header_readpower">Read Power</system:String>
+    <system:String x:Key="ParamSettings_ParamAnts_datagrid_header_writepower">Write Power</system:String>
+    <system:String x:Key="ParamSettings_ParamAnts_datagrid_header_state">State</system:String>
+    <system:String x:Key="ParamSettings_ParamAnts_datagrid_header_enableinv">in Use</system:String>
+    <system:String x:Key="ParamSettings_ParamAnts_AntInfo_Name">Ant</system:String>
+    <system:String x:Key="ParamSettings_ParamAnts_AntInfo_Connected">Connected</system:String>
+    <system:String x:Key="ParamSettings_ParamAnts_AntInfo_Unconnected">Unconnected</system:String>
+    <system:String x:Key="ParamSettings_ParamAnts_AntInfo_SetAll">Set All</system:String>
+
+    <system:String x:Key="Msg_Title">Attention</system:String>
+	<system:String x:Key="Msg_StartUsing">Enable</system:String>
+    <system:String x:Key="Msg_ErrInfo">error infomation</system:String>
+    <system:String x:Key="Msg_Comma">,</system:String>
+    <system:String x:Key="Msg_Period">.</system:String>
+    <system:String x:Key="Msg_Colon">:</system:String>
+    <system:String x:Key="Msg_PlsSelect">Please selcet</system:String>
+    <system:String x:Key="Msg_PlsInput">Please input</system:String>
+    <system:String x:Key="Msg_Space">&#160;</system:String>
+    <system:String x:Key="Msg_Connect_ConnectFailed">Failed to connect to reader</system:String>
+    <system:String x:Key="Msg_Connect_SelectDevType">Please select the device type</system:String>
+    <system:String x:Key="Msg_Connect_InputRdrAddr">Please input the address of device</system:String>
+    <system:String x:Key="Msg_Connect_GetParamsFailed">Failed to get reader parameters</system:String>
+    <system:String x:Key="Msg_Connect_ReconnectFailed">Failed to reconnect the reader</system:String>
+   
+    <system:String x:Key="Msg_Inventory_ErrorFrquently">Reader error frequency is too high</system:String>
+    <system:String x:Key="Msg_Inventory_StopInvFailed">Failed to stop inventory</system:String>
+    <system:String x:Key="Msg_Inventory_StartInvFailed">Failed to start inventory</system:String>
+    
+    <system:String x:Key="Msg_Params_PowerErr">Incorrect power value, the legal range is</system:String>
+    <system:String x:Key="Msg_Params_SetFailed">Failed to set parameters</system:String>
+    <system:String x:Key="Msg_Params_GetFailed">Failed to get parameters</system:String>
+    <system:String x:Key="Msg_Params_SetSuccess">The setting was successful</system:String>
+    <system:String x:Key="Msg_Params_GetSuccess">The getting was successful</system:String>
+    <system:String x:Key="Msg_Validation_InvalidVal">Invalid Value</system:String>
+    <system:String x:Key="Msg_Validation_InvalidEmpty">Required Field</system:String>
+    <system:String x:Key="Msg_Validation_is">&#160;is&#160;</system:String>
+
+    <system:String x:Key="Msg_ParamSettings_ParamInter_IpFormatErr">IP address format error</system:String>
+    <system:String x:Key="Msg_ParamSettings_ParamInter_KeyTypeLimit">Using the current authentication mode, the key type can only be ASC2</system:String>
+    
+    <system:String x:Key="Msg_Inventory_PlseStopReadTag">Please stop the ReadTag first</system:String>
+    <system:String x:Key="Msg_Inventory_PlseStopInventory">Please stop the inventory first</system:String>
+    <system:String x:Key="Msg_TagOp_RightDataToWrite">The data to write is a hexadecimal string, and the length must be an integer multiple of 4 characters</system:String>
+    <system:String x:Key="Msg_TagOp_TagOpOK">Executed successfully</system:String>
+    <system:String x:Key="Msg_TagOp_TagOpFailed">Failed to execute</system:String>
+
+    <system:String x:Key="Msg_FirmwareUpdateView_SelectFile">Please select a firmware file</system:String>
+    <system:String x:Key="Msg_FirmwareUpdateView_UpdateOK">Firmware updated successfully</system:String>
+    <system:String x:Key="Msg_FirmwareUpdateView_UpdateFailed">Update failed</system:String>
+    
+    <system:String x:Key="FlyView_Bottom_Inv_Title">Statistics</system:String>
+    <system:String x:Key="FlyView_Bottom_Inv_Ant_TagNumber">Tag Count of Ant</system:String>
+    <system:String x:Key="FlyView_Bottom_Inv_Freq_TagNumber">Tag Count of Frequency</system:String>
+    <system:String x:Key="FlyView_Bottom_Inv_Freq">Frequency</system:String>
+    <system:String x:Key="FlyView_Bottom_Inv_TagNumber">Tag Count</system:String>
+    <system:String x:Key="FlyView_Bottom_Inv_Refresh">Refresh</system:String>
+
+    <system:String x:Key="FlyView_Bottom_Potl_Title">Debug Mode</system:String>
+    <system:String x:Key="FlyView_Bottom_Potl_Debug_On">Enable Communication Protocol Debug</system:String>
+    <system:String x:Key="FlyView_Bottom_Potl_Debug_Off">Disable Communication Protocol Debug</system:String>
+    <system:String x:Key="FlyView_Bottom_Potl_PotlData">Communication Protocol Data</system:String>
+
+    <system:String x:Key="FlyView_Bottom_TagFilter_Title">Tag Filter</system:String>
+    <system:String x:Key="FlyView_Bottom_TagFilter_FilterRule">Filter Rule</system:String>
+    <system:String x:Key="FlyView_Bottom_TagFilter_MaskFormat">Mask Format</system:String>
+    <system:String x:Key="FlyView_Bottom_TagFilter_FilterMask">Filter Mask</system:String>
+    <system:String x:Key="FlyView_Bottom_TagFilter_UseInInv">Enable in Inventory</system:String>
+    <system:String x:Key="FlyView_Bottom_TagFilter_UseInTagOp">Enable in Tag Access</system:String>
+    <system:String x:Key="FlyView_Bottom_TagFilter_FilterParams">Parameters of Tag Filter</system:String>
+
+    <system:String x:Key="FlyView_Bottom_LanguageSwitch">Language Switch</system:String>
+
+    <x:Array x:Key="List_FlyBottom_TF_MatchMode" Type="system:String">
+        <system:String>Match</system:String>
+        <system:String>Non-match</system:String>
+    </x:Array>
+    <x:Array x:Key="List_FlyBottom_TF_MatchMode2" Type="system:String">
+        <system:String>Non-match</system:String>
+        <system:String>Match</system:String>
+    </x:Array>
+
+    <x:Array x:Key="List_FlyBottom_TF_MaskFormat" Type="system:String">
+        <system:String>Binary</system:String>
+        <system:String>Hexadecimal</system:String>
+    </x:Array>
+    
+    <x:Array x:Key="List_ParamSettings_ParamInter_KeyType" Type="system:String">
+        <system:String>ASC2</system:String>
+        <system:String>Hexadecimal</system:String>
+    </x:Array>
+
+    <x:Array x:Key="List_ParamSettings_ParamAdvance_wmode" Type="system:String">
+        <system:String>Word Write</system:String>
+        <system:String>Block Write</system:String>
+    </x:Array>
+
+    <x:Array x:Key="List_ParamSettings_ParamAdvance_region" Type="system:String">
+        <system:String>PRC</system:String>
+        <system:String>NA</system:String>
+        <system:String>JP</system:String>
+        <system:String>KR</system:String>
+        <system:String>EU</system:String>
+        <system:String>IN</system:String>
+        <system:String>CN</system:String>
+        <system:String>OPEN</system:String>
+        <system:String>PRC2</system:String>
+    </x:Array>
+
+
+    <x:Array x:Key="List_ParamEasrule_region" Type="system:String">
+        <system:String>matching</system:String>
+        <system:String>mismatching</system:String>
+        <system:String>EAS flag</system:String>
+    </x:Array>
+
+	<x:Array x:Key="List_ParamSettings_ParamAdvance_region2" Type="system:String">
+        <system:String>Unspecified</system:String>
+        <system:String>China</system:String>
+        <system:String>North America</system:String>
+        <system:String>Korea</system:String>
+        <system:String>Europe</system:String>
+        <system:String>China2</system:String>
+        <system:String>Open</system:String>
+        <system:String>India</system:String>
+        <system:String>Japanese</system:String>
+        <system:String>CE_HIGH</system:String>
+        <system:String>Hong Kong</system:String>
+        <system:String>Taiwan</system:String>
+        <system:String>Malaysia</system:String>
+        <system:String>South America</system:String>
+        <system:String>Brazil</system:String>
+        <system:String>Thailand</system:String>
+        <system:String>Singapore</system:String>
+        <system:String>Australian</system:String>
+        <system:String>Uruguay</system:String>
+        <system:String>Vietnam</system:String>
+        <system:String>Israel</system:String>
+        <system:String>the Philippines</system:String>
+        <system:String>Indonesia</system:String>
+        <system:String>New Zealand</system:String>
+        <system:String>Peru</system:String>
+        <system:String>Russia</system:String>
+        <system:String>CE_LOW_HIGH</system:String>
+    </x:Array>
+    
+    <x:Array x:Key="List_TagOpView_OpType" Type="system:String">
+        <system:String>Read Bank</system:String>
+        <system:String>Write Bank</system:String>
+        <system:String>Write EPC</system:String>
+        <system:String>Lock Tag</system:String>
+        <system:String>Kill Tag</system:String>
+    </x:Array>
+    
+    <x:Array x:Key="List_TagOpView_LockType" Type="system:String">
+        <system:String>Unlock</system:String>
+        <system:String>Temporary Lock</system:String>
+        <system:String>Permanent Lock</system:String>
+    </x:Array>
+	<x:Array x:Key="List_DisableorEnable" Type="system:String">
+        <system:String>Disable</system:String>
+        <system:String>Enable</system:String>
+    </x:Array>
+
+
+    <system:String x:Key="ToolsView_tabitem_firmwareupdate">Firmware</system:String>
+    <system:String x:Key="ToolsView_tabitem_vswrcheck">Vswr Check</system:String>
+    <system:String x:Key="ToolsView_tabitem_devsearch">Dev. Search</system:String>
+
+    <system:String x:Key="ToolsView_vswrcheck_checkparams">Parameters</system:String>
+    <system:String x:Key="ToolsView_vswrcheck_chartvswr">Frequency-VSWR</system:String>
+    <system:String x:Key="ToolsView_vswrcheck_checkant">Antenna detected</system:String>
+    <system:String x:Key="ToolsView_vswrcheck_txpower">Tx Power</system:String>
+    <system:String x:Key="ToolsView_vswrcheck_btnGetTip">Click to get the VSWR of the antenna</system:String>
+    <system:String x:Key="ToolsView_vswrcheck_chart_freq">Frequency</system:String>
+    <system:String x:Key="ToolsView_vswrcheck_chart_vswr">VSWR</system:String>
+
+    <system:String x:Key="ToolsView_tabitem_devip">Dev. Ip</system:String>
+    <system:String x:Key="ToolsView_tabitem_devsn">Dev. Sn</system:String>
+    <system:String x:Key="ToolsView_tabitem_devname">Dev. Name</system:String>
+    <system:String x:Key="ToolsView_tabitem_devset">Set Ip</system:String>
+
+    <system:String x:Key="App_language">English</system:String>
+
+
+    <system:String x:Key="Activemode_DataUploadConfiguration">Data Upload Configuration</system:String>
+    <system:String x:Key="Activemode_AdvancedParameterConfiguration">Advanced Parameter Configuration</system:String>
+    <system:String x:Key="Activemode_StaticParameterConfiguration">Static Parameter Configuration</system:String>
+
+
+
+    <system:String x:Key="ActiveMode_ReaderIp"> Reader IP</system:String>
+    <system:String x:Key="ActiveMode_BtnClear">Clear</system:String>
+	<system:String x:Key="ActiveMode_BtnSwitchover">Switchover</system:String>
+    <system:String x:Key="ActiveMode_EssentialParam">Required Parameters</system:String>
+	<system:String x:Key="ActiveMode_WorkState">WorkState</system:String>
+    <system:String x:Key="ActiveMode_WorkState-1">Passive mode</system:String>
+    <system:String x:Key="ActiveMode_WorkState-3">Active mode</system:String>
+	
+    <system:String x:Key="ActiveMode_DataCycle">Data Processing Cycle</system:String>
+    <system:String x:Key="ActiveMode_DataCycle_Describe">50-86400000ms</system:String>
+    <system:String x:Key="ActiveMode_HardwareInterface">Hardware Interface</system:String>
+    <system:String x:Key="ActiveMode_AdvancedParameter">Advanced Parameters</system:String>
+    <x:Array x:Key="ActiveMode_HardwareInterface_Type" Type="system:String">
+        <system:String>Select and Upload Hardware Interface</system:String>
+        <system:String>Ethernet</system:String>
+        <system:String>Serial Port</system:String>
+        <system:String>HID Keyboard</system:String>
+        <system:String>4G</system:String>
+        <system:String>WIFI</system:String>
+        <system:String>Wiegand</system:String>
+        <system:String>WinUSB</system:String>
+    </x:Array>
+
+    <x:Array x:Key="ActiveMode_CommunicationProtocol" Type="system:String">
+        <system:String>Please Select</system:String>
+        <system:String>TCP</system:String>
+        <system:String>HTTP</system:String>
+        <system:String>MQTT</system:String>
+    </x:Array>
+
+    <system:String x:Key="Mqtt_QoS">Please select，default vacant position is QOS0</system:String>
+    <x:Array x:Key="Mqtt_QoSType" Type="system:String">
+        <system:String>Please Select</system:String>
+        <system:String>QOS0</system:String>
+        <system:String>QOS1</system:String>
+        <system:String>QOS2</system:String>
+    </x:Array>
+    <system:String x:Key="Mqtt_Arguments">Mqtt parameter</system:String>
+    <system:String x:Key="Mqtt_HostAddress">Host Address</system:String>
+    <system:String x:Key="Mqtt_PortNumber">Port Number</system:String>
+    <system:String x:Key="Mqtt_PublishTopic">Publish Topic</system:String>
+    <system:String x:Key="Mqtt_PublishQoS">Publish QoS</system:String>
+    <system:String x:Key="Mqtt_SubscribeTopic">Subscribe Topic</system:String>
+    <system:String x:Key="Mqtt_BroadcastQoS">Subscribe QoS</system:String>
+    <system:String x:Key="Mqtt_UnicastSubscribeTopic">Unicast Subscribe Topic</system:String>
+    <system:String x:Key="Mqtt_UnicastSubscribeQoS">Unicast Subscribe QoS</system:String>
+    <system:String x:Key="Mqtt_KeepaliveTime">Keepalive Time</system:String>
+    <system:String x:Key="Mqtt_Username">User Name</system:String>
+    <system:String x:Key="Mqtt_Password">Password</system:String>
+    <system:String x:Key="Mqtt_EnableTLS">TLS One-Way Authentication</system:String>
+    <system:String x:Key="Mqtt_PleaseEnter48">Please enter, not more than 48 characters.</system:String>
+    <system:String x:Key="Mqtt_PleaseEnter48Null">Please enter, not more than 48 characters; optional.</system:String>
+    <system:String x:Key="Mqtt_PleaseEnter32Null">Please enter, not more than 32 characters; optional.</system:String>
+    <system:String x:Key="Mqtt_PleaseEnterKeepaliveTime">Valid values are between 5 and 86400 seconds, with a default of 60 seconds.</system:String>
+
+    <system:String x:Key="Tcp_Arguments">TCP Parameters</system:String>
+    <system:String x:Key="Tcp_HostAddress">Server Address</system:String>
+    <system:String x:Key="Tcp_PortNumber">Port Number</system:String>
+
+    <system:String x:Key="Http_Arguments">Http parameter</system:String>
+    <system:String x:Key="Http_Url">Upload URL</system:String>
+
+    <x:Array x:Key="Wiegand_InterfaceType" Type="system:String">
+        <system:String>Wiegand 26</system:String>
+        <system:String>Wiegand 34</system:String>
+        <system:String>Wiegand 66</system:String>
+    </x:Array>
+    <x:Array x:Key="Wiegand_OutputFormatType" Type="system:String">
+        <system:String>High Byte First</system:String>
+        <system:String>Low Byte First</system:String>
+    </x:Array>
+    <system:String x:Key="Wiegand_Arguments">Wiegand Parameter</system:String>
+    <system:String x:Key="Wiegand_Interface">Wiegand Interface Type</system:String>
+    <system:String x:Key="Wiegand_PulseWidth">Pulse Width</system:String>
+    <system:String x:Key="Wiegand_PulseInterval">Pulse Interval</system:String>
+    <system:String x:Key="Wiegand_DataOutputInterval">Data Output Interval</system:String>
+    <system:String x:Key="Wiegand_OutputFormat">Output Format</system:String>
+    <system:String x:Key="Wiegand_PleaseEnterInterface">Please select the Wiegand Interface Type</system:String>
+    <system:String x:Key="Wiegand_PleaseEnterPulseWidth">Unit is 10us, valid range is 4-20</system:String>
+    <system:String x:Key="Wiegand_PleaseEnterPulseInterval">Unit is 100us, valid range is为8-200</system:String>
+    <system:String x:Key="Wiegand_PleaseEnterDataOutputInterval">Please enter, unit is milliseconds, default is 250, valid range is 50-1000</system:String>
+
+    <system:String x:Key="GPI_TouchOff">GPI Trigger Operation</system:String>
+    <system:String x:Key="GPI_TriggerMode">Trigger Mode</system:String>
+    <x:Array x:Key="GPI_TriggerModeType" Type="system:String">
+        <system:String>Please select trigger mode</system:String>
+        <system:String>GPI Status 1 triggers start, GPI Status 2 triggers stop</system:String>
+        <system:String>GPI Status 1 triggers start, inventory stops after a fixed duration</system:String>
+        <system:String>GPI Status 1 and GPI Status 2 can both trigger start, inventory stops after a fixed duration</system:String>
+        <system:String>GPI Status 1 triggers start, or GPI Status 2 triggers start; the other GPI status triggers stop</system:String>
+    </x:Array>
+    
+    <system:String x:Key="GPI_GPIStatus1">GPI Status 1</system:String>
+    <system:String x:Key="GPI_GPIStatus2">GPI Status2</system:String>
+    <system:String x:Key="GPI_Enable">Enable</system:String>
+    <system:String x:Key="GPI_DurationOrInvertPersist">Duration/Reverse Duration</system:String>
+
+    <system:String x:Key="GPO_ReadTagGPOTrigger">Tag Read GPO Trigger</system:String>
+    <system:String x:Key="GPO_EnterStatusDuration">Please enter the duration of the status</system:String>
+    <system:String x:Key="GPO5">GPO5(Buzzer)</system:String>
+
+    <system:String x:Key="TagJson"> Tag JSON Format</system:String>
+    <system:String x:Key="Return_FormatType">Format Type</system:String>
+    <system:String x:Key="Return_LabelFieldOption">Tag Field Options</system:String>
+    <system:String x:Key="Return_AdditionalData">Additional Data</system:String>
+    <system:String x:Key="Return_AdditionalData2">Additional Data2</system:String>
+    <system:String x:Key="Return_AdditionalData3">Additional Data3</system:String>
+    <system:String x:Key="Return_AntennaNumber">Antenna Number</system:String>
+    <system:String x:Key="Return_ReadCount">Read Count</system:String>
+    <system:String x:Key="Return_Frequency">Frequency</system:String>
+    <system:String x:Key="Return_TagProtocol">Tag Protocol</system:String>
+    <system:String x:Key="Return_RSSI">RSSI</system:String>
+    <system:String x:Key="Return_ReservedField">Reserve Field</system:String>
+    <system:String x:Key="Return_FirstTimestamp">First Timestamp</system:String>
+    <system:String x:Key="Return_LastTimestamp">Last Timestamp</system:String>
+
+    <system:String x:Key="AdvancedUploadOptions">Advanced Data Upload Options</system:String>
+    <system:String x:Key="ClientConfirmation">Client Confirmation</system:String>
+    <x:Array x:Key="ClientConfirmationType" Type="system:String">
+        <system:String>No Confirmation Message Sent</system:String>
+        <system:String>Confirmation Message Sent</system:String>
+    </x:Array>
+
+    <system:String x:Key="ReplyTimeout">Response Timeout Duration</system:String>
+    <system:String x:Key="OldDataCleanupTime">Old Data Cleanup Time</system:String>
+    <system:String x:Key="BinaryMessageCRC">Binary Message CRC</system:String>
+    <x:Array x:Key="BinaryMessageCRCType" Type="system:String">
+        <system:String>Without crc</system:String>
+        <system:String>With crc</system:String>
+    </x:Array>
+    <system:String x:Key="EventSubscription">Event Subscription</system:String>
+    <system:String x:Key="TagData">Tag Data</system:String>
+    <system:String x:Key="Heartbeat">Heartbeat</system:String>
+    <system:String x:Key="GPIChange">GPI Change</system:String>
+    <system:String x:Key="EmptyData">Empty Data</system:String>
+    <system:String x:Key="TagEnter">Tag Enter</system:String>
+    <system:String x:Key="TimeSync">Time Synchronization</system:String>
+
+    <system:String x:Key="ReaderLogicalName">Reader Logical Name</system:String>
+    <system:String x:Key="ReaderLogicalNameDescribe">Reader Logical Name must be ASCII characters, cannot contain '/', and the length cannot exceed 128 characters</system:String>
+    <system:String x:Key="HeartbeatPeriod">Heartbeat Cycle</system:String>
+    <system:String x:Key="HeartbeatPeriodDescribe">Please enter, valid range is 5-7200 seconds, default value is 10 seconds if left blank</system:String>
+    <system:String x:Key="SendBufferLength">Send Buffer Length</system:String>
+    <system:String x:Key="SendBufferLengthDescribe">Please enter, valid range is 1500-8192 bytes, default value is 1580 bytes if left blank</system:String>
+    <system:String x:Key="CustomParameters">Custom Parameter</system:String>
+    <system:String x:Key="CustomParametersDescribe">Please enter, customized parameter string must be ASCII characters, and the length cannot exceed 64</system:String>
+
+    <system:String x:Key="Ethernet_Settings">Ethernet Setting</system:String>
+    <system:String x:Key="Ethernet_Subnet_Mask">Ethernet Subnet Mask</system:String>
+    <system:String x:Key="Ethernet_Gateway">Ethernet Gateway</system:String>
+    <system:String x:Key="Ethernet_MAC_Address">MAC Address</system:String>
+    <system:String x:Key="Ethernet_MAC_Address_Options">MAC Address Option</system:String>
+    <system:String x:Key="Specify_MAC">Specify MAC</system:String>
+    <system:String x:Key="MAC_Unchanged">MAC Unchange</system:String>
+
+    <system:String x:Key="Bluetooth_Settings">Bluetooth Setting</system:String>
+    <system:String x:Key="Bluetooth_Name">Bluetooth Name</system:String>
+    <system:String x:Key="Bluetooth_Standard_Pairing">Bluetooth Standard Paring</system:String>
+    <system:String x:Key="Bluetooth_Password_Pairing">Custom Password Pairing</system:String>
+    <system:String x:Key="Bluetooth_Default_Disabled">Default Disabled</system:String>
+
+    <system:String x:Key="Advanced_Parameters">Advanced Parameters</system:String>
+    <system:String x:Key="Inventory_and_Tag_Operation_Settings">Inventory and Tag Operation Settings</system:String>
+
+
+    <system:String x:Key="RF_Parameters">RF Parameter</system:String>
+    <system:String x:Key="ParamAdvance_hoptab_describe">Each frequency is separated by underscore</system:String>
+    <system:String x:Key="RS232_Serial_Parameters">RS232 Serial Parameter</system:String>
+    <system:String x:Key="RS485_Serial_Parameters">RS485 Serial Parameter</system:String>
+    
+    <system:String x:Key="Modbus_Address">Modbus address</system:String>
+    <system:String x:Key="Baud_Rate">Baud Rate</system:String>
+    <system:String x:Key="Data_Bits">Data Bits</system:String>
+    <system:String x:Key="Stop_Bits">Stop Bits</system:String>
+    <system:String x:Key="Parity">Verification</system:String>
+    <x:Array x:Key="ParityItems" Type="system:String">
+        <system:String>No Verification</system:String>
+        <system:String>Even Parity</system:String>
+        <system:String>Odd Parity</system:String>
+    </x:Array>
+
+    <system:String x:Key="App_Init_Parameters">Application Initialization Parameters</system:String>
+    <system:String x:Key="Max_Tag_Length">Maximum Tag Length</system:String>
+    <system:String x:Key="Event_Queue_Length">Event Queue Length</system:String>
+    <system:String x:Key="USB_Initial_Type">USB Initial Type</system:String>
+
+    <system:String x:Key="Inventory_Parameters">Inventory Parameters</system:String>
+    <system:String x:Key="Inventory_Cycle">Inventory Cycle</system:String>
+    <system:String x:Key="Inventory_Cycle_Interval">Inventory Cycle Interval</system:String>
+    <system:String x:Key="Working_Antenna">Working Antenna</system:String>
+    <system:String x:Key="Inventory_Mode">Inventory Mode</system:String>
+
+    <system:String x:Key="Tag_Access_Operation_Parameters">Tag Access Operation Parameters</system:String>
+    <system:String x:Key="Operation_Timeout">Operation Timeout Duration</system:String>
+    <system:String x:Key="Operation_Antenna">Operate Antenna</system:String>
+    <system:String x:Key="Access_Password_Description">Please enter a hexadecimal string of length 8; optional.</system:String>
+    <system:String x:Key="Ant_Description">Antennas are separated by commas; if left blank, the reader will auto-detect antennas during self-check</system:String>
+
+    <system:String x:Key="Ant_DurationOfStay">The default value is 0, indicating that the device does not fix the resident time of a single antenna</system:String>
+    <system:String x:Key="SerialPort_Site_Describe">The default vacancy is 2, and the valid value ranges from 1 to 255</system:String>
+    <system:String x:Key="ByteLength_Describe">Read EPC+BANK maximum data length, in bytes, vacancy using the default value of 80</system:String>
+    <system:String x:Key="Event_Queue_Length_Describe">Event queue length. Default value 60 is used for vacancies</system:String>
+    <system:String x:Key="Inventory_Period_Describe">The value ranges from 0 to 65535, in milliseconds. The default vacancy is 150</system:String>
+    <system:String x:Key="Inventory_PeriodInterval_Describe">The value ranges from 0 to 65535, in milliseconds. The default vacancy is 10</system:String>
+
+    <!-- ===== 新增：设备搜索 / 设备详情 / OTA 升级（v2 移植页） ===== -->
+    <system:String x:Key="ToolsView_tabitem_mcuupdate">MCU Firmware Upgrade</system:String>
+
+    <system:String x:Key="DevSearch_networkinterface">Network Interface:</system:String>
+    <system:String x:Key="DevSearch_startsearch">Start Search</system:String>
+    <system:String x:Key="DevSearch_stopsearch">Stop Search</system:String>
+    <system:String x:Key="DevSearch_clear">Clear</system:String>
+    <system:String x:Key="DevSearch_col_no">No.</system:String>
+    <system:String x:Key="DevSearch_col_ip">IP</system:String>
+    <system:String x:Key="DevSearch_col_mac">MAC</system:String>
+    <system:String x:Key="DevSearch_col_boardtype">Board Type</system:String>
+    <system:String x:Key="DevSearch_col_modtype">Module Type</system:String>
+    <system:String x:Key="DevSearch_col_bver">Board Ver.</system:String>
+    <system:String x:Key="DevSearch_col_mver">Module Ver.</system:String>
+    <system:String x:Key="DevSearch_col_wmode">Work Mode</system:String>
+    <system:String x:Key="DevSearch_tip_dblclick">Double-click a device row to open network config</system:String>
+    <system:String x:Key="DevSearch_status_searching">Searching...</system:String>
+    <system:String x:Key="DevSearch_status_found">Found {0} device(s)</system:String>
+    <system:String x:Key="DevSearch_status_done">Search done, found {0} device(s)</system:String>
+    <system:String x:Key="DevSearch_status_done_none">Search done</system:String>
+    <system:String x:Key="DevSearch_msg_selectif">Please select a network interface</system:String>
+    <system:String x:Key="DevSearch_msg_title">Notice</system:String>
+    <system:String x:Key="DevSearch_unknown">Unknown</system:String>
+    <system:String x:Key="DevSearch_passive">Passive</system:String>
+    <system:String x:Key="DevSearch_active">Active</system:String>
+    <system:String x:Key="DevSearch_bootloader">bootloader</system:String>
+
+    <system:String x:Key="DevDetails_title">Device Details</system:String>
+    <system:String x:Key="DevDetails_boardtype">Board Type:</system:String>
+    <system:String x:Key="DevDetails_modtype">Module Type:</system:String>
+    <system:String x:Key="DevDetails_ip">IP:</system:String>
+    <system:String x:Key="DevDetails_bver">Board Ver.:</system:String>
+    <system:String x:Key="DevDetails_mver">Module Ver.:</system:String>
+    <system:String x:Key="DevDetails_mac">MAC:</system:String>
+    <system:String x:Key="DevDetails_workmode">Work Mode:</system:String>
+    <system:String x:Key="DevDetails_statecode">State Code:</system:String>
+    <system:String x:Key="DevDetails_netcfg">Network Settings</system:String>
+    <system:String x:Key="DevDetails_iplabel">IP Address:</system:String>
+    <system:String x:Key="DevDetails_gwlabel">Gateway:</system:String>
+    <system:String x:Key="DevDetails_masklabel">Subnet Mask:</system:String>
+    <system:String x:Key="DevDetails_dnslabel">DNS:</system:String>
+    <system:String x:Key="DevDetails_portlabel">Bind Port:</system:String>
+    <system:String x:Key="DevDetails_dhcp">Enable DHCP</system:String>
+    <system:String x:Key="DevDetails_setmac">Specify MAC Address</system:String>
+    <system:String x:Key="DevDetails_btn_setnet">Set Network</system:String>
+    <system:String x:Key="DevDetails_btn_backpassive">Back to Passive Mode</system:String>
+    <system:String x:Key="DevDetails_set_ok">Set OK</system:String>
+    <system:String x:Key="DevDetails_set_fail">Set Failed</system:String>
+    <system:String x:Key="DevDetails_switch_ok">Switched OK</system:String>
+    <system:String x:Key="DevDetails_switch_fail">Switch Failed</system:String>
+    <system:String x:Key="DevDetails_msg_macerr">MAC address format error, need 12 hex chars</system:String>
+    <system:String x:Key="DevDetails_msg_ipempty">Please enter IP items</system:String>
+    <system:String x:Key="DevDetails_msg_iperr">IP address format error</system:String>
+    <system:String x:Key="DevDetails_msg_maskerr">Subnet mask format error</system:String>
+    <system:String x:Key="DevDetails_msg_gwerr">Gateway format error</system:String>
+    <system:String x:Key="DevDetails_msg_dnserr">DNS format error</system:String>
+    <system:String x:Key="DevDetails_msg_porterr">Bind port input error</system:String>
+
+    <system:String x:Key="Ota_title">MCU Firmware Upgrade (OTA1)</system:String>
+    <system:String x:Key="Ota_devver">Device Ver.:</system:String>
+    <system:String x:Key="Ota_pkgver">Pkg Ver.:</system:String>
+    <system:String x:Key="Ota_channel">Channel</system:String>
+    <system:String x:Key="Ota_ch_uart">UART1 (115200)</system:String>
+    <system:String x:Key="Ota_ch_usbcdc">USB-CDC Virtual COM</system:String>
+    <system:String x:Key="Ota_ch_http">HTTP Push (8081)</system:String>
+    <system:String x:Key="Ota_ch_usbdisk">USB Virtual Disk (FW.BIN)</system:String>
+    <system:String x:Key="Ota_ch_winusb">WinUSB Fast Channel</system:String>
+    <system:String x:Key="Ota_comport">COM Port</system:String>
+    <system:String x:Key="Ota_refresh">Refresh Ports</system:String>
+    <system:String x:Key="Ota_readver">Read Ver.</system:String>
+    <system:String x:Key="Ota_devip">Device IP</system:String>
+    <system:String x:Key="Ota_pkgfile">Firmware Package</system:String>
+    <system:String x:Key="Ota_browse">Browse...</system:String>
+    <system:String x:Key="Ota_start">Start Upgrade</system:String>
+    <system:String x:Key="Ota_stop">Stop</system:String>
+    <system:String x:Key="Ota_clearlog">Clear Log</system:String>
+    <system:String x:Key="Ota_tip_pkgtooltip">Select .otapkg firmware package (release/ directory)</system:String>
+    <system:String x:Key="Ota_msg_nopkg">Please select a firmware package (.otapkg) first</system:String>
+    <system:String x:Key="Ota_msg_noport">Please select a COM port</system:String>
+    <system:String x:Key="Ota_filter_otapkg">OTA package (*.otapkg)|*.otapkg|All files (*.*)|*.*</system:String>
+    <system:String x:Key="Ota_log_pkgver">Package version: </system:String>
+    <system:String x:Key="Ota_log_notota">Selected file is not an OTA package (missing OTA1 magic)</system:String>
+    <system:String x:Key="Ota_log_readverfail">Failed to read package version: </system:String>
+    <system:String x:Key="Ota_log_readver_serialonly">Read version only supports Serial/USB-CDC channels</system:String>
+    <system:String x:Key="Ota_log_selectport">Please select a COM port first</system:String>
+    <system:String x:Key="Ota_log_readdev">Reading device version (</system:String>
+    <system:String x:Key="Ota_log_serial">Serial</system:String>
+    <system:String x:Key="Ota_log_usbcdc">USB-CDC</system:String>
+    <system:String x:Key="Ota_log_devver">Device firmware version: </system:String>
+    <system:String x:Key="Ota_log_noreply">Read failed (no response; check port/wiring/device firmware)</system:String>
+    <system:String x:Key="Ota_log_readex">Read version exception: </system:String>
+    <system:String x:Key="Ota_log_badpkg">Error: package file incomplete (&lt;82B header)</system:String>
+    <system:String x:Key="Ota_log_usbdisk_hint">USB disk channel: copy release/FW.BIN to the virtual USB disk → safely eject → reboot the device</system:String>
+    <system:String x:Key="Ota_log_exception">Exception: </system:String>
+    <system:String x:Key="Ota_log_open">Opening </system:String>
+    <system:String x:Key="Ota_log_openfail">Failed to open COM port</system:String>
+    <system:String x:Key="Ota_log_done">Upgrade flow complete, device will reboot to upgrade</system:String>
+    <system:String x:Key="Ota_log_failed">Upgrade failed</system:String>
+    <system:String x:Key="Ota_log_httppush">HTTP push </system:String>
+    <system:String x:Key="Ota_log_httpresp">HTTP response: </system:String>
+    <system:String x:Key="Ota_log_pushdone">Push complete, device verifies signature then reboots to upgrade</system:String>
+    <system:String x:Key="Ota_log_pushfail">Push failed</system:String>
+    <system:String x:Key="Ota_log_stopreq">Stop request sent</system:String>
+</ResourceDictionary>

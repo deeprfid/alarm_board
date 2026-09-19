@@ -1,0 +1,144 @@
+<Window x:Class="ReaderManager.DevDetailsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{DynamicResource DevDetails_title}"
+        Height="528" Width="672"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        WindowStyle="ToolWindow">
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 设备信息区 -->
+        <Border Grid.Row="0" BorderBrush="#E0E0E0" BorderThickness="0,0,0,1" Padding="0,0,0,10">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal" Grid.Column="0">
+                        <TextBlock Text="{DynamicResource DevDetails_boardtype}" FontSize="13" VerticalAlignment="Center" Margin="2"/>
+                        <TextBlock x:Name="lblBoardType" Text="-" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" Margin="2"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Grid.Column="2">
+                        <TextBlock Text="{DynamicResource DevDetails_modtype}" FontSize="13" VerticalAlignment="Center" Margin="2"/>
+                        <TextBlock x:Name="lblModType" Text="-" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" Margin="2"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Grid.Column="4">
+                        <TextBlock Text="{DynamicResource DevDetails_ip}" FontSize="13" VerticalAlignment="Center" Margin="2"/>
+                        <TextBlock x:Name="lblIp" Text="-" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" Margin="2"/>
+                    </StackPanel>
+                </Grid>
+                <Grid Grid.Row="1" Margin="0,5,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal" Grid.Column="0">
+                        <TextBlock Text="{DynamicResource DevDetails_bver}" FontSize="13" VerticalAlignment="Center" Margin="2"/>
+                        <TextBlock x:Name="lblBVer" Text="-" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" Margin="2"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Grid.Column="2">
+                        <TextBlock Text="{DynamicResource DevDetails_mver}" FontSize="13" VerticalAlignment="Center" Margin="2"/>
+                        <TextBlock x:Name="lblMVer" Text="-" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" Margin="2"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Grid.Column="4">
+                        <TextBlock Text="{DynamicResource DevDetails_mac}" FontSize="13" VerticalAlignment="Center" Margin="2"/>
+                        <TextBlock x:Name="lblMac" Text="-" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" Margin="2"/>
+                    </StackPanel>
+                </Grid>
+                <Grid Grid.Row="2" Margin="0,5,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal" Grid.Column="0">
+                        <TextBlock Text="{DynamicResource DevDetails_workmode}" FontSize="13" VerticalAlignment="Center" Margin="2"/>
+                        <TextBlock x:Name="lblWorkMode" Text="-" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" Margin="2"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Grid.Column="2">
+                        <TextBlock Text="{DynamicResource DevDetails_statecode}" FontSize="13" VerticalAlignment="Center" Margin="2"/>
+                        <TextBlock x:Name="lblStateCode" Text="-" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" Margin="2"/>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- 网络设置区 -->
+        <GroupBox Grid.Row="1" Header="{DynamicResource DevDetails_netcfg}" Margin="0,10" Padding="10" FontSize="13">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="20"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal" Grid.Row="0" Grid.Column="0">
+                    <TextBlock Text="{DynamicResource DevDetails_iplabel}" Width="105" VerticalAlignment="Center" Margin="2"/>
+                    <TextBox x:Name="txtIp" Width="130" Height="26" VerticalAlignment="Center" Margin="2"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Grid.Row="0" Grid.Column="2">
+                    <TextBlock Text="{DynamicResource DevDetails_gwlabel}" Width="80" VerticalAlignment="Center" Margin="2"/>
+                    <TextBox x:Name="txtGateway" Width="130" Height="26" VerticalAlignment="Center" Margin="2"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Grid.Row="1" Grid.Column="0" Margin="0,5,0,0">
+                    <TextBlock Text="{DynamicResource DevDetails_masklabel}" Width="105" VerticalAlignment="Center" Margin="2"/>
+                    <TextBox x:Name="txtNetMask" Width="130" Height="26" VerticalAlignment="Center" Margin="2"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Grid.Row="1" Grid.Column="2" Margin="0,5,0,0">
+                    <TextBlock Text="{DynamicResource DevDetails_dnslabel}" Width="80" VerticalAlignment="Center" Margin="2"/>
+                    <TextBox x:Name="txtDns" Width="130" Height="26" VerticalAlignment="Center" Margin="2"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Grid.Row="2" Grid.Column="0" Margin="0,5,0,0">
+                    <TextBlock Text="{DynamicResource DevDetails_portlabel}" Width="105" VerticalAlignment="Center" Margin="2"/>
+                    <TextBox x:Name="txtPort" Width="130" Height="26" VerticalAlignment="Center" Margin="2"/>
+                </StackPanel>
+                <CheckBox x:Name="chkDhcp" Content="{DynamicResource DevDetails_dhcp}" Grid.Row="2" Grid.Column="2" 
+                          VerticalAlignment="Center" Margin="20,5,0,0"
+                          Checked="chkDhcp_CheckedChanged" Unchecked="chkDhcp_CheckedChanged"/>
+
+                <StackPanel Orientation="Horizontal" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,8,0,0">
+                    <CheckBox x:Name="chkMacAddr" Content="{DynamicResource DevDetails_setmac}" VerticalAlignment="Center" 
+                              Checked="chkMacAddr_CheckedChanged" Unchecked="chkMacAddr_CheckedChanged"/>
+                    <TextBox x:Name="txtMacAddr" Width="180" Height="26" VerticalAlignment="Center" Margin="10,0,0,0" IsEnabled="False"/>
+                </StackPanel>
+
+                <TextBlock x:Name="lblSetResult" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3"
+                       Text="" FontSize="14" Foreground="#FF0E3193" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+            </Grid>
+        </GroupBox>
+
+        <!-- 按钮区 -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5,0,0">
+            <Button Content="{DynamicResource DevDetails_btn_setnet}" Width="120" Height="32" Margin="10" Cursor="Hand" Click="btnSetNet_Click"/>
+            <Button Content="{DynamicResource DevDetails_btn_backpassive}" Width="180" Height="32" Margin="10" Cursor="Hand" Click="btnBackToPassive_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

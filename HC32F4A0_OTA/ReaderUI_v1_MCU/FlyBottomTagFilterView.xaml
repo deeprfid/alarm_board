@@ -1,0 +1,90 @@
+﻿<UserControl x:Class="ReaderManager.FlyBottomTagFilterView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:ReaderManager"
+             xmlns:locModel="clr-namespace:ReaderManager.Models"
+             xmlns:mah="clr-namespace:MahApps.Metro.Controls;assembly=MahApps.Metro"
+             xmlns:sys="clr-namespace:System;assembly=mscorlib"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes" 
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800" >
+
+    <UserControl.Resources>
+        <x:Array x:Key="tfBanks" Type="sys:String">
+            <sys:String>EPCbank</sys:String>
+            <sys:String>TIDbank</sys:String>
+            <sys:String>USERbank</sys:String>
+        </x:Array>
+    </UserControl.Resources>
+    
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="10" />
+            <RowDefinition Height="30" />
+            <RowDefinition Height="20" />
+            <RowDefinition Height="40" />
+            <RowDefinition Height="20" />
+            <RowDefinition Height="48" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="20" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="18" />
+        </Grid.ColumnDefinitions>
+        <Label Content="{DynamicResource FlyView_Bottom_TagFilter_FilterParams}" Grid.Row="1" Grid.Column="1" Style="{StaticResource paramLabelStyle}"/>
+        <Border  Style="{StaticResource paramBorderStyle}" Grid.Row="2" Grid.Column="1" />
+
+        <Grid  Grid.Column="1"   Grid.Row="3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <ComboBox Style="{StaticResource paramComboBoxStyle}"  Grid.Column="0"  
+                      SelectedIndex="{Binding Bank}"
+                      ItemsSource="{StaticResource tfBanks}"                        
+                                  materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_adddata_combobox_bank_hint}" SelectionChanged="ComboBox_SelectionChanged" />
+
+            <ComboBox Style="{StaticResource paramComboBoxStyle}"  Grid.Column="1" 
+                      x:Name="cbbMatchMode" SelectedIndex="{Binding Match}"
+                      ItemsSource="{DynamicResource List_FlyBottom_TF_MatchMode}"
+                                  materialDesign:HintAssist.Hint="{DynamicResource FlyView_Bottom_TagFilter_FilterRule}" />
+
+            <CheckBox  Style="{StaticResource paramCheckBoxStyle}"  x:Name="cbIsUseInv" Click="cbIsUseInv_Click"
+                       
+                       IsChecked="{Binding IsUseInv}" Margin="0,13, 0, 0"
+                       Grid.Column="2"  Content="{DynamicResource FlyView_Bottom_TagFilter_UseInInv}" />
+
+            <CheckBox  Style="{StaticResource paramCheckBoxStyle}"  x:Name="cbIsUseTagOp" Click="cbIsUseTagOp_Click"
+                       IsChecked="{Binding IsUseTagOp}" Margin="0,13, 0, 0"
+                       Grid.Column="3"  Content="{DynamicResource FlyView_Bottom_TagFilter_UseInTagOp}" />
+                        
+        </Grid>
+
+
+        <Grid  Grid.Column="1"   Grid.Row="5">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <ComboBox Style="{StaticResource paramComboBoxStyle}"  Grid.Column="1"  x:Name="cbbMaskFormat"   
+                                SelectedIndex="{Binding MaskFormat}"  
+                      ItemsSource="{DynamicResource List_FlyBottom_TF_MaskFormat}"
+                                  materialDesign:HintAssist.Hint="{DynamicResource FlyView_Bottom_TagFilter_MaskFormat}" SelectionChanged="cbbMaskFormat_SelectionChanged" />
+            <TextBox x:Name="StartSite" Style ="{StaticResource paramTextBoxStyle}"   TextChanged="Textbox_TextChanged"                  
+                             Grid.Column="0" Text="{Binding StartAddr}"
+                     materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_adddata_combobox_startaddr_hint}">
+
+            </TextBox>
+            <TextBox Style ="{StaticResource paramTextBoxStyle}"    x:Name="tbMask"  TextChanged="Textbox_TextChanged"           
+                             Grid.Column="2"  Grid.ColumnSpan="2"    Margin="0" Text="{Binding Mask}" 
+                         materialDesign:HintAssist.Hint="{DynamicResource FlyView_Bottom_TagFilter_FilterMask}"  >
+            </TextBox>
+        </Grid>
+    </Grid>
+</UserControl>

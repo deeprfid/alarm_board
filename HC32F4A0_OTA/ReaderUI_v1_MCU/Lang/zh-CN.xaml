@@ -1,0 +1,789 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"                    
+                    xmlns:system="clr-namespace:System;assembly=mscorlib">
+
+    <system:String x:Key="HamburgerMenu_devconnect">连接设备</system:String>
+    <system:String x:Key="HamburgerMenu_settings">系统设置</system:String>
+    <system:String x:Key="HamburgerMenu_inventory">标签盘点</system:String>
+    <system:String x:Key="HamburgerMenu_tagop">标签操作</system:String>
+    <system:String x:Key="HamburgerMenu_firmwareload">固件升级</system:String>
+    <system:String x:Key="HamburgerMenu_peripherals">外设接口</system:String>
+    <system:String x:Key="HamburgerMenu_tools">辅助工具</system:String>
+    <system:String x:Key="HamburgerMenu_activemode">主动模式</system:String>
+
+    <system:String x:Key="Connect_unknown">未知</system:String>
+    <system:String x:Key="Connect_label_mainboardtype">主板类型</system:String>
+    <system:String x:Key="Connect_button_connecttip">点击连接读写器</system:String>
+    <system:String x:Key="Connect_button_disconnecttip">点击断开读写器</system:String>
+    
+    <system:String x:Key="Connect_label_hwinfo">硬件信息</system:String>
+    <system:String x:Key="Connect_label_modtype">RFID模块类型</system:String>
+    <system:String x:Key="Connect_label_verinfo">版本信息</system:String>
+    <system:String x:Key="Connect_label_hwversion">模块硬件</system:String>
+    <system:String x:Key="Connect_label_swversion">模块软件</system:String>
+    <system:String x:Key="Connect_label_mainboard_hwversion">主板硬件</system:String>
+    <system:String x:Key="Connect_label_mainboard_swversion">主板软件</system:String>
+    <system:String x:Key="Connect_label_unknown">未知</system:String>
+    <system:String x:Key="Connect_label_connectsetting">连接设置</system:String>
+    <system:String x:Key="Connect_label_ipaddr">IP地址/串口号</system:String>
+    <system:String x:Key="Connect_label_ip">IP地址</system:String>
+    <system:String x:Key="Connect_label_com">串口号</system:String>
+    <system:String x:Key="Connect_label_devtype">设备类型</system:String>
+    <system:String x:Key="Connect_textbox_iphint">默认IP为192.168.1.100</system:String>
+    <system:String x:Key="Connect_combobox_devhint">请选择天线端口数量</system:String>
+
+    <system:String x:Key="Connect_label_software">软件版本</system:String>
+    <system:String x:Key="Connect_label_software_VersionUpdates">发现新版本，点击更新</system:String>
+
+    <x:Array x:Key="List_DevAntPortType" Type="system:String">
+        <system:String>1天线</system:String>
+        <system:String>2天线</system:String>
+        <system:String>4天线</system:String>
+        <system:String>8天线</system:String>
+        <system:String>16天线</system:String>
+    </x:Array>
+
+    <x:Array x:Key="quickModeType" Type="system:String">
+        <system:String>快速模式</system:String>
+        <system:String>快速模式-读距离优先</system:String>
+        <system:String>快速模式-读次数优先</system:String>
+        <system:String>Ex10快速模式</system:String>
+    </x:Array>
+
+    <system:String x:Key="Inventory_listview_colum_tabamount">读到标签数量</system:String>
+    <system:String x:Key="Inventory_listview_colum_tabcount">读到标签次数</system:String>
+    <system:String x:Key="Inventory_listview_colum_tabtime">读标签耗时</system:String>
+
+    <system:String x:Key="Inventory_listview_colum_StartInventory">开始盘点</system:String>
+    <system:String x:Key="Inventory_listview_colum_StopInventory">停止盘点</system:String>
+    <system:String x:Key="Inventory_listview_colum_ClearData">清空列表</system:String>
+    <system:String x:Key="Inventory_listview_colum_ExportData">导出数据</system:String>
+
+    <system:String x:Key="Inventory_listview_colum_epc">EPC</system:String>
+    <system:String x:Key="Inventory_listview_colum_readcount">读次数</system:String>
+    <system:String x:Key="Inventory_listview_colum_ant">天线</system:String>
+    <system:String x:Key="Inventory_listview_colum_bankdata">Bank数据</system:String>
+    <system:String x:Key="Inventory_listview_colum_prot">协议</system:String>
+    <system:String x:Key="Inventory_listview_colum_freq">频率</system:String>
+    <system:String x:Key="Inventory_listview_colum_rssi">RSSI</system:String>
+    <system:String x:Key="Inventory_listview_colum_phase">相位</system:String>
+
+
+    <system:String x:Key="ParamSettings_tabitem_setting_ant">天线设置</system:String>
+    <system:String x:Key="ParamSettings_tabitem_setting_inventory">盘点设置</system:String>
+    <system:String x:Key="ParamSettings_tabitem_setting_network">网络设置</system:String>
+    <system:String x:Key="ParamSettings_tabitem_setting_advance">高级设置</system:String>
+    <system:String x:Key="ParamSettings_tabitem_setting_eas">EAS设置</system:String>
+    <system:String x:Key="ParamSettings_tabitem_setting_white">报警名单</system:String>
+    <system:String x:Key="ParamSettings_tabitem_setting_tag">当前标签</system:String>
+    <system:String x:Key="ParamSettings_tabitem_setting_log">报警日志</system:String>
+    <system:String x:Key="ParamSettings_tabitem_setting_mptt">MQTT设置</system:String>
+    <system:String x:Key="ParamSettings_tabitem_setting_tagdisplay">标签显示</system:String>
+    <system:String x:Key="TagDisplay_interface">接口</system:String>
+    <system:String x:Key="TagDisplay_ch_serial">串口</system:String>
+    <system:String x:Key="TagDisplay_ch_cdc">USB-CDC</system:String>
+    <system:String x:Key="TagDisplay_ch_winusb">WinUSB</system:String>
+    <system:String x:Key="TagDisplay_ch_httptcp">HTTP/TCP</system:String>
+    <system:String x:Key="TagDisplay_addr_hint">地址 (COMx / IP / USB口)</system:String>
+    <system:String x:Key="TagDisplay_port_hint">端口</system:String>
+    <system:String x:Key="TagDisplay_btn_start">开始</system:String>
+    <system:String x:Key="TagDisplay_btn_stop">停止</system:String>
+    <system:String x:Key="TagDisplay_btn_clear">清空</system:String>
+    <system:String x:Key="TagDisplay_state_idle">未接收</system:String>
+    <system:String x:Key="TagDisplay_col_no">序号</system:String>
+    <system:String x:Key="TagDisplay_col_epc">EPC</system:String>
+    <system:String x:Key="TagDisplay_col_reads">读次</system:String>
+    <system:String x:Key="TagDisplay_col_ant">天线</system:String>
+    <system:String x:Key="TagDisplay_col_bankdata">数据</system:String>
+    <system:String x:Key="TagDisplay_col_prot">协议</system:String>
+    <system:String x:Key="TagDisplay_col_rssi">RSSI</system:String>
+    <system:String x:Key="TagDisplay_col_freq">频率</system:String>
+    <system:String x:Key="TagDisplay_col_phase">相位</system:String>
+    <system:String x:Key="TagDisplay_col_time">时间</system:String>
+
+
+    <system:String x:Key="ParamSettings_white_listNo">序号</system:String>
+    <system:String x:Key="ParamSettings_white_listCode">标签</system:String>
+    <system:String x:Key="ParamSettings_white_listMem">备注</system:String>
+    <system:String x:Key="ParamSettings_white_readfile">导入文件</system:String>
+    <system:String x:Key="ParamSettings_white_writefile">导出文件</system:String>
+
+    <system:String x:Key="ParamSettings_tag_start">开始读取</system:String>
+    <system:String x:Key="ParamSettings_tag_stop">停  止</system:String>
+    <system:String x:Key="ParamSettings_tag_listNo">次数</system:String>
+    <system:String x:Key="ParamSettings_tag_listCode">标签</system:String>
+    <system:String x:Key="ParamSettings_tag_listFlag">标示</system:String>
+    <system:String x:Key="ParamSettings_tag_listWhite">报警名单</system:String>
+
+    <system:String x:Key="ParamSettings_eas_leida">雷达范围</system:String>
+    <system:String x:Key="ParamSettings_eas_volume">报警音量</system:String>
+    <system:String x:Key="ParamSettings_eas_alarmlength">报警时长</system:String>
+    <system:String x:Key="ParamSettings_eas_alarmthreshold">报警门阀</system:String>
+    <system:String x:Key="ParamSettings_eas_alarmswitch">报警开关</system:String>
+
+    <system:String x:Key="ParamSettings_eas_days">存储天数</system:String>
+    <system:String x:Key="ParamSettings_eas_rule">过滤规则</system:String>
+    <system:String x:Key="ParamSettings_eas_code">过滤掩码</system:String>
+    <system:String x:Key="ParamSettings_eas_total">标签总数</system:String>
+    <system:String x:Key="ParamSettings_eas_address">起始地址</system:String>
+    <system:String x:Key="ParamSettings_eas_dtime">系统时间</system:String>
+    <system:String x:Key="ParamSettings_eas_atotal">报警总数</system:String>
+    <system:String x:Key="ParamSettings_eas_people">客流</system:String>
+    <system:String x:Key="ParamSettings_eas_stime">积累时长</system:String>
+    <system:String x:Key="ParamSettings_eas_scount">积累次数</system:String>
+    <system:String x:Key="ParamSettings_eas_starttime">开启时间</system:String>
+    <system:String x:Key="ParamSettings_eas_stoptime">关闭时间</system:String>
+
+    <system:String x:Key="ParamSettings_eas_devid">设备ID</system:String>
+    <system:String x:Key="ParamSettings_eas_restart">设备重启</system:String>
+    <system:String x:Key="ParamSettings_eas_getsucc">读取执行成功</system:String>
+    <system:String x:Key="ParamSettings_eas_getalarmsucc">读取数据成功 总数:</system:String>
+    <system:String x:Key="ParamSettings_eas_getfail">读取执行失败</system:String>
+    <system:String x:Key="ParamSettings_eas_setsucc">设置执行成功</system:String>
+    <system:String x:Key="ParamSettings_eas_setfail">设置执行失败</system:String>
+    <system:String x:Key="ParamSettings_eas_rebootsucc">重启执行成功</system:String>
+    <system:String x:Key="ParamSettings_eas_rebootfail">重启执行失败</system:String>
+    <system:String x:Key="ParamSettings_eas_setresult">未操作</system:String>
+
+    <system:String x:Key="ParamSettings_eas_listNo">门禁号码</system:String>
+    <system:String x:Key="ParamSettings_eas_listTime">报警时间</system:String>
+    <system:String x:Key="ParamSettings_eas_listCode">报警Epc码</system:String>
+    <system:String x:Key="ParamSettings_eas_listMem">备注</system:String>
+    
+    <system:String x:Key="ParamSettings_eas_listSearch">报警日志</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule">Epc标签过滤规则</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule1">过滤规则1</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule2">过滤规则2</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule3">过滤规则3</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule4">过滤规则4</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule5">过滤规则5</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule6">过滤规则6</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule7">过滤规则7</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule8">过滤规则8</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule9">过滤规则9</system:String>
+    <system:String x:Key="ParamSettings_eas_epcrule10">过滤规则10</system:String>
+    <system:String x:Key="ParamSettings_eas_epcstart">起始位置</system:String>
+    <system:String x:Key="ParamSettings_eas_epcduibi">匹配长度</system:String>
+    <system:String x:Key="ParamSettings_eas_epcvalue">掩码</system:String>
+
+    <system:String x:Key="ParamSettings_eas_logstart">日志起始</system:String>
+    <system:String x:Key="ParamSettings_eas_logend">日志结束</system:String>
+    <system:String x:Key="ParamSettings_eas_easflag">Eas标识</system:String>
+    <system:String x:Key="ParamSettings_eas_easClear">清除</system:String>
+
+    <system:String x:Key="ParamSettings_mqtt_storecode">仓店编码</system:String>
+    <system:String x:Key="ParamSettings_mqtt_storetype">仓店类型</system:String>
+    <system:String x:Key="ParamSettings_mqtt_devicetype">设备类型</system:String>
+    <system:String x:Key="ParamSettings_mqtt_devicemodel">设备型号</system:String>
+    <system:String x:Key="ParamSettings_mqtt_devicesn">设备编号</system:String>
+    <system:String x:Key="ParamSettings_mqtt_devicebrand">设备品牌</system:String>
+    <system:String x:Key="ParamSettings_mqtt_software">软件版本</system:String>
+    <system:String x:Key="ParamSettings_mqtt_staff">员工编码</system:String>
+    <system:String x:Key="ParamSettings_mqtt_softname">软件名称</system:String>
+    <system:String x:Key="ParamSettings_mqtt_remake">备注</system:String>
+    <system:String x:Key="ParamSettings_mqtt_longitude">经度</system:String>
+    <system:String x:Key="ParamSettings_mqtt_latitude">纬度</system:String>
+
+    <system:String x:Key="ParamSettings_button_get">获取</system:String>
+    <system:String x:Key="ParamSettings_button_set">设置</system:String>
+    <system:String x:Key="ParamSettings_button_test">测试</system:String>
+    <system:String x:Key="ParamSettings_button_set_perpetual">永久保存</system:String>
+    <system:String x:Key="ParamSettings_button_set_clicktoset">点击设置参数</system:String>
+    <system:String x:Key="ParamSettings_button_set_clicktoget">点击获取参数</system:String>
+
+    <system:String x:Key="ParamSettings_button_set_clicktoClear">清除所有参数,返回被动模式</system:String>
+    <system:String x:Key="ParamSettings_button_set_clicktoChange">保留当前参数,切换设备模式</system:String>
+
+    <system:String x:Key="ParamSettings_ParamInv_adddata_toggleswitch_on">启用附加数据</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_adddata_toggleswitch_off">禁用附加数据</system:String>
+
+    <system:String x:Key="ParamSettings_ParamInv_buzzer_on">盘点触发蜂鸣器</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_buzzer_off">盘点不触发蜂鸣器</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_buzzer_time">触发时长(ms)</system:String>
+
+    <system:String x:Key="ParamSettings_ParamInv_adddata_combobox_bank_hint">请选择Bank</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_adddata_combobox_startaddr_hint">起始地址</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_adddata_combobox_blocks_hint">读块数</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_adddata_combobox_pwd_hint">访问密码，可不填</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_adddata_combobox_pwd">访问密码</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_fastmode_toggleswitch_on">启用快速模式</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_fastmode_toggleswitch_off">禁用快速模式</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_readdur">盘点周期（ms）</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_sleepdur">盘点间隔（ms）</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_quickModeType">快速模式类型 </system:String>
+    <system:String x:Key="ParamSettings_ParamInv_commonparams">盘点常用参数</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_stopparams_on">启用自动停止盘点</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_stopparams_off">禁用自动停止盘点</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_hopmode">跳频模式</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_antdwelltime">天线驻留时间</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_readaccesstime">读取时间(毫秒)</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_readaccessquantity">读取数量</system:String>
+    <system:String x:Key="ParamSettings_ParamInv_readaccessthenumber">读取次数</system:String>
+
+    <system:String x:Key="ParamSettings_ParamInter_ipsettings">IP设置</system:String>
+    <system:String x:Key="ParamSettings_ParamInter_ipaddr">IP地址</system:String>
+    <system:String x:Key="ParamSettings_ParamInter_subnetmask">子网掩码</system:String>
+    <system:String x:Key="ParamSettings_ParamInter_gateway">网关</system:String>
+    <system:String x:Key="ParamSettings_ParamInter_tsWirelessSettings_on">启用无线网络</system:String>
+    <system:String x:Key="ParamSettings_ParamInter_tsWirelessSettings_off">禁用无线网络</system:String>
+    <system:String x:Key="ParamSettings_ParamInter_authmode">认证模式</system:String>
+    <system:String x:Key="ParamSettings_ParamInter_keytype">密钥类型</system:String>
+
+    <system:String x:Key="ParamSettings_ParamAdvance_gen2potlparams">特殊参数</system:String>
+    <system:String x:Key="ParamSettings_ParamAdvance_gen2writemode">Gen2写模式</system:String>
+    <system:String x:Key="ParamSettings_ParamAdvance_tagdatacache">标签数据缓存设置</system:String>
+    <system:String x:Key="ParamSettings_ParamAdvance_tdc_ant">天线编号作为唯一标识</system:String>
+    <system:String x:Key="ParamSettings_ParamAdvance_tdc_bank">Bank数据作为唯一标识</system:String>
+    <system:String x:Key="ParamSettings_ParamAdvance_tdc_rssi">记录最大RSSI值</system:String>
+    <system:String x:Key="ParamSettings_ParamAdvance_hoptabandregion">频率管制规则</system:String>
+    <system:String x:Key="ParamSettings_ParamAdvance_hoptab">跳频表</system:String>
+    <system:String x:Key="ParamSettings_ParamAdvance_region">工作区域</system:String>
+    <system:String x:Key="ParamSettings_ParamAdvance_selall">全部选择</system:String>
+    
+    <system:String x:Key="ParamSettings_ParamAnts_datagrid_header_index">编号</system:String>
+    <system:String x:Key="ParamSettings_ParamAnts_datagrid_header_readpower">读功率</system:String>
+    <system:String x:Key="ParamSettings_ParamAnts_datagrid_header_writepower">写功率</system:String>
+    <system:String x:Key="ParamSettings_ParamAnts_datagrid_header_state">当前状态</system:String>
+    <system:String x:Key="ParamSettings_ParamAnts_datagrid_header_enableinv">启用盘点</system:String>
+    <system:String x:Key="ParamSettings_ParamAnts_AntInfo_Name">天线</system:String>
+    <system:String x:Key="ParamSettings_ParamAnts_AntInfo_Connected">连接</system:String>
+    <system:String x:Key="ParamSettings_ParamAnts_AntInfo_Unconnected">未连接</system:String>
+    <system:String x:Key="ParamSettings_ParamAnts_AntInfo_SetAll">全部设置</system:String>
+
+    <system:String x:Key="TagOpView_Exec">执行</system:String>
+    <system:String x:Key="TagOpView_ExecuteTip">点击执行标签操作</system:String>
+    <system:String x:Key="TagOpView_OpCommonParams">操作共有参数</system:String>
+    <system:String x:Key="TagOpView_OpType">操作类型</system:String>
+    <system:String x:Key="TagOpView_OpAnt">操作天线</system:String>
+    <system:String x:Key="TagOpView_KillPwd">销毁密码，可选</system:String>
+    <system:String x:Key="TagOpView_AcsPwd">访问密码，可选</system:String>
+    <system:String x:Key="TagOpView_ReadWriteParams">读写操作参数</system:String>
+    <system:String x:Key="TagOpView_ReadBlkCnt">读块数，写操作不用填</system:String>
+    <system:String x:Key="TagOpView_PureReadBlkCnt">读块数</system:String>
+    <system:String x:Key="TagOpView_PureWriteData">要的写数据</system:String>
+    <system:String x:Key="TagOpView_LockParams">锁操作参数</system:String>
+    <system:String x:Key="TagOpView_LockObj">锁定对象</system:String>
+    <system:String x:Key="TagOpView_LockType">锁定类型</system:String>
+    <system:String x:Key="TagOpView_DataAndResult">操作结果/要的写数据</system:String>
+
+    <system:String x:Key="PeripheralView_GPIstatus">GPI 状态</system:String>
+    <system:String x:Key="PeripheralView_GPOstatus">GPO 状态</system:String>
+    <system:String x:Key="PeripheralView_GPIOstate_High">1</system:String>
+    <system:String x:Key="PeripheralView_GPIOstate_Low">0</system:String>
+    <system:String x:Key="PeripheralView_ClickToChangeState">点击改变状态</system:String>
+    <system:String x:Key="PeripheralView_Psam_SendCmd">发送指令</system:String>
+    <system:String x:Key="PeripheralView_Psam_RecvCmd">接收指令</system:String>
+    <system:String x:Key="PeripheralView_Psam_bntSend">发送</system:String>
+    <system:String x:Key="PeripheralView_Psam_bntSendTip">点击发送指令</system:String>
+    <system:String x:Key="PeripheralView_Psam_PsamSlot">PSAM卡槽</system:String>
+
+    <x:Array x:Key="List_PeripheralView_PsamSlot" Type="system:String">
+        <system:String>卡槽1</system:String>
+        <system:String>卡槽2</system:String>
+    </x:Array>
+
+    <system:String x:Key="FirmwareUpdateView_btnGetTip">点击获取软件版本</system:String>
+    <system:String x:Key="FirmwareUpdateView_btnUpdate">升级</system:String>
+    <system:String x:Key="FirmwareUpdateView_btnUpdateTip">点击升级固件</system:String>
+    <system:String x:Key="FirmwareUpdateView_UpdateGuide">固件升级说明</system:String>
+    <system:String x:Key="FirmwareUpdateView_Tip_UpdateFw">固件升级</system:String>
+    <system:String x:Key="FirmwareUpdateView_Tip_UpdateFwDetails">填入读写器地址，串口号（例如com1）或者是IP地址，然后点击'浏览'按钮，并在文件选择窗口中选择升级固件文件，最后点击'更新'按钮并等待升级成功提示窗口弹出。</system:String>
+    <system:String x:Key="FirmwareUpdateView_Tip_GetVer">获取版本</system:String>
+    <system:String x:Key="FirmwareUpdateView_Tip_GetVerDetails">填入读写器地址，串口号（例如com1）或者是IP地址，然后点击'获取'按钮。</system:String>
+    <system:String x:Key="FirmwareUpdateView_UpdateParams">升级参数</system:String>
+    <system:String x:Key="FirmwareUpdateView_Parmas_RdAddr">读写器地址</system:String>
+    <system:String x:Key="FirmwareUpdateView_Parmas_FwFile">固件文件</system:String>
+    <system:String x:Key="FirmwareUpdateView_btnBrowse">浏览</system:String>
+    <system:String x:Key="FirmwareUpdateView_btnBrowse_tip">点击选择固件文件</system:String>
+    <system:String x:Key="FirmwareUpdateView_Progress">升级进度</system:String>
+    <system:String x:Key="FirmwareUpdateView_FwVersion">固件版本</system:String>
+    <system:String x:Key="FirmwareUpdateView_UpdFwParams">升级参数</system:String>
+    
+    <system:String x:Key="FlyView_Bottom_Inv_Title">盘点统计</system:String>
+    <system:String x:Key="FlyView_Bottom_Inv_Ant_TagNumber">天线-标签数量</system:String>
+    <system:String x:Key="FlyView_Bottom_Inv_Freq_TagNumber">频率-标签数量</system:String>
+    <system:String x:Key="FlyView_Bottom_Inv_Freq">频率</system:String>
+    <system:String x:Key="FlyView_Bottom_Inv_TagNumber">标签数量</system:String>
+    <system:String x:Key="FlyView_Bottom_Inv_Refresh">刷新</system:String>
+
+    <system:String x:Key="FlyView_Bottom_Potl_Title">指令调试</system:String>
+    <system:String x:Key="FlyView_Bottom_Potl_Debug_On">开启指令调试</system:String>
+    <system:String x:Key="FlyView_Bottom_Potl_Debug_Off">禁用指令调试</system:String>
+    <system:String x:Key="FlyView_Bottom_Potl_PotlData">指令数据</system:String>
+
+    <system:String x:Key="FlyView_Bottom_TagFilter_Title">标签过滤</system:String>
+    <system:String x:Key="FlyView_Bottom_TagFilter_FilterRule">过滤规则</system:String>
+    <system:String x:Key="FlyView_Bottom_TagFilter_MaskFormat">掩码格式</system:String>
+    <system:String x:Key="FlyView_Bottom_TagFilter_FilterMask">过滤掩码</system:String>
+    <system:String x:Key="FlyView_Bottom_TagFilter_UseInInv">盘点时启用</system:String>
+    <system:String x:Key="FlyView_Bottom_TagFilter_UseInTagOp">标签操作时启用</system:String>
+    <system:String x:Key="FlyView_Bottom_TagFilter_FilterParams">过滤参数</system:String>
+
+    <system:String x:Key="FlyView_Bottom_LanguageSwitch">语言切换</system:String>
+
+    <x:Array x:Key="List_FlyBottom_TF_MatchMode" Type="system:String">
+        <system:String>匹配</system:String>
+        <system:String>不匹配</system:String>
+    </x:Array>
+    <x:Array x:Key="List_FlyBottom_TF_MatchMode2" Type="system:String">
+        <system:String>不匹配</system:String>
+        <system:String>匹配</system:String>
+    </x:Array>
+
+    <x:Array x:Key="List_FlyBottom_TF_MaskFormat" Type="system:String">
+        <system:String>二进制</system:String>
+        <system:String>十六进制</system:String>
+    </x:Array>
+    
+    <x:Array x:Key="List_ParamSettings_ParamInter_KeyType" Type="system:String">
+        <system:String>ASC2码</system:String>
+        <system:String>十六进制</system:String>
+    </x:Array>
+
+    <x:Array x:Key="List_ParamSettings_ParamAdvance_wmode" Type="system:String">
+        <system:String>字写</system:String>
+        <system:String>块写</system:String>
+    </x:Array>
+    
+    <x:Array x:Key="List_ParamSettings_ParamAdvance_region" Type="system:String">
+        <system:String>中国</system:String>
+        <system:String>北美</system:String>
+        <system:String>日本</system:String>
+        <system:String>韩国</system:String>
+        <system:String>欧洲</system:String>
+        <system:String>印度</system:String>
+        <system:String>加拿大</system:String>
+        <system:String>全频段</system:String>
+        <system:String>中国2</system:String>
+    </x:Array>
+
+    <x:Array x:Key="List_ParamEasrule_region" Type="system:String">
+        <system:String>匹配</system:String>
+        <system:String>不匹配</system:String>
+        <system:String>EAS标志位</system:String>
+    </x:Array>
+
+    <x:Array x:Key="List_ParamSettings_ParamAdvance_region2" Type="system:String">
+        <system:String>未指定</system:String>
+        <system:String>中国</system:String>
+        <system:String>北美</system:String>
+        <system:String>韩国</system:String>
+        <system:String>欧洲</system:String>
+        <system:String>中国2</system:String>
+        <system:String>全频段</system:String>
+        <system:String>印度</system:String>
+        <system:String>日本</system:String>
+        <system:String>CE_HIGH</system:String>
+        <system:String>香港</system:String>
+        <system:String>台湾</system:String>
+        <system:String>马拉西亚</system:String>
+        <system:String>南美</system:String>
+        <system:String>巴西</system:String>
+        <system:String>泰国</system:String>
+        <system:String>新加坡</system:String>
+        <system:String>澳大利亚</system:String>
+        <system:String>乌拉圭</system:String>
+        <system:String>越南</system:String>
+        <system:String>以色列</system:String>
+        <system:String>菲律宾</system:String>
+        <system:String>印度尼西亚</system:String>
+        <system:String>新西兰</system:String>
+        <system:String>秘鲁</system:String>
+        <system:String>俄罗斯</system:String>
+        <system:String>CE_LOW_HIGH</system:String>
+    </x:Array>
+    
+    <x:Array x:Key="List_TagOpView_OpType" Type="system:String">
+        <system:String>读Bank</system:String>
+        <system:String>写Bank</system:String>
+        <system:String>写EPC</system:String>
+        <system:String>锁定标签</system:String>
+        <system:String>销毁标签</system:String>
+    </x:Array>
+    
+    <x:Array x:Key="List_TagOpView_LockType" Type="system:String">
+        <system:String>解锁定</system:String>
+        <system:String>暂时锁定</system:String>
+        <system:String>永久锁定</system:String>
+    </x:Array>
+
+    <x:Array x:Key="List_DisableorEnable" Type="system:String">
+        <system:String>禁用</system:String>
+        <system:String>启用</system:String>
+    </x:Array>
+
+    <system:String x:Key="Msg_Title">提示</system:String>
+    <system:String x:Key="Msg_StartUsing">启用</system:String>
+    <system:String x:Key="Msg_ErrInfo">错误信息</system:String>
+    <system:String x:Key="Msg_Comma">，</system:String>
+    <system:String x:Key="Msg_Period">。</system:String>
+    <system:String x:Key="Msg_Colon">：</system:String>
+    <system:String x:Key="Msg_PlsSelect">请选择</system:String>
+    <system:String x:Key="Msg_PlsInput">请输入</system:String>
+    <x:Static x:Key="Msg_Space" Member="system:String.Empty" />
+    <system:String x:Key="Msg_Connect_ConnectFailed">连接读写器失败</system:String>
+    <system:String x:Key="Msg_Connect_SelectDevType">请选择设备类型</system:String>
+    <system:String x:Key="Msg_Connect_InputRdrAddr">请输入读写器地址</system:String>
+    <system:String x:Key="Msg_Connect_GetParamsFailed">获取读写器参数失败</system:String>
+    <system:String x:Key="Msg_Connect_ReconnectFailed">重新连接读写器失败</system:String>
+
+    <system:String x:Key="Msg_Inventory_ErrorFrquently">读写器出错频率过高</system:String>
+    <system:String x:Key="Msg_Inventory_StopInvFailed">停止盘点失败</system:String>
+    <system:String x:Key="Msg_Inventory_StartInvFailed">启动盘点失败</system:String>
+    
+    <system:String x:Key="Msg_Params_PowerErr">错误的功率值，合法范围为 </system:String>
+    <system:String x:Key="Msg_Params_SetFailed">设置参数失败</system:String>
+    <system:String x:Key="Msg_Params_GetFailed">获取参数失败</system:String>
+    <system:String x:Key="Msg_Params_SetSuccess">设置参数成功</system:String>
+    <system:String x:Key="Msg_Params_GetSuccess">获取参数成功</system:String>
+    <system:String x:Key="Msg_Validation_InvalidVal">不合法的值</system:String>
+    <system:String x:Key="Msg_Validation_InvalidEmpty">必填项</system:String>
+    <system:String x:Key="Msg_Validation_is">是</system:String>
+
+    <system:String x:Key="Msg_ParamSettings_ParamInter_IpFormatErr">IP地址格式错误</system:String>
+    <system:String x:Key="Msg_ParamSettings_ParamInter_KeyTypeLimit">当前认证模式下密钥类型只能是ASC2码</system:String>
+
+    <system:String x:Key="Msg_Inventory_PlseStopReadTag">请先停止读标签</system:String>
+    <system:String x:Key="Msg_Inventory_PlseStopInventory">请先停止标签盘点</system:String>
+    <system:String x:Key="Msg_TagOp_RightDataToWrite">将要写入的数据是16进制的字符,且长度为4字符的整数倍</system:String>
+    <system:String x:Key="Msg_TagOp_TagOpOK">执行成功</system:String>
+    <system:String x:Key="Msg_TagOp_TagOpFailed">执行失败</system:String>
+
+    <system:String x:Key="Msg_FirmwareUpdateView_SelectFile">请选择固件文件</system:String>
+    <system:String x:Key="Msg_FirmwareUpdateView_UpdateOK">固件升级成功</system:String>
+    <system:String x:Key="Msg_FirmwareUpdateView_UpdateFailed">升级失败</system:String>
+
+    <system:String x:Key="ToolsView_tabitem_firmwareupdate">固件升级</system:String>
+    <system:String x:Key="ToolsView_tabitem_vswrcheck">驻波检测</system:String>
+    <system:String x:Key="ToolsView_tabitem_devsearch">设备搜索</system:String>
+
+    <system:String x:Key="ToolsView_vswrcheck_checkparams">检测参数</system:String>
+    <system:String x:Key="ToolsView_vswrcheck_chartvswr">频率-驻波比</system:String>
+    <system:String x:Key="ToolsView_vswrcheck_checkant">检测天线</system:String>
+    <system:String x:Key="ToolsView_vswrcheck_txpower">输出功率</system:String>
+    <system:String x:Key="ToolsView_vswrcheck_btnGetTip">点击获取天线的驻波比</system:String>
+    <system:String x:Key="ToolsView_vswrcheck_chart_freq">频率</system:String>
+    <system:String x:Key="ToolsView_vswrcheck_chart_vswr">驻波比</system:String>
+
+    <system:String x:Key="ToolsView_tabitem_devip">设备Ip地址</system:String>
+    <system:String x:Key="ToolsView_tabitem_devsn">设备序列号</system:String>
+    <system:String x:Key="ToolsView_tabitem_devname">设备名称</system:String>
+    <system:String x:Key="ToolsView_tabitem_devset">设置IP地址</system:String>
+
+    <system:String x:Key="App_language">中文</system:String>
+
+    <system:String x:Key="Activemode_DataUploadConfiguration">数据上传配置</system:String>
+    <system:String x:Key="Activemode_AdvancedParameterConfiguration">运行参数配置</system:String>
+    <system:String x:Key="Activemode_StaticParameterConfiguration">静态参数配置</system:String>
+
+    <system:String x:Key="ActiveMode_ReaderIp">读写器IP</system:String>
+    <system:String x:Key="ActiveMode_BtnClear">擦除</system:String>
+    <system:String x:Key="ActiveMode_BtnSwitchover">切换</system:String>
+    <system:String x:Key="ActiveMode_EssentialParam">必填参数</system:String>
+    <system:String x:Key="ActiveMode_WorkState">工作状态</system:String>
+    <system:String x:Key="ActiveMode_WorkState-1">被动模式</system:String>
+    <system:String x:Key="ActiveMode_WorkState-3">主动模式</system:String>
+
+    <system:String x:Key="ActiveMode_DataCycle">数据整理周期</system:String>
+    <system:String x:Key="ActiveMode_DataCycle_Describe">50-86400000ms</system:String>
+    <system:String x:Key="ActiveMode_HardwareInterface">硬件接口</system:String>
+    <system:String x:Key="ActiveMode_AdvancedParameter">高级参数</system:String>
+    <x:Array x:Key="ActiveMode_HardwareInterface_Type" Type="system:String">
+        <system:String>请选择，上传硬件接口</system:String>
+        <system:String>以太网</system:String>
+        <system:String>串口</system:String>
+        <system:String>HID键盘</system:String>
+        <system:String>4G</system:String>
+        <system:String>WIFI</system:String>
+        <system:String>韦根</system:String>
+        <system:String>WinUSB</system:String>
+    </x:Array>
+
+    <x:Array x:Key="ActiveMode_CommunicationProtocol" Type="system:String">
+        <system:String>请选择</system:String>
+        <system:String>TCP</system:String>
+        <system:String>HTTP</system:String>
+        <system:String>MQTT</system:String>
+    </x:Array>
+
+    <system:String x:Key="Mqtt_QoS">请选择，空缺默认为QOS0</system:String>
+    <x:Array x:Key="Mqtt_QoSType" Type="system:String">
+        <system:String>请选择</system:String>
+        <system:String>QOS0</system:String>
+        <system:String>QOS1</system:String>
+        <system:String>QOS2</system:String>
+    </x:Array>
+    <system:String x:Key="Mqtt_Arguments">Mqtt参数</system:String>
+    <system:String x:Key="Mqtt_HostAddress">主机地址</system:String>
+    <system:String x:Key="Mqtt_PortNumber">端口号</system:String>
+    <system:String x:Key="Mqtt_PublishTopic">发布主题</system:String>
+    <system:String x:Key="Mqtt_PublishQoS">发布QoS</system:String>
+    <system:String x:Key="Mqtt_SubscribeTopic">订阅主题</system:String>
+    <system:String x:Key="Mqtt_BroadcastQoS">订阅QoS</system:String>
+    <system:String x:Key="Mqtt_UnicastSubscribeTopic">单播订阅主题</system:String>
+    <system:String x:Key="Mqtt_UnicastSubscribeQoS">单播订阅QoS</system:String>
+    <system:String x:Key="Mqtt_KeepaliveTime">Keepalive时间</system:String>
+    <system:String x:Key="Mqtt_Username">用户名</system:String>
+    <system:String x:Key="Mqtt_Password">密码</system:String>
+    <system:String x:Key="Mqtt_EnableTLS">TLS单向认证</system:String>
+    <system:String x:Key="Mqtt_PleaseEnter48">请输入，不大于48个字符</system:String>
+    <system:String x:Key="Mqtt_PleaseEnter48Null">请输入，不大于48个字符，可空缺</system:String>
+    <system:String x:Key="Mqtt_PleaseEnter32Null">请输入，不大于32个字符，可空缺</system:String>
+    <system:String x:Key="Mqtt_PleaseEnterKeepaliveTime">有效值5-86400秒，默认60</system:String>
+
+    <system:String x:Key="Tcp_Arguments">TCP参数</system:String>
+    <system:String x:Key="Tcp_HostAddress">服务器地址</system:String>
+    <system:String x:Key="Tcp_PortNumber">端口号</system:String>
+
+    <system:String x:Key="Http_Arguments">Http参数</system:String>
+    <system:String x:Key="Http_Url">上传URL</system:String>
+
+    <x:Array x:Key="Wiegand_InterfaceType" Type="system:String">
+        <system:String>韦根26</system:String>
+        <system:String>韦根34</system:String>
+        <system:String>韦根66</system:String>
+    </x:Array>
+    <x:Array x:Key="Wiegand_OutputFormatType" Type="system:String">
+        <system:String>高字节在前</system:String>
+        <system:String>低字节在前</system:String>
+    </x:Array>
+    <system:String x:Key="Wiegand_Arguments">韦根参数</system:String>
+    <system:String x:Key="Wiegand_Interface">韦根接口类型</system:String>
+    <system:String x:Key="Wiegand_PulseWidth">脉冲宽度</system:String>
+    <system:String x:Key="Wiegand_PulseInterval">脉冲间隔</system:String>
+    <system:String x:Key="Wiegand_DataOutputInterval">数据输出间隔</system:String>
+    <system:String x:Key="Wiegand_OutputFormat">输出格式</system:String>
+    <system:String x:Key="Wiegand_PleaseEnterInterface">请选择，韦根接口类型</system:String>
+    <system:String x:Key="Wiegand_PleaseEnterPulseWidth">单位为10us，有效值为4-20</system:String>
+    <system:String x:Key="Wiegand_PleaseEnterPulseInterval">单位为100us，有效值为8-200</system:String>
+    <system:String x:Key="Wiegand_PleaseEnterDataOutputInterval">请输入，单位为ms，缺省默认为250，有效值50-1000</system:String>
+
+    <system:String x:Key="GPI_TouchOff">GPI触发工作</system:String>
+    <system:String x:Key="GPO_Enable">GPO是否启用</system:String>
+    <system:String x:Key="GPI_TriggerMode">触发模式</system:String>
+    <x:Array x:Key="GPI_TriggerModeType" Type="system:String">
+        <system:String>请选择触发模式</system:String>
+        <system:String>GPI状态1触发启动，GPI状态2触发停止</system:String>
+        <system:String>GPI状态1触发启动，盘存固定时间停止</system:String>
+        <system:String>GPI状态1和GPI状态2均可触发启动，盘存固定时间停止</system:String>
+        <system:String>GPI状态1或GPI状态2触发启动，另一GPI状态触发停止</system:String>
+    </x:Array>
+    
+    <system:String x:Key="GPI_GPIStatus1">GPI状态1</system:String>
+    <system:String x:Key="GPI_GPIStatus2">GPI状态2</system:String>
+    <system:String x:Key="GPI_Enable">是否启用</system:String>
+    <system:String x:Key="GPI_DurationOrInvertPersist">时长/反转持续</system:String>
+
+    <system:String x:Key="GPO_ReadTagGPOTrigger">读到标签GPO触发</system:String>
+    <system:String x:Key="GPO_EnterStatusDuration">请输入状态持续时间</system:String>
+    <system:String x:Key="GPO5">GPO5(蜂鸣器)</system:String>
+
+    <system:String x:Key="TagJson">标签JSON格式</system:String>
+    <system:String x:Key="Return_FormatType">格式类型</system:String>
+    <system:String x:Key="Return_LabelFieldOption">标签字段选项</system:String>
+    <system:String x:Key="Return_AdditionalData">附加数据</system:String>
+    <system:String x:Key="Return_AdditionalData2">附加数据2</system:String>
+    <system:String x:Key="Return_AdditionalData3">附加数据3</system:String>
+    <system:String x:Key="Return_AntennaNumber">天线编号</system:String>
+    <system:String x:Key="Return_ReadCount">读次数</system:String>
+    <system:String x:Key="Return_Frequency">频点</system:String>
+    <system:String x:Key="Return_TagProtocol">标签协议</system:String>
+    <system:String x:Key="Return_RSSI">RSSI</system:String>
+    <system:String x:Key="Return_ReservedField">保留字段</system:String>
+    <system:String x:Key="Return_FirstTimestamp">首次时戳</system:String>
+    <system:String x:Key="Return_LastTimestamp">末次时戳</system:String>
+
+    <system:String x:Key="AdvancedUploadOptions">数据上传高级选项</system:String>
+    <system:String x:Key="ClientConfirmation">客户端确认</system:String>
+    <x:Array x:Key="ClientConfirmationType" Type="system:String">
+        <system:String>不发确认报文</system:String>
+        <system:String>发确认报文</system:String>
+    </x:Array>
+
+    <system:String x:Key="ReplyTimeout">回复超时时间</system:String>
+    <system:String x:Key="OldDataCleanupTime">旧数据清理时间</system:String>
+    <system:String x:Key="BinaryMessageCRC">二进制报文CRC</system:String>
+    <x:Array x:Key="BinaryMessageCRCType" Type="system:String">
+        <system:String>不加crc</system:String>
+        <system:String>加crc</system:String>
+    </x:Array>
+    <system:String x:Key="EventSubscription">事件订阅</system:String>
+    <system:String x:Key="TagData">标签数据</system:String>
+    <system:String x:Key="Heartbeat">心跳</system:String>
+    <system:String x:Key="GPIChange">GPI改变</system:String>
+    <system:String x:Key="EmptyData">空数据</system:String>
+    <system:String x:Key="TagEnter">标签进入</system:String>
+    <system:String x:Key="TimeSync">时间同步</system:String>
+
+    <system:String x:Key="ReaderLogicalName">读写器逻辑名字</system:String>
+    <system:String x:Key="ReaderLogicalNameDescribe">读写器逻辑名字只能是ASC2字符，且不能包含/，长度不能大于128</system:String>
+    <system:String x:Key="HeartbeatPeriod">心跳周期</system:String>
+    <system:String x:Key="HeartbeatPeriodDescribe">请输入，有效范围为5-7200，单位秒，空缺使用默认值10</system:String>
+    <system:String x:Key="SendBufferLength">发送缓冲区长度</system:String>
+    <system:String x:Key="SendBufferLengthDescribe">请输入，有效范围为1500-8192，单位字节，空缺使用默认值1580</system:String>
+    <system:String x:Key="CustomParameters">定制参数</system:String>
+    <system:String x:Key="CustomParametersDescribe">请输入，定制化参数字符串只能是ASC2字符，长度不能大于64</system:String>
+
+    <system:String x:Key="Ethernet_Settings">以太网设置</system:String>
+    <system:String x:Key="Ethernet_Subnet_Mask">子网掩码</system:String>
+    <system:String x:Key="Ethernet_Gateway">网关</system:String>
+    <system:String x:Key="Ethernet_MAC_Address">MAC地址</system:String>
+    <system:String x:Key="Ethernet_MAC_Address_Options">MAC地址选项</system:String>
+    <system:String x:Key="Specify_MAC">指定MAC</system:String>
+    <system:String x:Key="MAC_Unchanged">MAC不变</system:String>
+
+    <system:String x:Key="Bluetooth_Settings">蓝牙设置</system:String>
+    <system:String x:Key="Bluetooth_Name">蓝牙名称</system:String>
+    <system:String x:Key="Bluetooth_Standard_Pairing">蓝牙标准配对</system:String>
+    <system:String x:Key="Bluetooth_Password_Pairing">自定义密码配对</system:String>
+    <system:String x:Key="Bluetooth_Default_Disabled">默认禁用</system:String>
+
+    <system:String x:Key="Advanced_Parameters">高级参数</system:String>
+    <system:String x:Key="Inventory_and_Tag_Operation_Settings">盘存和标签操作设置</system:String>
+
+
+    <system:String x:Key="RF_Parameters">射频参数</system:String>
+    <system:String x:Key="ParamAdvance_hoptab_describe">每个频点使用下划线分隔</system:String>
+    <system:String x:Key="RS232_Serial_Parameters">RS232串口参数</system:String>
+    <system:String x:Key="RS485_Serial_Parameters">RS485串口参数</system:String>
+    
+    <system:String x:Key="Modbus_Address">Modbus地址</system:String>
+    <system:String x:Key="Baud_Rate">波特率</system:String>
+    <system:String x:Key="Data_Bits">数据位</system:String>
+    <system:String x:Key="Stop_Bits">停止位</system:String>
+    <system:String x:Key="Parity">校验</system:String>
+    <x:Array x:Key="ParityItems" Type="system:String">
+        <system:String>不校验</system:String>
+        <system:String>偶校验</system:String>
+        <system:String>奇校验</system:String>
+    </x:Array>
+
+    <system:String x:Key="App_Init_Parameters">应用初始化参数</system:String>
+    <system:String x:Key="Max_Tag_Length">最大标签长度</system:String>
+    <system:String x:Key="Event_Queue_Length">事件队列长度</system:String>
+    <system:String x:Key="USB_Initial_Type">USB初始类型</system:String>
+
+    <system:String x:Key="Inventory_Parameters">盘存参数</system:String>
+    <system:String x:Key="Inventory_Cycle">盘存周期</system:String>
+    <system:String x:Key="Inventory_Cycle_Interval">盘存周期间隔</system:String>
+    <system:String x:Key="Working_Antenna">工作天线</system:String>
+    <system:String x:Key="Inventory_Mode">盘存模式</system:String>
+
+    <system:String x:Key="Tag_Access_Operation_Parameters">标签访问操作参数</system:String>
+    <system:String x:Key="Operation_Timeout">操作超时时长</system:String>
+    <system:String x:Key="Operation_Antenna">操作天线</system:String>
+    <system:String x:Key="Access_Password_Description">请输入，必须是长度为8的16进制字符串，非必要</system:String>
+    <system:String x:Key="Ant_Description">每个天线使用逗号分隔，空缺默认为读写器自检测天线</system:String>
+    
+    
+    <system:String x:Key="Ant_DurationOfStay">空缺默认为0，表示设备不固定单个天线驻留时间</system:String>
+    <system:String x:Key="SerialPort_Site_Describe">空缺默认为2，有效值为1-255</system:String>
+    <system:String x:Key="ByteLength_Describe">读取的EPC+BANK最大数据长度，单位字节，空缺使用默认值80</system:String>
+    <system:String x:Key="Event_Queue_Length_Describe">事件队列长度，空缺使用默认值60</system:String>
+    <system:String x:Key="Inventory_Period_Describe">有效值为0-65535，单位毫秒，空缺默认为150</system:String>
+    <system:String x:Key="Inventory_PeriodInterval_Describe">有效值为0-65535，单位毫秒，空缺默认为10</system:String>
+
+    <!-- ===== 新增：设备搜索 / 设备详情 / OTA 升级（v2 移植页） ===== -->
+    <system:String x:Key="ToolsView_tabitem_mcuupdate">MCU 固件升级</system:String>
+
+    <system:String x:Key="DevSearch_networkinterface">网络接口:</system:String>
+    <system:String x:Key="DevSearch_startsearch">开始搜索</system:String>
+    <system:String x:Key="DevSearch_stopsearch">停止搜索</system:String>
+    <system:String x:Key="DevSearch_clear">清空</system:String>
+    <system:String x:Key="DevSearch_col_no">编号</system:String>
+    <system:String x:Key="DevSearch_col_ip">IP</system:String>
+    <system:String x:Key="DevSearch_col_mac">MAC</system:String>
+    <system:String x:Key="DevSearch_col_boardtype">主板类型</system:String>
+    <system:String x:Key="DevSearch_col_modtype">模块类型</system:String>
+    <system:String x:Key="DevSearch_col_bver">主板版本</system:String>
+    <system:String x:Key="DevSearch_col_mver">模块版本</system:String>
+    <system:String x:Key="DevSearch_col_wmode">工作模式</system:String>
+    <system:String x:Key="DevSearch_tip_dblclick">双击设备行打开网络配置</system:String>
+    <system:String x:Key="DevSearch_status_searching">正在搜索...</system:String>
+    <system:String x:Key="DevSearch_status_found">已发现 {0} 台设备</system:String>
+    <system:String x:Key="DevSearch_status_done">搜索完成，共发现 {0} 台设备</system:String>
+    <system:String x:Key="DevSearch_status_done_none">搜索完成</system:String>
+    <system:String x:Key="DevSearch_msg_selectif">请选择网络接口</system:String>
+    <system:String x:Key="DevSearch_msg_title">提示</system:String>
+    <system:String x:Key="DevSearch_unknown">未知</system:String>
+    <system:String x:Key="DevSearch_passive">被动</system:String>
+    <system:String x:Key="DevSearch_active">主动</system:String>
+    <system:String x:Key="DevSearch_bootloader">bootloader</system:String>
+
+    <system:String x:Key="DevDetails_title">设备详细信息</system:String>
+    <system:String x:Key="DevDetails_boardtype">主板类型:</system:String>
+    <system:String x:Key="DevDetails_modtype">模块类型:</system:String>
+    <system:String x:Key="DevDetails_ip">IP:</system:String>
+    <system:String x:Key="DevDetails_bver">主板版本:</system:String>
+    <system:String x:Key="DevDetails_mver">模块版本:</system:String>
+    <system:String x:Key="DevDetails_mac">MAC:</system:String>
+    <system:String x:Key="DevDetails_workmode">工作模式:</system:String>
+    <system:String x:Key="DevDetails_statecode">状态码:</system:String>
+    <system:String x:Key="DevDetails_netcfg">网络设置</system:String>
+    <system:String x:Key="DevDetails_iplabel">IP 地址:</system:String>
+    <system:String x:Key="DevDetails_gwlabel">网关:</system:String>
+    <system:String x:Key="DevDetails_masklabel">子网掩码:</system:String>
+    <system:String x:Key="DevDetails_dnslabel">DNS:</system:String>
+    <system:String x:Key="DevDetails_portlabel">绑定端口:</system:String>
+    <system:String x:Key="DevDetails_dhcp">启用 DHCP</system:String>
+    <system:String x:Key="DevDetails_setmac">指定 MAC 地址</system:String>
+    <system:String x:Key="DevDetails_btn_setnet">设置网络</system:String>
+    <system:String x:Key="DevDetails_btn_backpassive">返回被动模式</system:String>
+    <system:String x:Key="DevDetails_set_ok">设置成功</system:String>
+    <system:String x:Key="DevDetails_set_fail">设置失败</system:String>
+    <system:String x:Key="DevDetails_switch_ok">切换成功</system:String>
+    <system:String x:Key="DevDetails_switch_fail">切换失败</system:String>
+    <system:String x:Key="DevDetails_msg_macerr">MAC地址格式错误，需要12位16进制字符</system:String>
+    <system:String x:Key="DevDetails_msg_ipempty">请输入IP地址相关项</system:String>
+    <system:String x:Key="DevDetails_msg_iperr">IP地址格式错误</system:String>
+    <system:String x:Key="DevDetails_msg_maskerr">子网掩码格式错误</system:String>
+    <system:String x:Key="DevDetails_msg_gwerr">网关格式错误</system:String>
+    <system:String x:Key="DevDetails_msg_dnserr">DNS格式错误</system:String>
+    <system:String x:Key="DevDetails_msg_porterr">绑定端口输入错误</system:String>
+
+    <system:String x:Key="Ota_title">MCU 固件升级（OTA1 协议）</system:String>
+    <system:String x:Key="Ota_devver">设备版本:</system:String>
+    <system:String x:Key="Ota_pkgver">  包版本:</system:String>
+    <system:String x:Key="Ota_channel">升级通道</system:String>
+    <system:String x:Key="Ota_ch_uart">串口 UART1 (115200)</system:String>
+    <system:String x:Key="Ota_ch_usbcdc">USB-CDC 虚拟串口</system:String>
+    <system:String x:Key="Ota_ch_http">HTTP 网络推送 (8081)</system:String>
+    <system:String x:Key="Ota_ch_usbdisk">USB 虚拟 U 盘 (FW.BIN)</system:String>
+    <system:String x:Key="Ota_ch_winusb">WinUSB 快通道</system:String>
+    <system:String x:Key="Ota_comport">串口/COM</system:String>
+    <system:String x:Key="Ota_refresh">刷新串口</system:String>
+    <system:String x:Key="Ota_readver">读版本</system:String>
+    <system:String x:Key="Ota_devip">设备 IP</system:String>
+    <system:String x:Key="Ota_pkgfile">固件包</system:String>
+    <system:String x:Key="Ota_browse">浏览...</system:String>
+    <system:String x:Key="Ota_start">开始升级</system:String>
+    <system:String x:Key="Ota_stop">停止</system:String>
+    <system:String x:Key="Ota_clearlog">清空日志</system:String>
+    <system:String x:Key="Ota_tip_pkgtooltip">选择 .otapkg 固件包（release/ 目录）</system:String>
+    <system:String x:Key="Ota_msg_nopkg">请先选择固件包（.otapkg）</system:String>
+    <system:String x:Key="Ota_msg_noport">请选择串口</system:String>
+    <system:String x:Key="Ota_filter_otapkg">OTA 固件包 (*.otapkg)|*.otapkg|所有文件 (*.*)|*.*</system:String>
+    <system:String x:Key="Ota_log_pkgver">固件包版本: </system:String>
+    <system:String x:Key="Ota_log_notota">所选文件不是 OTA 包（缺 OTA1 魔数）</system:String>
+    <system:String x:Key="Ota_log_readverfail">读取包版本失败: </system:String>
+    <system:String x:Key="Ota_log_readver_serialonly">读版本仅支持串口/USB-CDC 通道</system:String>
+    <system:String x:Key="Ota_log_selectport">请先选择串口</system:String>
+    <system:String x:Key="Ota_log_readdev">读取设备版本 (</system:String>
+    <system:String x:Key="Ota_log_serial">串口</system:String>
+    <system:String x:Key="Ota_log_usbcdc">USB-CDC</system:String>
+    <system:String x:Key="Ota_log_devver">设备固件版本: </system:String>
+    <system:String x:Key="Ota_log_noreply">读取失败（无响应，检查端口/接线/设备固件）</system:String>
+    <system:String x:Key="Ota_log_readex">读版本异常: </system:String>
+    <system:String x:Key="Ota_log_badpkg">错误：包文件不完整（&lt;82B 包头）</system:String>
+    <system:String x:Key="Ota_log_usbdisk_hint">USB 盘通道：把 release/FW.BIN 拷贝到设备虚拟 U 盘 → 安全弹出 → 重启设备即可</system:String>
+    <system:String x:Key="Ota_log_exception">异常：</system:String>
+    <system:String x:Key="Ota_log_open">打开 </system:String>
+    <system:String x:Key="Ota_log_openfail">串口打开失败</system:String>
+    <system:String x:Key="Ota_log_done">升级流程完成，设备将重启升级</system:String>
+    <system:String x:Key="Ota_log_failed">升级失败</system:String>
+    <system:String x:Key="Ota_log_httppush">HTTP 推送 </system:String>
+    <system:String x:Key="Ota_log_httpresp">HTTP 响应：</system:String>
+    <system:String x:Key="Ota_log_pushdone">推送完成，设备验签后重启升级</system:String>
+    <system:String x:Key="Ota_log_pushfail">推送失败</system:String>
+    <system:String x:Key="Ota_log_stopreq">停止请求已发送</system:String>
+</ResourceDictionary>

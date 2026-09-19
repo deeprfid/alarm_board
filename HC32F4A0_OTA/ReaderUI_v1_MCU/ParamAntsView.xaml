@@ -1,0 +1,77 @@
+﻿<UserControl x:Class="ReaderManager.ParamAntsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:ReaderManager"
+             xmlns:mah="clr-namespace:MahApps.Metro.Controls;assembly=MahApps.Metro"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes" 
+             mc:Ignorable="d"
+             d:DesignHeight="450" d:DesignWidth="680" 
+             SizeChanged="UserControl_SizeChanged" Loaded="UserControl_Loaded" 
+             IsVisibleChanged="UserControl_IsVisibleChanged">
+    <UserControl.Resources>
+        <Style
+            x:Key="dgSilionCheckStyle"
+            BasedOn="{StaticResource MaterialDesignDataGridCheckBoxColumnStyle}"
+            TargetType="{x:Type CheckBox}">
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="Background" Value="{DynamicResource MahApps.Brushes.AccentBase}" />
+        </Style>
+        <Style  x:Key="dgSilionCenterHeader"
+            TargetType="DataGridColumnHeader" BasedOn="{StaticResource MaterialDesignDataGridColumnHeader}">
+            <Setter Property="HorizontalContentAlignment" Value="Center">
+            </Setter>
+        </Style>
+
+        <Style x:Key="dgSilionTextCenterStyle" TargetType="{x:Type TextBlock}">
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="dgSilionChangeTextColorr" TargetType="{x:Type TextBlock}">
+            <Setter Property="Foreground" Value="{Binding ConnState,Converter={StaticResource MyColorConvert}}" />
+        </Style>
+
+    </UserControl.Resources>
+
+    <DataGrid x:Name="dgAntsConf" Grid.Column="0" Style="{StaticResource MaterialDesignDataGrid}"
+                  CanUserAddRows="False"
+                  CanUserSortColumns="False"
+                  AutoGenerateColumns="False"
+                  FontSize="14"
+                  RowHeaderWidth="0"
+                  GridLinesVisibility="Horizontal"
+                  CanUserResizeColumns="False"
+                  CanUserReorderColumns="False"
+                  Background="White"
+                  Width="560"
+                  MinWidth="560"
+                  HorizontalAlignment="Left"
+                  CellEditEnding="dgAntsConf_CellEditEnding"
+                  Margin="0,10,0,0" >
+
+
+        <DataGrid.Columns>
+
+            <materialDesign:DataGridTextColumn Binding="{Binding Name}" x:Name="dgtxName" Foreground="#FF5C5C5C"
+                                Header="{DynamicResource ParamSettings_ParamAnts_datagrid_header_index}"  
+                                Width="0.8*" IsReadOnly="True" />
+            <materialDesign:DataGridTextColumn Binding="{Binding ReadPower}"  x:Name="dgtxReadpower" Foreground="#FF5C5C5C"
+                                Width="1*" Header="{DynamicResource ParamSettings_ParamAnts_datagrid_header_readpower}"  />
+            <materialDesign:DataGridTextColumn Binding="{Binding WritePower}"  x:Name="dgtxWritepower" Foreground="#FF5C5C5C"
+                                Width="1*" Header="{DynamicResource ParamSettings_ParamAnts_datagrid_header_writepower}"  />
+            <materialDesign:DataGridTextColumn Binding="{Binding ConnState}"  x:Name="dgtxState"
+                                Width="1.1*" Header="{DynamicResource ParamSettings_ParamAnts_datagrid_header_state}" 
+                                                IsReadOnly="True"
+                                                ElementStyle="{StaticResource dgSilionChangeTextColorr}" />
+
+            <DataGridCheckBoxColumn Header="{DynamicResource ParamSettings_ParamAnts_datagrid_header_enableinv}" 
+                        Width="1*" HeaderStyle="{StaticResource dgSilionCenterHeader}" x:Name="dgtxIsUseInv"
+                        Binding="{Binding IsUseInv, UpdateSourceTrigger=PropertyChanged}" 
+                        ElementStyle="{StaticResource dgSilionCheckStyle}" 
+                        EditingElementStyle="{StaticResource MaterialDesignDataGridCheckBoxColumnEditingStyle}">
+
+            </DataGridCheckBoxColumn>
+        </DataGrid.Columns>
+    </DataGrid>
+</UserControl>

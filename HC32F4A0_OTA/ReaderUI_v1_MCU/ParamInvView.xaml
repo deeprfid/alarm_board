@@ -1,0 +1,330 @@
+﻿<UserControl x:Class="ReaderManager.ParamInvView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:ReaderManager"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:sys="clr-namespace:System;assembly=mscorlib"
+             xmlns:mah="clr-namespace:MahApps.Metro.Controls;assembly=MahApps.Metro"
+             xmlns:local_Models="clr-namespace:ReaderManager.Models"
+             mc:Ignorable="d" 
+             d:DesignHeight="850" d:DesignWidth="600" Loaded="UserControl_Loaded" 
+             SizeChanged="UserControl_SizeChanged" IsVisibleChanged="UserControl_IsVisibleChanged">
+
+    <UserControl.Resources>
+        <local_Models:InvertBoolConvert x:Key="MyBoolConvert" />
+        <x:Array x:Key="profItems" Type="sys:String">
+            <sys:String>FM0</sys:String>
+            <sys:String>M2</sys:String>
+            <sys:String>M4</sys:String>
+            <sys:String>M8</sys:String>
+            <sys:String>Profile0</sys:String>
+            <sys:String>Profile1</sys:String>
+            <sys:String>Profile2</sys:String>
+            <sys:String>Profile3</sys:String>
+            <sys:String>Profile4</sys:String>
+            <sys:String>Profile5</sys:String>
+            <sys:String>RF_MODE_1</sys:String>
+            <sys:String>RF_MODE_3</sys:String>
+            <sys:String>RF_MODE_5</sys:String>
+            <sys:String>RF_MODE_7</sys:String>
+            <sys:String>RF_MODE_11</sys:String>
+            <sys:String>RF_MODE_12</sys:String>
+            <sys:String>RF_MODE_13</sys:String>
+            <sys:String>RF_MODE_15</sys:String>
+            <sys:String>RF_MODE_103</sys:String>
+            <sys:String>RF_MODE_120</sys:String>
+            <sys:String>RF_MODE_345</sys:String>
+        </x:Array>
+
+        <x:Array x:Key="hopmodeItems" Type="sys:String">
+            <sys:String>Mode0</sys:String>
+            <sys:String>Mode1</sys:String>
+            <sys:String>Mode2</sys:String>
+        </x:Array>
+        <x:Array x:Key="gen2Targetstrs" Type="sys:String">
+            <sys:String>A</sys:String>
+            <sys:String>B</sys:String>
+            <sys:String>A->B</sys:String>
+            <sys:String>B->A</sys:String>
+        </x:Array>
+        <x:Array x:Key="gen2Qstrs" Type="sys:String">
+            <sys:String>Auto</sys:String>
+            <sys:String>0</sys:String>
+            <sys:String>1</sys:String>
+            <sys:String>2</sys:String>
+            <sys:String>3</sys:String>
+            <sys:String>4</sys:String>
+            <sys:String>5</sys:String>
+            <sys:String>6</sys:String>
+            <sys:String>7</sys:String>
+            <sys:String>8</sys:String>
+            <sys:String>9</sys:String>
+            <sys:String>10</sys:String>
+            <sys:String>11</sys:String>
+            <sys:String>12</sys:String>
+            <sys:String>13</sys:String>
+            <sys:String>14</sys:String>
+            <sys:String>15</sys:String>
+        </x:Array>
+        <x:Array x:Key="gen2sessItems" Type="sys:String">
+            <sys:String>Session0</sys:String>
+            <sys:String>Session1</sys:String>
+            <sys:String>Session2</sys:String>
+            <sys:String>Session3</sys:String>
+        </x:Array>
+
+        <x:Array x:Key="invBanks" Type="sys:String">
+            <sys:String>Reservebank</sys:String>
+            <sys:String>EPCbank</sys:String>
+            <sys:String>TIDbank</sys:String>
+            <sys:String>USERbank</sys:String>
+        </x:Array>
+    </UserControl.Resources>
+
+    <Grid x:Name="gdMain" Margin="0,10,0,0" >
+        <Grid.RowDefinitions>
+            <RowDefinition Height="30" MinHeight="30"/>
+            <RowDefinition Height="48" MinHeight="48"/>
+            <RowDefinition Height="30" MinHeight="30"/>
+            <RowDefinition Height="48" MinHeight="48"/>
+            <RowDefinition Height="30" MinHeight="30"/>
+            <RowDefinition Height="48" MinHeight="48"/>
+            <RowDefinition Height="20" MinHeight="20"/>
+            <RowDefinition Height="30" MinHeight="30"/>
+            <RowDefinition Height="48" MinHeight="48"/>
+            <RowDefinition Height="20" MinHeight="20"/>
+            <RowDefinition Height="30" MinHeight="30"/>
+            <RowDefinition Height="48" MinHeight="48"/>
+            <RowDefinition Height="20" MinHeight="20"/>
+            <RowDefinition Height="30" MinHeight="30"/>
+            <RowDefinition Height="48" MinHeight="48"/>
+            <RowDefinition Height="30" MinHeight="30"/>
+            <RowDefinition Height="48" MinHeight="48"/>
+        </Grid.RowDefinitions>
+       
+
+        <mah:ToggleSwitch x:Name="twAddData"   Grid.Row="0"  IsOn="{Binding invEmdData.IsEnable}"
+                              Style="{StaticResource paramToggleSwitchStyle}"
+                              OffContent="{DynamicResource ParamSettings_ParamInv_adddata_toggleswitch_off}" 
+                              OnContent="{DynamicResource ParamSettings_ParamInv_adddata_toggleswitch_on}" />
+        <Grid Grid.Row="1" >
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <ComboBox Style="{StaticResource paramComboBoxStyle}"  Grid.Column="0"
+                                  SelectedIndex="{Binding invEmdData.Bank}"
+                                  IsEnabled="{Binding ElementName=twAddData,Path=IsOn}"
+                                  ItemsSource="{StaticResource invBanks}"
+                                  materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_adddata_combobox_bank_hint}" SelectionChanged="ComboBox_SelectionChanged_1" />
+            <TextBox x:Name="StartAddrBox" Style ="{StaticResource paramTextBoxStyle}" 
+                            IsEnabled="{Binding ElementName=twAddData,Path=IsOn}"
+                             Grid.Column="1"    Text="{Binding invEmdData.StartAddr}"             
+                         materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_adddata_combobox_startaddr_hint}"  />
+
+            <TextBox x:Name="BlkCntBox" Style ="{StaticResource paramTextBoxStyle}" 
+                            IsEnabled="{Binding ElementName=twAddData,Path=IsOn}"
+                             Grid.Column="2"  Text="{Binding invEmdData.BlkCnt}"
+                         materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_adddata_combobox_blocks_hint}" Cursor="Arrow" />
+
+            <TextBox Style ="{StaticResource paramTextBoxStyle}" 
+                            IsEnabled="{Binding ElementName=twAddData,Path=IsOn}"
+                             Grid.Column="3" Text="{Binding invEmdData.AcsPwd}"
+                         materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_adddata_combobox_pwd_hint}" />
+
+
+        </Grid>
+        <mah:ToggleSwitch x:Name="twAddData2"   Grid.Row="2"  IsOn="{Binding invEmdData2.IsEnable}"
+                              Style="{StaticResource paramToggleSwitchStyle}"
+                              OffContent="{DynamicResource ParamSettings_ParamInv_adddata_toggleswitch_off}" 
+                              OnContent="{DynamicResource ParamSettings_ParamInv_adddata_toggleswitch_on}" />
+        <Grid Grid.Row="3" >
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <ComboBox Style="{StaticResource paramComboBoxStyle}"  Grid.Column="0"
+                                  SelectedIndex="{Binding invEmdData2.Bank}"
+                                  IsEnabled="{Binding ElementName=twAddData2,Path=IsOn}"
+                                  ItemsSource="{StaticResource invBanks}"
+                                  materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_adddata_combobox_bank_hint}" SelectionChanged="ComboBox_SelectionChanged_1" />
+            <TextBox x:Name="StartAddrBox2" Style ="{StaticResource paramTextBoxStyle}" 
+                            IsEnabled="{Binding ElementName=twAddData2,Path=IsOn}"
+                             Grid.Column="1"    Text="{Binding invEmdData2.StartAddr}"             
+                         materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_adddata_combobox_startaddr_hint}"  />
+
+            <TextBox x:Name="BlkCntBox2" Style ="{StaticResource paramTextBoxStyle}" 
+                            IsEnabled="{Binding ElementName=twAddData2,Path=IsOn}"
+                             Grid.Column="2"  Text="{Binding invEmdData2.BlkCnt}"
+                         materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_adddata_combobox_blocks_hint}" Cursor="Arrow" />
+
+            <TextBox Style ="{StaticResource paramTextBoxStyle}" 
+                            IsEnabled="{Binding ElementName=twAddData2,Path=IsOn}"
+                             Grid.Column="3" Text="{Binding invEmdData2.AcsPwd}"
+                         materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_adddata_combobox_pwd_hint}" />
+        </Grid>
+
+        <mah:ToggleSwitch x:Name="twAddData3"   Grid.Row="4"  IsOn="{Binding invEmdData3.IsEnable}"
+                              Style="{StaticResource paramToggleSwitchStyle}"
+                              OffContent="{DynamicResource ParamSettings_ParamInv_adddata_toggleswitch_off}" 
+                              OnContent="{DynamicResource ParamSettings_ParamInv_adddata_toggleswitch_on}" />
+        <Grid Grid.Row="5" >
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <ComboBox Style="{StaticResource paramComboBoxStyle}"  Grid.Column="0"
+                                  SelectedIndex="{Binding invEmdData3.Bank}"
+                                  IsEnabled="{Binding ElementName=twAddData3,Path=IsOn}"
+                                  ItemsSource="{StaticResource invBanks}"
+                                  materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_adddata_combobox_bank_hint}" SelectionChanged="ComboBox_SelectionChanged_1" />
+            <TextBox x:Name="StartAddrBox3" Style ="{StaticResource paramTextBoxStyle}" 
+                            IsEnabled="{Binding ElementName=twAddData3,Path=IsOn}"
+                             Grid.Column="1"    Text="{Binding invEmdData3.StartAddr}"             
+                         materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_adddata_combobox_startaddr_hint}"  />
+
+            <TextBox x:Name="BlkCntBox3" Style ="{StaticResource paramTextBoxStyle}" 
+                            IsEnabled="{Binding ElementName=twAddData3,Path=IsOn}"
+                             Grid.Column="2"  Text="{Binding invEmdData3.BlkCnt}"
+                         materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_adddata_combobox_blocks_hint}" Cursor="Arrow" />
+
+            <TextBox Style ="{StaticResource paramTextBoxStyle}" 
+                            IsEnabled="{Binding ElementName=twAddData3,Path=IsOn}"
+                             Grid.Column="3" Text="{Binding invEmdData3.AcsPwd}"
+                         materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_adddata_combobox_pwd_hint}" />
+        </Grid>
+
+        <Border  Style="{StaticResource paramBorderStyle}" Grid.Row="6" />
+
+        <mah:ToggleSwitch x:Name="tsFastMode"  Grid.Row="7"   IsOn="{Binding IsFastInvMode}"
+                              Style="{StaticResource paramToggleSwitchStyle}"
+                              OffContent="{DynamicResource ParamSettings_ParamInv_fastmode_toggleswitch_off}" 
+                              OnContent="{DynamicResource ParamSettings_ParamInv_fastmode_toggleswitch_on}" />
+       
+        <Grid Grid.Row="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <TextBox Style ="{StaticResource paramTextBoxStyle}" Text="{Binding ReadDur}"
+                            IsEnabled="{Binding ElementName=tsFastMode,Path=IsOn, Converter={StaticResource MyBoolConvert}}"
+                             Grid.Column="0"                
+                         materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_readdur}" />
+
+            <TextBox Style ="{StaticResource paramTextBoxStyle}"  Text="{Binding SleepDur}"
+                            IsEnabled="{Binding ElementName=tsFastMode,Path=IsOn, Converter={StaticResource MyBoolConvert}}"
+                             Grid.Column="1"                        
+                         materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_sleepdur}"  />
+
+            <ComboBox  x:Name="ModeType" Style="{StaticResource paramComboBoxStyle}"  Grid.Column="2"
+                      SelectedIndex="{Binding getQuickModeType}"
+                       IsEnabled="{Binding ElementName=tsFastMode,Path=IsOn}"
+                                  ItemsSource="{DynamicResource quickModeType}"
+                                  materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_quickModeType}" Grid.ColumnSpan="2" Margin="20,4,0,5" SelectionChanged="ComboBox_SelectionChanged"/>
+
+        </Grid>
+        <Border  Style="{StaticResource paramBorderStyle}"  Grid.Row="9" />
+
+        <Label Content="{DynamicResource ParamSettings_ParamInv_commonparams}" 
+               Grid.Row="10" Style="{StaticResource paramLabelStyle}"/>
+        <Grid Grid.Row="11">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="11*" />
+                <ColumnDefinition Width="49*"/>
+                <ColumnDefinition Width="60*" />
+                <ColumnDefinition Width="60*" />
+                <ColumnDefinition Width="60*" />
+                <ColumnDefinition Width="60*" />
+            </Grid.ColumnDefinitions>
+            <ComboBox x:Name="Gen2SessionBox"  Style="{StaticResource paramComboBoxStyle}"  Grid.Column="0"
+                      SelectedIndex="{Binding Gen2Session}"
+                      IsEnabled="{Binding IsQuickMode}"
+                                  ItemsSource="{StaticResource gen2sessItems}"
+                                  materialDesign:HintAssist.Hint="Gen2Session" Grid.ColumnSpan="2" Margin="20,4,0,5"/>
+            <ComboBox x:Name="ProfileBox" Style="{StaticResource paramComboBoxStyle}"  Grid.Column="2"
+                      SelectedIndex="{Binding Profile}"
+                      IsEnabled="{Binding IsQuickMode}"
+                                  ItemsSource="{StaticResource profItems}"
+                                  materialDesign:HintAssist.Hint="Profile" Margin="20,4,0,5"/>
+            <ComboBox x:Name="TargetBox" Style="{StaticResource paramComboBoxStyle}"  Grid.Column="3"  
+                                SelectedIndex="{Binding Gen2Target}"
+                                  ItemsSource="{StaticResource gen2Targetstrs}" 
+                                  materialDesign:HintAssist.Hint="Gen2 Target" />
+            <ComboBox x:Name="gen2QstrsBox" Style="{StaticResource paramComboBoxStyle}"  Grid.Column="4"  
+                      SelectedIndex="{Binding Gen2QValue}"
+                                  ItemsSource="{StaticResource gen2Qstrs}" ToolTip="Gen2 Q Value"
+                                  materialDesign:HintAssist.Hint="Gen2 Q Value" />
+        </Grid>
+        <Border  Style="{StaticResource paramBorderStyle}"  Grid.Row="12" />
+        <mah:ToggleSwitch x:Name="IsStart"  Grid.Row="13" IsOn="{Binding IsStartStop}"
+                          OnContent="{DynamicResource ParamSettings_ParamInv_stopparams_on}"
+                          OffContent="{DynamicResource ParamSettings_ParamInv_stopparams_off}"
+                          Style="{StaticResource paramToggleSwitchStyle}"
+                               />
+        <Grid Grid.Row="14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <TextBox Style ="{StaticResource paramTextBoxStyle}" 
+                     IsEnabled="{Binding ElementName=IsStart,Path=IsOn}"
+                     Grid.Column="0"
+                     Text="{Binding GetStopTime}"
+                     Name="StopTime"
+                     materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_readaccesstime}"  />
+            
+            <TextBox Style ="{StaticResource paramTextBoxStyle}" 
+                     IsEnabled="{Binding ElementName=IsStart,Path=IsOn}"
+                     Grid.Column="1"
+                     Text="{Binding GetStopCount}" 
+                     Name="StopCount"
+                     materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_readaccessquantity}"  />
+            <TextBox Style ="{StaticResource paramTextBoxStyle}" 
+                     IsEnabled="{Binding ElementName=IsStart,Path=IsOn}"
+                     Grid.Column="2"
+                     Text="{Binding GetForCount}" 
+                     Name="ForCount"
+                     materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_readaccessthenumber}"  />
+        </Grid>
+        <mah:ToggleSwitch x:Name="isGpi5"   Grid.Row="15"  IsOn="{Binding IsGpi5}"
+                              Style="{StaticResource paramToggleSwitchStyle}"
+                              OffContent="{DynamicResource ParamSettings_ParamInv_buzzer_off}" 
+                              OnContent="{DynamicResource ParamSettings_ParamInv_buzzer_on}" />
+        <Grid Grid.Row="16" >
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <TextBox Style ="{StaticResource paramTextBoxStyle}" 
+                            IsEnabled="{Binding ElementName=isGpi5,Path=IsOn}"
+                             Grid.Column="0" Text="{Binding IsGpi5Time}"
+                         materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamInv_buzzer_time}" />
+        </Grid>
+    </Grid>
+</UserControl>

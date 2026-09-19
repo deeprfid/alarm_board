@@ -33,5 +33,11 @@ _microboot_ref/
 #   （构建产物里的同名 .lib 仍被上面的 **/output/ 忽略，不会重复入库）
 **/*.pdb
 ReaderUI_v2_linux/
-ReaderUI_v1_MCU/
 Scanner_20260901/
+# ReaderUI_v1_MCU/ 自 2026-09-19 起【入库】：它是 C# 上位机工程（133 个 .cs/.xaml/.csproj 等，2.9MB），
+# 但整个目录 399MB 里 259MB 是 NuGet packages/ 还原缓存、10MB 是 obj/、还有 bin/ 构建输出 —— 这些不入库；
+# dll/（13.8MB，MahApps/MaterialDesign/ModuleAPI.dll 等）是工程直接引用的依赖，按"链接必需"同样入库。
+ReaderUI_v1_MCU/packages/
+ReaderUI_v1_MCU/obj/
+ReaderUI_v1_MCU/bin/
+ReaderUI_v1_MCU/.vs/

@@ -1,0 +1,745 @@
+﻿<UserControl x:Class="ReaderManager.StaticModelView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:mah="clr-namespace:MahApps.Metro.Controls;assembly=MahApps.Metro"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:sys="clr-namespace:System;assembly=mscorlib"
+             xmlns:local="clr-namespace:ReaderManager"
+             mc:Ignorable="d" 
+             d:DesignHeight="1450" d:DesignWidth="800">
+   
+    <!--<Label Content="Coming Soon" HorizontalAlignment="Center"
+               VerticalAlignment="Center" FontSize="25"
+                           Style="{StaticResource fwUpdProgLabel}" />-->
+    <UserControl.Resources>
+        <local:ArrayToStringWithUnderscoresConverter x:Key="ArrayToStringConverter"/>
+        <local:TextBlockConverter x:Key="TextBlockConverter"/>
+        <x:Array x:Key="hopmodeItems" Type="sys:String">
+            <sys:String>Mode0</sys:String>
+            <sys:String>Mode1</sys:String>
+            <sys:String>Mode2</sys:String>
+        </x:Array>
+        <x:Array x:Key="bankItems" Type="sys:String">
+            <sys:String>RESERVED</sys:String>
+            <sys:String>EPC</sys:String>
+            <sys:String>TID</sys:String>
+            <sys:String>USER</sys:String>
+        </x:Array>
+        <x:Array x:Key="bankItems2" Type="sys:String">
+            <sys:String>EPC</sys:String>
+            <sys:String>TID</sys:String>
+            <sys:String>USER</sys:String>
+        </x:Array>
+        <x:Array x:Key="Data_BitsItems" Type="sys:String">
+            <sys:String>8</sys:String>
+            <sys:String>9</sys:String>
+        </x:Array>
+        <x:Array x:Key="Stop_BitsItems" Type="sys:String">
+            <sys:String>1</sys:String>
+            <sys:String>2</sys:String>
+        </x:Array>
+        <x:Array x:Key="USB_Initial_TypeItems" Type="sys:String">
+            <sys:String>请选择</sys:String>
+            <sys:String>HID+KEYBOARD</sys:String>
+            <sys:String>HID+CDC</sys:String>
+        </x:Array>
+        <x:Array x:Key="Baud_RateItems" Type="sys:String">
+            <sys:String>9600</sys:String>
+            <sys:String>19200</sys:String>
+            <sys:String>38400</sys:String>
+            <sys:String>57600</sys:String>
+            <sys:String>115200</sys:String>
+            <sys:String>230400</sys:String>
+            <sys:String>460800</sys:String>
+            <sys:String>921600</sys:String>
+        </x:Array>
+        <Style BasedOn="{StaticResource MaterialDesignFloatingHintComboBox}" x:Key="paramComboBoxStyle"
+               TargetType="ComboBox" >
+            <Setter Property="Margin" Value="20,0,20,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="MinWidth" Value="100" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="materialDesign:HintAssist.FloatingScale" Value="0.85" />
+            <Setter Property="materialDesign:HintAssist.Foreground" Value="{DynamicResource MahApps.Brushes.AccentBase}" />
+        </Style>
+        <x:Array x:Key="gen2Targetstrs" Type="sys:String">
+            <sys:String>A</sys:String>
+            <sys:String>B</sys:String>
+            <sys:String>A->B</sys:String>
+            <sys:String>B->A</sys:String>
+        </x:Array>
+        <x:Array x:Key="gen2Qstrs" Type="sys:String">
+            <sys:String>Auto</sys:String>
+            <sys:String>0</sys:String>
+            <sys:String>1</sys:String>
+            <sys:String>2</sys:String>
+            <sys:String>3</sys:String>
+            <sys:String>4</sys:String>
+            <sys:String>5</sys:String>
+            <sys:String>6</sys:String>
+            <sys:String>7</sys:String>
+            <sys:String>8</sys:String>
+            <sys:String>9</sys:String>
+            <sys:String>10</sys:String>
+            <sys:String>11</sys:String>
+            <sys:String>12</sys:String>
+            <sys:String>13</sys:String>
+            <sys:String>14</sys:String>
+            <sys:String>15</sys:String>
+        </x:Array>
+        <x:Array x:Key="gen2sessItems" Type="sys:String">
+            <sys:String>Session0</sys:String>
+            <sys:String>Session1</sys:String>
+            <sys:String>Session2</sys:String>
+            <sys:String>Session3</sys:String>
+        </x:Array>
+        <x:Array x:Key="gen2ProfItems" Type="sys:String">
+            <sys:String>FM0</sys:String>
+            <sys:String>M2</sys:String>
+            <sys:String>M4</sys:String>
+            <sys:String>M8</sys:String>
+            <sys:String>Profile0</sys:String>
+            <sys:String>Profile1</sys:String>
+            <sys:String>Profile2</sys:String>
+            <sys:String>Profile3</sys:String>
+            <sys:String>Profile4</sys:String>
+            <sys:String>Profile5</sys:String>
+            <sys:String>RF_MODE_1</sys:String>
+            <sys:String>RF_MODE_3</sys:String>
+            <sys:String>RF_MODE_5</sys:String>
+            <sys:String>RF_MODE_7</sys:String>
+            <sys:String>RF_MODE_11</sys:String>
+            <sys:String>RF_MODE_12</sys:String>
+            <sys:String>RF_MODE_13</sys:String>
+            <sys:String>RF_MODE_15</sys:String>
+            <sys:String>RF_MODE_103</sys:String>
+            <sys:String>RF_MODE_120</sys:String>
+            <sys:String>RF_MODE_345</sys:String>
+        </x:Array>
+
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Loaded="Grid_Loaded">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="20" />
+                <ColumnDefinition Width="23*" />
+            </Grid.ColumnDefinitions>
+            <Grid Grid.Row="0" Grid.Column="1"  >
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60*" />
+                    <ColumnDefinition Width="140*"/>
+                    <ColumnDefinition Width="60*" />
+                    <ColumnDefinition Width="60*" />
+                    <ColumnDefinition Width="60*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource ActiveMode_ReaderIp}" FontSize="13"/>
+                <TextBox x:Name="IpString" Grid.Column="1" Style ="{StaticResource paramTextBoxStyle}"
+                         materialDesign:HintAssist.Hint="{DynamicResource Connect_label_ip}" GotFocus="IpString_GotFocus" />
+                <Button x:Name="btnGet" VerticalAlignment="Center"  Grid.Column="2" Margin="0,0, 20, 0"                                   
+                                    HorizontalAlignment="Right"
+                                    Content="{DynamicResource ParamSettings_button_get}"                                    
+                                    ToolTip="{DynamicResource ParamSettings_button_set_clicktoget}" 
+                                    Style="{StaticResource AccentSettingButtonStyle}"  Cursor="Hand" Click="btnGet_Click"  />
+                <Button x:Name="btnSet" VerticalAlignment="Center"  Grid.Column="3" Margin="0,0, 20, 0"                                   
+                                    HorizontalAlignment="Right"
+                                    Content="{DynamicResource ParamSettings_button_set}"                                    
+                                    ToolTip="{DynamicResource ParamSettings_button_set_clicktoset}" 
+                                    Style="{StaticResource AccentSettingButtonStyle}" Click="btnSet_Click" />
+                <!--<Button x:Name="btnClear" VerticalAlignment="Center"  Grid.Column="4" Margin="0,0, 20, 0"                                   
+                                    HorizontalAlignment="Right"
+                                    Content="{DynamicResource ActiveMode_BtnClear}"                                    
+                                    ToolTip="{DynamicResource ParamSettings_button_set_clicktoget}" 
+                                    Style="{StaticResource AccentSettingButtonStyle}"  />-->
+
+            </Grid>
+           
+            <Label Grid.Row="3" Grid.Column="1"  Content="{DynamicResource Ethernet_Settings}" Style="{StaticResource paramLabelStyle}"/>
+            <Grid Grid.Row="4" Grid.Column="1" Margin="0, 0,0,5">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60*" />
+                    <ColumnDefinition Width="140*"/>
+                    <ColumnDefinition Width="60*" />
+                    <ColumnDefinition Width="140*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Column="0" Grid.Row="0"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource ParamSettings_ParamInter_ipaddr}" FontSize="13"/>
+                <TextBox Grid.Column="1" Style ="{StaticResource paramTextBoxStyle}" Text="{Binding Ethernet.Ip}"
+                         materialDesign:HintAssist.Hint="{DynamicResource Connect_label_ip}" />
+                <TextBlock Grid.Column="2" Grid.Row="0"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource ParamSettings_ParamInter_subnetmask}" FontSize="13"/>
+                <TextBox Grid.Column="3" Style ="{StaticResource paramTextBoxStyle}" Text="{Binding Ethernet.Nm}" />
+
+                <TextBlock Grid.Column="0" Grid.Row="1"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource ParamSettings_ParamInter_gateway}" FontSize="13"/>
+                <TextBox Grid.Column="1" Grid.Row="1" Style ="{StaticResource paramTextBoxStyle}" Text="{Binding Ethernet.Gw}"/>
+                <TextBlock Grid.Column="2" Grid.Row="1"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="DNS" FontSize="13"/>
+                <TextBox Grid.Column="3" Grid.Row="1" Style ="{StaticResource paramTextBoxStyle}" Text="{Binding Ethernet.Dns}" />
+
+                <TextBlock Grid.Column="0" Grid.Row="2"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="DHCP" FontSize="13"/>
+                <CheckBox  Style="{StaticResource paramCheckBoxStyle}"
+                       Grid.Column="1" Grid.Row="2" Margin="15,0,0,0" Content="{DynamicResource Msg_StartUsing}" />
+                <TextBox Grid.Column="3" Grid.Row="2" Style ="{StaticResource paramTextBoxStyle}" Visibility="Hidden" />
+
+                <TextBlock Grid.Column="0" Grid.Row="3"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource Ethernet_MAC_Address}" FontSize="13"/>
+                <TextBox Grid.Column="1" Grid.Row="3" Style ="{StaticResource paramTextBoxStyle}" Text="{Binding Ethernet.Mac}" />
+                <TextBlock Grid.Column="2" Grid.Row="3"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource Ethernet_MAC_Address_Options}" FontSize="13"/>
+                <CheckBox  Style="{StaticResource paramCheckBoxStyle}"
+                       Grid.Column="3" Grid.Row="3" Margin="20,0,0,0" Content="{DynamicResource Specify_MAC}" />
+                <CheckBox  Style="{StaticResource paramCheckBoxStyle}"
+                       Grid.Column="3" Grid.Row="3" Margin="140,0,0,0" Content="{DynamicResource MAC_Unchanged}" />
+            </Grid>
+
+            <Label Grid.Row="7" Grid.Column="1"  Content="{DynamicResource RF_Parameters}" Style="{StaticResource paramLabelStyle}"/>
+            <Grid Grid.Row="8" Grid.Column="1" Margin="0, 0,0,5">
+               
+                <ContentControl>
+                    <ItemsControl ItemsSource="{Binding Rf.Tx_powers}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,0,0,5">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="60*" />
+                                        <ColumnDefinition Width="140*" />
+                                        <ColumnDefinition Width="60*" />
+                                        <ColumnDefinition Width="140*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Column="0" Grid.Row="0" Margin="15, 0,0,0" VerticalAlignment="Center"
+                                Text="{Binding AntennaName_Rp}" FontSize="13"/>
+                                
+                                <TextBox Grid.Column="1" Grid.Row="0" Style="{StaticResource paramTextBoxStyle}"
+                                Text="{Binding Rp}" />
+                                
+                                <!--<TextBlock Grid.Column="2" Grid.Row="0" Margin="15, 0,0,0" VerticalAlignment="Center"
+                                Text="{Binding AntennaName_Wp}" FontSize="13"/>
+                                
+                                <TextBox Grid.Column="3" Grid.Row="0" Style="{StaticResource paramTextBoxStyle}"
+                                Text="{Binding Wp}" />-->
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                </ContentControl>
+            </Grid>
+            
+            <Expander Grid.Row="9" Grid.Column="1" Margin="0,20,0,0" Header="{DynamicResource Advanced_Parameters}">
+                <StackPanel Margin="10">
+                    <mah:ToggleSwitch x:Name="isGpoNmae"   Grid.Row="15"  Grid.Column="1" IsOn="{Binding IsGpO_enable}"
+                              Style="{StaticResource paramToggleSwitchStyle}"
+                              OffContent="{DynamicResource GPO_Enable}" 
+                              OnContent="{DynamicResource GPO_Enable}" />
+                    <Grid  IsEnabled="{Binding ElementName=isGpoNmae,Path=IsOn}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="60" />
+
+                        </Grid.ColumnDefinitions>
+
+                        <Label Content="GPI1" Grid.Column="0" Style="{StaticResource paramLabelStyle}"
+                         Margin="20,0,0,0" IsEnabled="{Binding IsGpO_enable}"
+                       FontSize="14"/>
+                        <ToggleButton x:Name="GpoToggleButton1" Width="40" Height="40"  Grid.Column="0" Margin="70,5,0,5"
+                          IsChecked="{Binding Path=Gpos, Mode=OneWay, ConverterParameter=GpoToggleButton_1,Converter={StaticResource TextBlockConverter}}"
+                          Style="{StaticResource gpoTbStateStyle}"
+                          ToolTip="{DynamicResource PeripheralView_ClickToChangeState}"                             
+                          Content="{DynamicResource PeripheralView_GPIOstate_Low}"
+                          materialDesign:ToggleButtonAssist.OnContent="{DynamicResource PeripheralView_GPIOstate_High}" />
+                        <Label Content="GPI2" Grid.Column="1" Style="{StaticResource paramLabelStyle}"
+                         Margin="20,0,0,0" IsEnabled="{Binding EnableGpi2}"
+                       FontSize="14"/>
+                        <ToggleButton x:Name="GpoToggleButton2" Width="40" Height="40"  Grid.Column="1" Margin="70,5,0,5"
+                          IsChecked="{Binding Path=Gpos, Mode=OneWay, ConverterParameter=GpoToggleButton_2,Converter={StaticResource TextBlockConverter}}"
+                          Style="{StaticResource gpoTbStateStyle}"
+                          ToolTip="{DynamicResource PeripheralView_ClickToChangeState}"                             
+                          Content="{DynamicResource PeripheralView_GPIOstate_Low}"
+                          materialDesign:ToggleButtonAssist.OnContent="{DynamicResource PeripheralView_GPIOstate_High}" />
+                        <Label Content="GPI3" Grid.Column="2" Style="{StaticResource paramLabelStyle}"
+                         Margin="20,0,0,0" IsEnabled="{Binding EnableGpi3}"
+                       FontSize="14"/>
+                        <ToggleButton x:Name="GpoToggleButton3" Width="40" Height="40"  Grid.Column="2" Margin="70,5,0,5"
+                          IsChecked="{Binding Path=Gpos, Mode=OneWay, ConverterParameter=GpoToggleButton_3,Converter={StaticResource TextBlockConverter}}"
+                          Style="{StaticResource gpoTbStateStyle}"
+                          ToolTip="{DynamicResource PeripheralView_ClickToChangeState}"                             
+                          Content="{DynamicResource PeripheralView_GPIOstate_Low}"
+                          materialDesign:ToggleButtonAssist.OnContent="{DynamicResource PeripheralView_GPIOstate_High}" />
+                        <Label Content="GPI4" Grid.Column="3" Style="{StaticResource paramLabelStyle}"
+                         Margin="20,0,0,0" IsEnabled="{Binding EnableGpi4}"
+                        FontSize="14"/>
+                        <ToggleButton x:Name="GpoToggleButton4" Width="40" Height="40"  Grid.Column="3" Margin="70,5,0,5"
+                          IsChecked="{Binding Path=Gpos, Mode=OneWay, ConverterParameter=GpoToggleButton_4,Converter={StaticResource TextBlockConverter}}"
+                          Style="{StaticResource gpoTbStateStyle}"
+                          ToolTip="{DynamicResource PeripheralView_ClickToChangeState}"                             
+                          Content="{DynamicResource PeripheralView_GPIOstate_Low}"
+                          materialDesign:ToggleButtonAssist.OnContent="{DynamicResource PeripheralView_GPIOstate_High}" />
+                    </Grid>
+                    
+                    <Label Content="{DynamicResource ParamSettings_ParamAdvance_tagdatacache}"  Style="{StaticResource paramLabelStyle}"/>
+                    <Grid  Height="48">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="16*" />
+                            <ColumnDefinition Width="63*"/>
+                            <ColumnDefinition Width="79*" />
+                            <ColumnDefinition Width="79*" />
+                        </Grid.ColumnDefinitions>
+                        <CheckBox  Style="{StaticResource paramCheckBoxStyle}"  IsChecked="{Binding Tag_data.Unique_by_antenna}"
+                       Grid.Column="0"  Content="{DynamicResource ParamSettings_ParamAdvance_tdc_ant}" Grid.ColumnSpan="2" Margin="20,0,0,0" />
+
+                        <CheckBox  Style="{StaticResource paramCheckBoxStyle}"  IsChecked="{Binding Tag_data.Unique_by_bank_data}"
+                       Grid.Column="2"  Content="{DynamicResource ParamSettings_ParamAdvance_tdc_bank}" Margin="20,0,0,0" />
+
+                        <CheckBox  Style="{StaticResource paramCheckBoxStyle}"   IsChecked="{Binding Tag_data.Record_highest_rssi}"
+                       Grid.Column="3"  Content="{DynamicResource ParamSettings_ParamAdvance_tdc_rssi}" Margin="20,0,0,0" />
+                    </Grid>
+
+                    <Label Content="{DynamicResource RF_Parameters}"  Style="{StaticResource paramLabelStyle}"/>
+                    <Grid Grid.Row="6" Grid.Column="1" Margin="0, 0,0,5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*"/>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Column="0" Grid.Row="0"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource ParamSettings_ParamAdvance_region}" FontSize="13"/>
+                        <ComboBox Style="{StaticResource paramComboBoxStyle}"  Grid.Column="1"  Margin="20,0,20,0" 
+                                  x:Name="cbbRegion" VerticalAlignment="Bottom"   SelectedIndex="{Binding Rf.Region}" 
+                      ItemsSource="{DynamicResource List_ParamSettings_ParamAdvance_region2}"
+                                  
+                                  materialDesign:HintAssist.Hint="{DynamicResource ParamSettings_ParamAdvance_region}" />
+                        <TextBlock Grid.Column="0" Grid.Row="1"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource ParamSettings_ParamAdvance_hoptab}" FontSize="13"/>
+                        <TextBox Grid.Column="1" Grid.Row="1" Grid.ColumnSpan="3" Style ="{StaticResource paramTextBoxStyle}"
+                                 materialDesign:HintAssist.Hint="{DynamicResource ParamAdvance_hoptab_describe}" Text="{Binding Rf.Hop_tableToString}"/>
+
+                        <TextBlock Grid.Column="0" Grid.Row="2"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource ParamSettings_ParamInv_antdwelltime}" FontSize="13"/>
+                        <TextBox Grid.Column="1" Grid.Row="3" Grid.ColumnSpan="3" Style ="{StaticResource paramTextBoxStyle}" 
+                                 materialDesign:HintAssist.Hint="{DynamicResource Ant_DurationOfStay}"  Text="{Binding Rf.Ant_max_dwell_time}" />
+                        
+                        <TextBlock Grid.Column="2" Grid.Row="0"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource ParamSettings_ParamInv_hopmode}" FontSize="13"/>
+                        <ComboBox Grid.Row="0"   Style="{StaticResource paramComboBoxStyle}"  Grid.Column="3"
+                      SelectedIndex="{Binding Rf.Hop_mode}"
+                      ItemsSource="{StaticResource hopmodeItems}"
+                      Grid.ColumnSpan="2" Margin="20,0,0,0"/>
+                    </Grid>
+
+                    <Label Content="{DynamicResource RS232_Serial_Parameters}"  Style="{StaticResource paramLabelStyle}"/>
+                    <Grid Grid.Row="2" Grid.Column="1" Margin="0, 0,0,5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*"/>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Column="0" Grid.Row="0"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource Modbus_Address}" FontSize="13"/>
+                        <TextBox Grid.Column="1" Grid.Row="0" Style ="{StaticResource paramTextBoxStyle}"
+                                materialDesign:HintAssist.Hint="{DynamicResource SerialPort_Site_Describe}" Text="{Binding Uart1.Address}" />
+                        <TextBlock Grid.Column="0" Grid.Row="1"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource Baud_Rate}" FontSize="13"/>
+                        <ComboBox  Grid.Row="1" Style="{StaticResource paramComboBoxStyle}"  Grid.Column="1"
+                      Text="{Binding Uart1.Baud}"
+                      ItemsSource="{StaticResource Baud_RateItems}" Grid.ColumnSpan="2" Margin="20,0,0,0"/>
+                        <TextBlock Grid.Column="2" Grid.Row="1"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource Data_Bits}" FontSize="13"/>
+                        <ComboBox Grid.Row="1"  Style="{StaticResource paramComboBoxStyle}"  Grid.Column="3"
+                      SelectedIndex="{Binding Uart1.Data_bits}"
+                      ItemsSource="{StaticResource Data_BitsItems}" Grid.ColumnSpan="2" Margin="20,0,0,0"/>
+
+                        <TextBlock Grid.Column="0" Grid.Row="2"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource Stop_Bits}" FontSize="13"/>
+                        <ComboBox  Grid.Row="2"   Style="{StaticResource paramComboBoxStyle}"  Grid.Column="1"
+                      SelectedIndex="{Binding Uart1.Stop_bits}"
+                      ItemsSource="{StaticResource Stop_BitsItems}"  Grid.ColumnSpan="2" Margin="20,0,0,0"/>
+                        <TextBlock Grid.Column="2" Grid.Row="2"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource Parity}" FontSize="13"/>
+                        <ComboBox Grid.Row="2"   Style="{StaticResource paramComboBoxStyle}"  Grid.Column="3"
+                      SelectedIndex="{Binding Uart1.Parity}"
+                      ItemsSource="{DynamicResource ParityItems}" Grid.ColumnSpan="2" Margin="20,0,0,0"/>
+                    </Grid>
+
+                    <Label Content="{DynamicResource RS485_Serial_Parameters}"  Style="{StaticResource paramLabelStyle}"/>
+                    <Grid Grid.Row="2" Grid.Column="1" Margin="0, 0,0,5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*"/>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Column="0" Grid.Row="0"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource Modbus_Address}" FontSize="13"/>
+                        <TextBox Grid.Column="1" Grid.Row="0" Style ="{StaticResource paramTextBoxStyle}"
+                                materialDesign:HintAssist.Hint="{DynamicResource SerialPort_Site_Describe}" Text="{Binding Uart2.Address}" />
+                        <TextBlock Grid.Column="0" Grid.Row="1"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource Baud_Rate}" FontSize="13"/>
+                        <ComboBox  Grid.Row="1" Style="{StaticResource paramComboBoxStyle}"  Grid.Column="1"
+                      Text="{Binding Uart2.Baud}"
+                      ItemsSource="{StaticResource Baud_RateItems}" Grid.ColumnSpan="2" Margin="20,0,0,0"/>
+                        <TextBlock Grid.Column="2" Grid.Row="1"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource Data_Bits}" FontSize="13"/>
+                        <ComboBox Grid.Row="1"  Style="{StaticResource paramComboBoxStyle}"  Grid.Column="3"
+                      SelectedIndex="{Binding Uart2.Data_bits}"
+                      ItemsSource="{StaticResource Data_BitsItems}" Grid.ColumnSpan="2" Margin="20,0,0,0"/>
+
+                        <TextBlock Grid.Column="0" Grid.Row="2"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource Stop_Bits}" FontSize="13"/>
+                        <ComboBox  Grid.Row="2"   Style="{StaticResource paramComboBoxStyle}"  Grid.Column="1"
+                      SelectedIndex="{Binding Uart2.Stop_bits}"
+                      ItemsSource="{StaticResource Stop_BitsItems}"  Grid.ColumnSpan="2" Margin="20,0,0,0"/>
+                        <TextBlock Grid.Column="2" Grid.Row="2"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource Parity}" FontSize="13"/>
+                        <ComboBox Grid.Row="2"   Style="{StaticResource paramComboBoxStyle}"  Grid.Column="3"
+                      SelectedIndex="{Binding Uart2.Parity}"
+                      ItemsSource="{DynamicResource ParityItems}" Grid.ColumnSpan="2" Margin="20,0,0,0"/>
+                    </Grid>
+
+                    <Label Content="{DynamicResource RF_Parameters}"  Style="{StaticResource paramLabelStyle}"/>
+                    <Grid Grid.Row="6" Grid.Column="1" Margin="0, 0,0,5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*"/>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Column="0" Grid.Row="0"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource USB_Initial_Type}" FontSize="13"/>
+                        <ComboBox Style="{StaticResource paramComboBoxStyle}"  Grid.Column="1"  Margin="20,0,20,0" 
+                                   VerticalAlignment="Bottom"   SelectedIndex="{Binding App_init.Usb_type}" 
+                      ItemsSource="{DynamicResource USB_Initial_TypeItems}" />
+
+                        <TextBlock Grid.Column="0" Grid.Row="2"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource Max_Tag_Length}" FontSize="13"/>
+                        <TextBox Grid.Column="1" Grid.Row="3" Style ="{StaticResource paramTextBoxStyle}"
+                                materialDesign:HintAssist.Hint="{DynamicResource ByteLength_Describe}" Text="{Binding App_init.Max_tb_rec_len}"  />
+
+                        <TextBlock Grid.Column="2" Grid.Row="2"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource Event_Queue_Length}" FontSize="13"/>
+                        <TextBox Grid.Column="3" Grid.Row="2" Style ="{StaticResource paramTextBoxStyle}"
+                                materialDesign:HintAssist.Hint="{DynamicResource Event_Queue_Length_Describe}" Text="{Binding App_init.Evt_que_len}"  />
+                    </Grid>
+                </StackPanel>
+            </Expander>
+
+            <Expander Grid.Row="10" Grid.Column="1" Margin="0,20,0,0" Header="{DynamicResource Inventory_and_Tag_Operation_Settings}">
+                <StackPanel Margin="10">
+                    <Label Grid.Row="1" Grid.Column="1"  Content="Gen2" Style="{StaticResource paramLabelStyle}"/>
+                    <Grid Grid.Row="2" Grid.Column="1" Margin="0, 0,0,5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*"/>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Column="0" Grid.Row="0"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="Session" FontSize="13"/>
+                        <ComboBox  Grid.Row="0" Style="{StaticResource paramComboBoxStyle}"  Grid.Column="1"
+                      SelectedIndex="{Binding Protocol.Gen2.Session}"
+                      ItemsSource="{StaticResource gen2sessItems}"
+                      materialDesign:HintAssist.Hint="Gen2Session" Grid.ColumnSpan="2" Margin="20,0,0,0"/>
+                        <TextBlock Grid.Column="2" Grid.Row="0"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="Target" FontSize="13"/>
+                        <ComboBox Grid.Row="0"  Style="{StaticResource paramComboBoxStyle}"  Grid.Column="3"
+                      SelectedIndex="{Binding Protocol.Gen2.Target}"
+                      ItemsSource="{StaticResource gen2Targetstrs}"
+                      materialDesign:HintAssist.Hint="gen2Target" Grid.ColumnSpan="2" Margin="20,0,0,0"/>
+
+                        <TextBlock Grid.Column="0" Grid.Row="1"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="QValue" FontSize="13"/>
+                        <ComboBox  Grid.Row="1"   Style="{StaticResource paramComboBoxStyle}"  Grid.Column="1"
+                      SelectedIndex="{Binding Protocol.Gen2.Q,ConverterParameter=QValue,Converter={StaticResource TextBlockConverter}}"
+                      ItemsSource="{StaticResource gen2Qstrs}"
+                      materialDesign:HintAssist.Hint="Gen2QValue" Grid.ColumnSpan="2" Margin="20,0,0,0"/>
+                        <TextBlock Grid.Column="2" Grid.Row="1"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="Profe" FontSize="13"/>
+                        <ComboBox Grid.Row="1"   Style="{StaticResource paramComboBoxStyle}"  Grid.Column="3"
+                      SelectedIndex="{Binding Protocol.Gen2.Profile,Converter={StaticResource TextBlockConverter},ConverterParameter=Profile}"
+                      ItemsSource="{StaticResource gen2ProfItems}"
+                      materialDesign:HintAssist.Hint="gen2Prof" Grid.ColumnSpan="2" Margin="20,0,0,0"/>
+                    </Grid>
+                    
+                    <Label Content="{DynamicResource Inventory_Parameters}" Style="{StaticResource paramLabelStyle}"/>
+                    <Grid  Margin="0, 0,0,5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*"/>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Column="0" Grid.Row="0"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource Inventory_Cycle}" FontSize="13"/>
+                        <TextBox Grid.Column="1" Style ="{StaticResource paramTextBoxStyle}"
+                         materialDesign:HintAssist.Hint="{DynamicResource Inventory_Period_Describe}" Text="{Binding Tagops_param.Inventory.Cycle}" />
+                        <TextBlock Grid.Column="2" Grid.Row="0"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource Inventory_Cycle_Interval}" FontSize="13"/>
+                        <TextBox Grid.Column="3" Style ="{StaticResource paramTextBoxStyle}"
+                                materialDesign:HintAssist.Hint="{DynamicResource Inventory_PeriodInterval_Describe}" Text="{Binding Tagops_param.Inventory.Interval}"/>
+                        <TextBlock Grid.Column="0" Grid.Row="1"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource Working_Antenna}" FontSize="13"/>
+                        <TextBox Grid.Column="1" Grid.Row="1" Style ="{StaticResource paramTextBoxStyle}" 
+                              materialDesign:HintAssist.Hint="{DynamicResource Ant_Description}" Text="{Binding Tagops_param.Inventory.Ants,Converter={StaticResource ArrayToStringConverter}}"  />
+                        <TextBlock Visibility="Hidden" Grid.Column="2" Grid.Row="1"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource Inventory_Mode}" FontSize="13"/>
+                        <TextBox  Visibility="Hidden" Grid.Column="3" Grid.Row="1" Style ="{StaticResource paramTextBoxStyle}" />
+
+                    </Grid>
+
+                    <Label Content="{DynamicResource Tag_Access_Operation_Parameters}"  Style="{StaticResource paramLabelStyle}"/>
+                    <Grid Grid.Row="6" Grid.Column="1" Margin="0, 0,0,5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*"/>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Column="0" Grid.Row="0"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource Operation_Timeout}" FontSize="13"/>
+                        <TextBox Grid.Column="1" Grid.Row="0" Style ="{StaticResource paramTextBoxStyle}" Text="{Binding Tagops_param.Accessop.Timeout}" />
+
+                        <TextBlock Grid.Column="2" Grid.Row="0"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource Operation_Antenna}" FontSize="13"/>
+                        <TextBox Grid.Column="3" Grid.Row="0" Grid.ColumnSpan="3" Style ="{StaticResource paramTextBoxStyle}" 
+                                 Text="{Binding Tagops_param.Accessop.Ant}"/>
+
+                        <TextBlock Grid.Column="0" Grid.Row="1"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource ParamSettings_ParamInv_adddata_combobox_pwd}" FontSize="13"/>
+                        <TextBox Grid.Column="1" Grid.Row="1" Grid.ColumnSpan="3" Style ="{StaticResource paramTextBoxStyle}"
+                                 Text="{Binding Tagops_param.Accessop.Aaespwd}"
+                                 materialDesign:HintAssist.Hint="{DynamicResource Access_Password_Description}"/>
+                    </Grid>
+
+                    <Label  Content="{DynamicResource Return_AdditionalData}" Style="{StaticResource paramLabelStyle}"/>
+                    <Grid  Margin="0, 0,0,5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*"/>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Column="0" Grid.Row="1"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="Bank" FontSize="13"/>
+                        <ComboBox  Grid.Row="1"  Style="{StaticResource paramComboBoxStyle}"  Grid.Column="1"
+                                   IsEnabled="{Binding ElementName=IsBankdataName, Path=IsChecked}"
+                                   SelectedIndex="{Binding Tagops_param.Bankdata.Bank}"
+                      ItemsSource="{StaticResource bankItems}" Grid.ColumnSpan="2" Margin="20,0,0,0"/>
+                        <TextBlock Grid.Column="0" Grid.Row="0"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource ParamSettings_ParamInv_adddata_combobox_startaddr_hint}" FontSize="13"/>
+                        <TextBox Grid.Column="1"  IsEnabled="{Binding ElementName=IsBankdataName, Path=IsChecked}"
+                                 Style ="{StaticResource paramTextBoxStyle}" Text="{Binding Tagops_param.Bankdata.Start}" />
+
+                        <TextBlock Grid.Column="2" Grid.Row="0"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource ParamSettings_ParamInv_adddata_combobox_blocks_hint}" FontSize="13"/>
+                        <TextBox Grid.Column="3" Grid.Row="0" Style ="{StaticResource paramTextBoxStyle}"
+                                 IsEnabled="{Binding ElementName=IsBankdataName, Path=IsChecked}" Text="{Binding Tagops_param.Bankdata.Blkcnt}" />
+                        
+                        <TextBlock Grid.Column="2" Grid.Row="1"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource GPI_Enable}" FontSize="13"/>
+                        <CheckBox x:Name="IsBankdataName" IsChecked="{Binding IsBankdata}"  Style="{StaticResource paramCheckBoxStyle}"
+                       Grid.Column="3" Grid.Row="1" Margin="15,0,0,0" Content="{DynamicResource Msg_StartUsing}" />
+                        <TextBox Grid.Column="3" Grid.Row="2" Style ="{StaticResource paramTextBoxStyle}" Visibility="Hidden" />
+                    </Grid>
+                    <Label  Content="{DynamicResource Return_AdditionalData2}" Style="{StaticResource paramLabelStyle}"/>
+                    <Grid  Margin="0, 0,0,5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*"/>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Column="0" Grid.Row="1"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="Bank" FontSize="13"/>
+                        <ComboBox  Grid.Row="1"  Style="{StaticResource paramComboBoxStyle}"  Grid.Column="1"
+                                   IsEnabled="{Binding ElementName=IsBankdataName2, Path=IsChecked}"
+                                   SelectedIndex="{Binding Tagops_param.Bankdata2.Bank}"
+                      ItemsSource="{StaticResource bankItems}" Grid.ColumnSpan="2" Margin="20,0,0,0"/>
+                        <TextBlock Grid.Column="0" Grid.Row="0"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource ParamSettings_ParamInv_adddata_combobox_startaddr_hint}" FontSize="13"/>
+                        <TextBox Grid.Column="1"  IsEnabled="{Binding ElementName=IsBankdataName2, Path=IsChecked}"
+                                 Style ="{StaticResource paramTextBoxStyle}" Text="{Binding Tagops_param.Bankdata2.Start}" />
+
+                        <TextBlock Grid.Column="2" Grid.Row="0"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource ParamSettings_ParamInv_adddata_combobox_blocks_hint}" FontSize="13"/>
+                        <TextBox Grid.Column="3" Grid.Row="0" Style ="{StaticResource paramTextBoxStyle}"
+                                 IsEnabled="{Binding ElementName=IsBankdataName2, Path=IsChecked}" Text="{Binding Tagops_param.Bankdata2.Blkcnt}" />
+
+                        <TextBlock Grid.Column="2" Grid.Row="1"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource GPI_Enable}" FontSize="13"/>
+                        <CheckBox x:Name="IsBankdataName2" IsChecked="{Binding IsBankdata2}"  Style="{StaticResource paramCheckBoxStyle}"
+                       Grid.Column="3" Grid.Row="1" Margin="15,0,0,0" Content="{DynamicResource Msg_StartUsing}" />
+                        <TextBox Grid.Column="3" Grid.Row="2" Style ="{StaticResource paramTextBoxStyle}" Visibility="Hidden" />
+                    </Grid>
+                    <Label  Content="{DynamicResource Return_AdditionalData3}" Style="{StaticResource paramLabelStyle}"/>
+                    <Grid  Margin="0, 0,0,5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*"/>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Column="0" Grid.Row="1"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="Bank" FontSize="13"/>
+                        <ComboBox  Grid.Row="1"  Style="{StaticResource paramComboBoxStyle}"  Grid.Column="1"
+                                   IsEnabled="{Binding ElementName=IsBankdataName3, Path=IsChecked}"
+                                   SelectedIndex="{Binding Tagops_param.Bankdata3.Bank}"
+                      ItemsSource="{StaticResource bankItems}" Grid.ColumnSpan="2" Margin="20,0,0,0"/>
+                        <TextBlock Grid.Column="0" Grid.Row="0"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource ParamSettings_ParamInv_adddata_combobox_startaddr_hint}" FontSize="13"/>
+                        <TextBox Grid.Column="1"  IsEnabled="{Binding ElementName=IsBankdataName3, Path=IsChecked}"
+                                 Style ="{StaticResource paramTextBoxStyle}" Text="{Binding Tagops_param.Bankdata3.Start}" />
+
+                        <TextBlock Grid.Column="2" Grid.Row="0"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource ParamSettings_ParamInv_adddata_combobox_blocks_hint}" FontSize="13"/>
+                        <TextBox Grid.Column="3" Grid.Row="0" Style ="{StaticResource paramTextBoxStyle}"
+                                 IsEnabled="{Binding ElementName=IsBankdataName3, Path=IsChecked}" Text="{Binding Tagops_param.Bankdata3.Blkcnt}" />
+
+                        <TextBlock Grid.Column="2" Grid.Row="1"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource GPI_Enable}" FontSize="13"/>
+                        <CheckBox x:Name="IsBankdataName3" IsChecked="{Binding IsBankdata3}"  Style="{StaticResource paramCheckBoxStyle}"
+                       Grid.Column="3" Grid.Row="1" Margin="15,0,0,0" Content="{DynamicResource Msg_StartUsing}" />
+                        <TextBox Grid.Column="3" Grid.Row="2" Style ="{StaticResource paramTextBoxStyle}" Visibility="Hidden" />
+                    </Grid>
+
+                    <Label  Content="{DynamicResource FlyView_Bottom_TagFilter_Title}" Style="{StaticResource paramLabelStyle}"/>
+                    <Grid  Margin="0, 0,0,5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*"/>
+                            <ColumnDefinition Width="60*" />
+                            <ColumnDefinition Width="140*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Column="0" Grid.Row="1"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="Bank" FontSize="13"/>
+                        <ComboBox Name="TagfilterBank"  Grid.Row="1"  Style="{StaticResource paramComboBoxStyle}"  Grid.Column="1"
+                         IsEnabled="{Binding ElementName=isTagfilterName, Path=IsChecked}"
+                      SelectedIndex="{Binding Tagops_param.Tagfilter.Bank}"
+                      ItemsSource="{StaticResource bankItems}" Grid.ColumnSpan="2" Margin="20,0,0,0"/>
+                        <TextBlock Grid.Column="2" Grid.Row="1"   Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource FlyView_Bottom_TagFilter_FilterRule}" FontSize="13"/>
+                        <ComboBox  Grid.Row="1"  Style="{StaticResource paramComboBoxStyle}"  Grid.Column="3"
+                         IsEnabled="{Binding ElementName=isTagfilterName, Path=IsChecked}"
+                      SelectedIndex="{Binding Tagops_param.Tagfilter.Match}"
+                      ItemsSource="{DynamicResource List_FlyBottom_TF_MatchMode2}" Grid.ColumnSpan="2" Margin="20,0,0,0"/>
+                        
+                        <TextBlock Grid.Column="2" Grid.Row="0"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource FlyView_Bottom_TagFilter_FilterMask}" FontSize="13"/>
+                        <TextBox Grid.Column="3" Style ="{StaticResource paramTextBoxStyle}"
+                                  IsEnabled="{Binding ElementName=isTagfilterName, Path=IsChecked}" Text="{Binding Tagops_param.Tagfilter.Mask}" />
+
+                        <TextBlock Grid.Column="0" Grid.Row="0"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource ParamSettings_ParamInv_adddata_combobox_startaddr_hint}" FontSize="13"/>
+                        <TextBox Grid.Column="1" Grid.Row="0" Style ="{StaticResource paramTextBoxStyle}"
+                         IsEnabled="{Binding ElementName=isTagfilterName, Path=IsChecked}"  Text="{Binding Tagops_param.Tagfilter.Start}"  />
+                       
+                        <TextBlock Grid.Column="0" Grid.Row="2"  Margin="15, 0,0,0" VerticalAlignment="Center"
+                    Text="{DynamicResource GPI_Enable}" FontSize="13"/>
+                        <CheckBox x:Name="isTagfilterName" IsChecked="{Binding IsTagfilter}" Style="{StaticResource paramCheckBoxStyle}"
+                       Grid.Column="1" Grid.Row="2" Margin="15,0,0,0" Content="{DynamicResource Msg_StartUsing}" />
+                        <TextBox Grid.Column="3" Grid.Row="2" Style ="{StaticResource paramTextBoxStyle}" Visibility="Hidden" />
+                    </Grid>
+                </StackPanel>
+            </Expander>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

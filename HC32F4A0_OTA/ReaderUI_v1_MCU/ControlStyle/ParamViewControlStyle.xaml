@@ -1,0 +1,134 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+                    xmlns:mah="clr-namespace:MahApps.Metro.Controls;assembly=MahApps.Metro"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    
+    <Style  BasedOn="{StaticResource MahApps.Styles.ToggleSwitch}"   x:Key="paramToggleSwitchStyle"
+               TargetType="mah:ToggleSwitch"  >
+        <Setter Property="Foreground" Value="#FF0E3193" />
+        <Setter Property="FontFamily" Value="Microsoft YaHei UI" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="FontSize" Value="15" />
+    </Style>
+
+    <Style   BasedOn="{StaticResource MahApps.Styles.Label}"   x:Key="paramLabelStyle"
+               TargetType="Label"  >
+        <Setter Property="Foreground" Value="#FF0E3193" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+    <Style BasedOn="{StaticResource MaterialDesignActionToggleButton}"
+           x:Key="gpoTbStateStyle" TargetType="ToggleButton">
+
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Background" Value="#100E3193" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="Height" Value="40" />
+        <Setter Property="Width" Value="40" />
+        <Style.Triggers>
+            <Trigger Property="IsChecked" Value="True">
+                <Setter Property="Foreground" Value="Red" />
+            </Trigger>
+            <Trigger Property="IsChecked" Value="False">
+                <Setter Property="Foreground" Value="Green" />
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#300E3193" />
+            </Trigger>
+        </Style.Triggers>
+        
+    </Style>
+    <Style BasedOn="{StaticResource MaterialDesignFloatingHintComboBox}" x:Key="paramComboBoxStyle"
+               TargetType="ComboBox" >
+        <Setter Property="Margin" Value="20,0,20,0" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="MinWidth" Value="100" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="materialDesign:HintAssist.FloatingScale" Value="0.85" />
+        <Setter Property="materialDesign:HintAssist.Foreground" Value="{DynamicResource MahApps.Brushes.AccentBase}" />
+    </Style>
+
+    <Style BasedOn="{StaticResource MaterialDesignDarkCheckBox}" x:Key="paramCheckBoxStyle"
+               TargetType="CheckBox" >
+        <Setter Property="Margin" Value="20,0,20,0" />
+        <Setter Property="FontSize" Value="13.5" />
+        <Setter Property="MinWidth" Value="100" />
+        <Setter Property="Foreground" Value="#FF5C5C5C" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+
+    <Style BasedOn="{StaticResource MaterialDesignDarkCheckBox}" x:Key="paramCbFreqStyle"
+               TargetType="CheckBox" >
+        <Setter Property="Margin" Value="0,0,0,8" />
+        <Setter Property="FontSize" Value="13.5" />
+        <Setter Property="MinWidth" Value="90" />
+        <Setter Property="IsChecked" Value="True" />
+        <Setter Property="Foreground" Value="#FF5C5C5C" />
+    </Style>
+
+    <Style BasedOn="{StaticResource MaterialDesignFloatingHintTextBox}" x:Key="paramTextBoxStyle"
+            TargetType="TextBox" >
+        <Setter Property="Margin" Value="20,0,20,0" />
+        <Setter Property="MinWidth" Value="100" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="materialDesign:TextFieldAssist.HasClearButton" Value="False" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontFamily" Value="Microsoft YaHei UI" />
+        <Setter Property="materialDesign:HintAssist.FloatingScale" Value="0.85" />
+        <Setter Property="materialDesign:HintAssist.Foreground" Value="{DynamicResource MahApps.Brushes.AccentBase}" />
+        <Setter Property="materialDesign:HintAssist.FontFamily" Value="Microsoft YaHei UI" />
+    </Style>
+    <Style TargetType="Border" x:Key="paramBorderStyle">
+        <Setter Property="BorderThickness" Value="0,0,0,2" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="BorderBrush" Value="#100E3193" />
+        <Setter Property="Height" Value="2" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <x:Array x:Key="Gen2Banks" Type="sys:String">
+        <sys:String>Reservebank</sys:String>
+        <sys:String>EPCbank</sys:String>
+        <sys:String>TIDbank</sys:String>
+        <sys:String>USERbank</sys:String>
+    </x:Array>
+    
+    <Style x:Key="AccentSettingButtonStyle"
+                BasedOn="{StaticResource MaterialDesignPaperSecondaryDarkButton}"
+                TargetType="{x:Type Button}">
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="FontFamily" Value="Microsoft YaHei UI" />
+        <Setter Property="Width" Value="65" />
+        <Setter Property="Height" Value="30" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="{DynamicResource MahApps.Brushes.AccentBase}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource MahApps.Brushes.AccentBase}" />
+        <Setter Property="BorderThickness" Value="2" />
+    </Style>
+
+    <Style   BasedOn="{StaticResource MahApps.Styles.Label}"   x:Key="fwUpdProgLabel"
+               TargetType="Label"  >
+        <Setter Property="Foreground" Value="#FF0E3193" />
+        <Setter Property="FontSize" Value="15" />
+    </Style>
+    <Style TargetType="TextBlock" x:Key="HoverUnderlineStyle">
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="TextBlock.TextDecorations" Value="Underline" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+</ResourceDictionary>

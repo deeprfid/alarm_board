@@ -1,0 +1,518 @@
+﻿<UserControl
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:ReaderManager" xmlns:sys="clr-namespace:System;assembly=mscorlib"
+             xmlns:local_Models="clr-namespace:ReaderManager.Models"
+             xmlns:mah="clr-namespace:MahApps.Metro.Controls;assembly=MahApps.Metro"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"  
+             xmlns:controlzex="urn:controlzex" x:Class="ReaderManager.ParamEasView"
+             xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800">
+
+    <UserControl.Resources>
+        <x:Array x:Key="storage" Type="{x:Type sys:String}">
+            <sys:String>5</sys:String>
+            <sys:String>10</sys:String>
+            <sys:String>20</sys:String>
+            <sys:String>30</sys:String>
+        </x:Array>
+
+        <x:Array x:Key="range" Type="{x:Type sys:String}">
+            <sys:String>0</sys:String>
+            <sys:String>1</sys:String>
+            <sys:String>2</sys:String>
+            <sys:String>3</sys:String>
+            <sys:String>4</sys:String>
+            <sys:String>5</sys:String>
+            <sys:String>6</sys:String>
+            <sys:String>7</sys:String>
+            <sys:String>8</sys:String>
+            <sys:String>9</sys:String>
+            <sys:String>10</sys:String>
+        </x:Array>
+        <x:Array x:Key="trange" Type="{x:Type sys:String}">
+            <sys:String>0</sys:String>
+            <sys:String>1</sys:String>
+            <sys:String>2</sys:String>
+            <sys:String>3</sys:String>
+            <sys:String>4</sys:String>
+            <sys:String>5</sys:String>
+            <sys:String>6</sys:String>
+            <sys:String>7</sys:String>
+            <sys:String>8</sys:String>
+            <sys:String>9</sys:String>
+            <sys:String>10</sys:String>
+            <sys:String>11</sys:String>
+            <sys:String>12</sys:String>
+            <sys:String>13</sys:String>
+            <sys:String>14</sys:String>
+            <sys:String>15</sys:String>
+            <sys:String>16</sys:String>
+            <sys:String>17</sys:String>
+            <sys:String>18</sys:String>
+            <sys:String>19</sys:String>
+            <sys:String>20</sys:String>
+            <sys:String>21</sys:String>
+            <sys:String>22</sys:String>
+            <sys:String>23</sys:String>
+        </x:Array>
+        <x:Array x:Key="range1" Type="{x:Type sys:String}">
+            <sys:String>0</sys:String>
+            <sys:String>1</sys:String>
+            <sys:String>2</sys:String>
+            <sys:String>3</sys:String>
+            <sys:String>4</sys:String>
+            <sys:String>5</sys:String>
+            <sys:String>6</sys:String>
+            <sys:String>7</sys:String>
+            <sys:String>8</sys:String>
+            <sys:String>9</sys:String>
+            <sys:String>10</sys:String>
+        </x:Array>
+
+
+        <x:Array x:Key="address" Type="{x:Type sys:String}">
+            <sys:String>16bit</sys:String>
+            <sys:String>32bit</sys:String>
+            <sys:String>64bit</sys:String>
+            <sys:String>128bit</sys:String>
+        </x:Array>
+
+
+        <Style TargetType="{x:Type ListView}" x:Key="ListViewBorderStyle">
+            <Setter Property="BorderBrush" Value="Black"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Margin" Value="5"/>
+        </Style>
+
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid>
+            <Grid x:Name="gdMain" >
+
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" >
+                    <Expander Grid.Row="10" Grid.Column="1" Header="{DynamicResource ParamSettings_eas_epcrule}">
+                        <StackPanel Margin="10">
+                            <Grid Grid.Row="0" >
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid Grid.Column="0">
+                                    <CheckBox  Name="RuleCheck1" Style="{StaticResource paramCheckBoxStyle}" Margin="15,0,0,0" Content="{DynamicResource ParamSettings_eas_epcrule1}" />
+                                </Grid>
+                                <Grid Grid.Column="1">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcstart}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <xctk:IntegerUpDown Name="Start1" Value="0" Width="40" Height="24" Increment="1" Minimum="0" Maximum="32" Margin="60,0,0,0" />
+                                </Grid>
+                                <Grid Grid.Column="2">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcduibi}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <xctk:IntegerUpDown Name="MValue1"  Value="0" Width="40" Height="24" Increment="2" Minimum="0" Maximum="32" Margin="60,0,0,0" />
+                                </Grid>
+                                <Grid Grid.Column="3">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcvalue}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <TextBox  x:Name="tbMask1" MaxWidth="60"  Height="24" Text="{Binding rvalue1}" Margin="20,0,0,0"/>
+                                </Grid>
+                            </Grid>
+
+                            <Grid Grid.Row="1" >
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid Grid.Column="0">
+                                    <CheckBox  Name="RuleCheck2" Style="{StaticResource paramCheckBoxStyle}" Margin="15,0,0,0" Content="{DynamicResource ParamSettings_eas_epcrule2}" />
+                                </Grid>
+                                <Grid Grid.Column="1">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcstart}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <xctk:IntegerUpDown Name="Start2" Value="0" Width="40" Height="20" Increment="1" Minimum="0" Maximum="32" Margin="60,0,0,0" />
+                                </Grid>
+                                <Grid Grid.Column="2">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcduibi}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <xctk:IntegerUpDown Name="MValue2"  Value="0" Width="40" Height="20" Increment="2" Minimum="0" Maximum="32" Margin="60,0,0,0" />
+                                </Grid>
+                                <Grid Grid.Column="3">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcvalue}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <TextBox  x:Name="tbMask2" MaxWidth="60"  Height="20" Text="{Binding rvalue1}" Margin="20,0,0,0"/>
+                                </Grid>
+                            </Grid>
+                            <Grid Grid.Row="2" >
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid Grid.Column="0">
+                                    <CheckBox Name="RuleCheck3" Style="{StaticResource paramCheckBoxStyle}" Margin="15,0,0,0" Content="{DynamicResource ParamSettings_eas_epcrule3}" />
+                                </Grid>
+                                <Grid Grid.Column="1">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcstart}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <xctk:IntegerUpDown Name="Start3" Value="0" Width="40" Height="20" Increment="1" Minimum="0" Maximum="32" Margin="60,0,0,0" />
+                                </Grid>
+                                <Grid Grid.Column="2">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcduibi}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <xctk:IntegerUpDown  Name="MValue3" Value="0" Width="40" Height="20" Increment="2" Minimum="0" Maximum="32" Margin="60,0,0,0" />
+                                </Grid>
+                                <Grid Grid.Column="3">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcvalue}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <TextBox x:Name="tbMask3" MaxWidth="60"  Height="20" Text="{Binding rvalue1}" Margin="20,0,0,0"/>
+                                </Grid>
+                            </Grid>
+                            <Grid Grid.Row="3" >
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid Grid.Column="0">
+                                    <CheckBox Name="RuleCheck4" Style="{StaticResource paramCheckBoxStyle}" Margin="15,0,0,0" Content="{DynamicResource ParamSettings_eas_epcrule4}" />
+                                </Grid>
+                                <Grid Grid.Column="1">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcstart}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <xctk:IntegerUpDown Name="Start4" Value="0" Width="40" Height="20" Increment="1" Minimum="0" Maximum="32" Margin="60,0,0,0" />
+                                </Grid>
+                                <Grid Grid.Column="2">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcduibi}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <xctk:IntegerUpDown Name="MValue4" Value="0" Width="40" Height="20" Increment="2" Minimum="0" Maximum="32" Margin="60,0,0,0" />
+                                </Grid>
+                                <Grid Grid.Column="3">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcvalue}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <TextBox x:Name="tbMask4" MaxWidth="60"  Height="20" Text="{Binding rvalue1}" Margin="20,0,0,0"/>
+                                </Grid>
+                            </Grid>
+                            <Grid Grid.Row="4" >
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid Grid.Column="0">
+                                    <CheckBox Name="RuleCheck5" Style="{StaticResource paramCheckBoxStyle}" Margin="15,0,0,0" Content="{DynamicResource ParamSettings_eas_epcrule5}" />
+                                </Grid>
+                                <Grid Grid.Column="1">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcstart}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <xctk:IntegerUpDown  Name="Start5" Value="0" Width="40" Height="20" Increment="1" Minimum="0" Maximum="32" Margin="60,0,0,0" />
+                                </Grid>
+                                <Grid Grid.Column="2">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcduibi}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <xctk:IntegerUpDown Name="MValue5"  Value="0" Width="40" Height="20" Increment="2" Minimum="0" Maximum="32" Margin="60,0,0,0" />
+                                </Grid>
+                                <Grid Grid.Column="3">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcvalue}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <TextBox x:Name="tbMask5" MaxWidth="60"  Height="20" Text="{Binding rvalue1}" Margin="20,0,0,0"/>
+                                </Grid>
+                            </Grid>
+                            <Grid Grid.Row="5" >
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid Grid.Column="0">
+                                    <CheckBox Name="RuleCheck6" Style="{StaticResource paramCheckBoxStyle}" Margin="15,0,0,0" Content="{DynamicResource ParamSettings_eas_epcrule6}" />
+                                </Grid>
+                                <Grid Grid.Column="1">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcstart}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <xctk:IntegerUpDown  Name="Start6" Value="0" Width="40" Height="24" Increment="1" Minimum="0" Maximum="32" Margin="60,0,0,0" />
+                                </Grid>
+                                <Grid Grid.Column="2">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcduibi}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <xctk:IntegerUpDown Name="MValue6"  Value="0" Width="40" Height="24" Increment="2" Minimum="0" Maximum="32" Margin="60,0,0,0" />
+                                </Grid>
+                                <Grid Grid.Column="3">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcvalue}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <TextBox x:Name="tbMask6" MaxWidth="60"  Height="24" Text="{Binding rvalue1}" Margin="20,0,0,0"/>
+                                </Grid>
+                            </Grid>
+
+                            <Grid Grid.Row="6" >
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid Grid.Column="0">
+                                    <CheckBox Name="RuleCheck7" Style="{StaticResource paramCheckBoxStyle}" Margin="15,0,0,0" Content="{DynamicResource ParamSettings_eas_epcrule7}" />
+                                </Grid>
+                                <Grid Grid.Column="1">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcstart}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <xctk:IntegerUpDown Name="Start7" Value="0" Width="40" Height="20" Increment="1" Minimum="0" Maximum="32" Margin="60,0,0,0" />
+                                </Grid>
+                                <Grid Grid.Column="2">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcduibi}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <xctk:IntegerUpDown Name="MValue7"  Value="0" Width="40" Height="20" Increment="2" Minimum="0" Maximum="32" Margin="60,0,0,0" />
+                                </Grid>
+                                <Grid Grid.Column="3">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcvalue}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <TextBox x:Name="tbMask7" MaxWidth="60"  Height="20" Text="{Binding rvalue1}" Margin="20,0,0,0"/>
+                                </Grid>
+                            </Grid>
+                            <Grid Grid.Row="7" >
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid Grid.Column="0">
+                                    <CheckBox Name="RuleCheck8"  Style="{StaticResource paramCheckBoxStyle}" Margin="15,0,0,0" Content="{DynamicResource ParamSettings_eas_epcrule8}" />
+                                </Grid>
+                                <Grid Grid.Column="1">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcstart}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <xctk:IntegerUpDown Name="Start8" Value="0" Width="40" Height="20" Increment="1" Minimum="0" Maximum="32" Margin="60,0,0,0" />
+                                </Grid>
+                                <Grid Grid.Column="2">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcduibi}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <xctk:IntegerUpDown Name="MValue8"  Value="0" Width="40" Height="20" Increment="2" Minimum="0" Maximum="32" Margin="60,0,0,0" />
+                                </Grid>
+                                <Grid Grid.Column="3">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcvalue}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <TextBox x:Name="tbMask8" MaxWidth="60"  Height="20" Text="{Binding rvalue1}" Margin="20,0,0,0"/>
+                                </Grid>
+                            </Grid>
+                            <Grid Grid.Row="8" >
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid Grid.Column="0">
+                                    <CheckBox Name="RuleCheck9" Style="{StaticResource paramCheckBoxStyle}" Margin="15,0,0,0" Content="{DynamicResource ParamSettings_eas_epcrule9}" />
+                                </Grid>
+                                <Grid Grid.Column="1">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcstart}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <xctk:IntegerUpDown Name="Start9" Value="0" Width="40" Height="20" Increment="1" Minimum="0" Maximum="32" Margin="60,0,0,0" />
+                                </Grid>
+                                <Grid Grid.Column="2">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcduibi}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <xctk:IntegerUpDown Name="MValue9"  Value="0" Width="40" Height="20" Increment="2" Minimum="0" Maximum="32" Margin="60,0,0,0" />
+                                </Grid>
+                                <Grid Grid.Column="3">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcvalue}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <TextBox x:Name="tbMask9" MaxWidth="60"  Height="20" Text="{Binding rvalue1}" Margin="20,0,0,0"/>
+                                </Grid>
+                            </Grid>
+                            <Grid Grid.Row="9" >
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                    <ColumnDefinition Width="50*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid Grid.Column="0">
+                                    <CheckBox Name="RuleCheck10" Style="{StaticResource paramCheckBoxStyle}" Margin="15,0,0,0" Content="{DynamicResource ParamSettings_eas_epcrule10}" />
+                                </Grid>
+                                <Grid Grid.Column="1">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcstart}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <xctk:IntegerUpDown  Name="Start10" Value="0" Width="40" Height="20" Increment="1" Minimum="0" Maximum="32" Margin="60,0,0,0" />
+                                </Grid>
+                                <Grid Grid.Column="2">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcduibi}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <xctk:IntegerUpDown  Name="MValue10"  Value="0" Width="40" Height="20" Increment="2" Minimum="0" Maximum="32" Margin="60,0,0,0" />
+                                </Grid>
+                                <Grid Grid.Column="3">
+                                    <Label Content="{DynamicResource ParamSettings_eas_epcvalue}"  Style="{StaticResource paramLabelStyle}" FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                                    <TextBox x:Name="tbMask10" MaxWidth="60"  Height="20" Text="{Binding rvalue1}" Margin="20,0,0,0"/>
+                                </Grid>
+                            </Grid>
+                        </StackPanel>
+                    </Expander>
+                </Grid>
+                <Grid Grid.Row="1" >
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="50*"/>
+                        <ColumnDefinition Width="50*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid Grid.Column="0">
+                        <Label  Style="{StaticResource paramLabelStyle}" FontSize="13" Content="{DynamicResource ParamSettings_ParamInter_ipaddr}" HorizontalAlignment="Left" Margin="0,10,0,0" HorizontalContentAlignment="Center"  />
+                        <ComboBox x:Name="cbDevIp" IsEditable="True" Style="{StaticResource paramComboBoxStyle}" IsEnabled="{Binding EnableFreqHopMode}"  Width="130" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                    </Grid>
+                    <Grid Grid.Column="1">
+                        <Label  Style="{StaticResource paramLabelStyle}" FontSize="13" Content="{DynamicResource ParamSettings_eas_days}" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0"  />
+                        <ComboBox x:Name="cbFreqDays" Style="{StaticResource paramComboBoxStyle}"  SelectedIndex="{Binding FreqDays}" IsEnabled="{Binding EnableFreqHopMode}"
+                        ItemsSource="{StaticResource storage}" Width="130" VerticalAlignment="Top" HorizontalAlignment="Center" IsEditable="True" />
+                    </Grid>
+                </Grid>
+
+                <Grid Grid.Row="2" >
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="50*"/>
+                        <ColumnDefinition Width="50*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Grid.Column="0">
+                        <Label Content="{DynamicResource ParamSettings_eas_total}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0"/>
+                        <TextBox x:Name="tbTotal" Style ="{StaticResource paramTextBoxStyle}" Width="130" Text="{Binding Total}" HorizontalAlignment="Center" />
+                    </Grid>
+                    <Grid Grid.Column="1">
+                        <Label Content="{DynamicResource ParamSettings_eas_atotal}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0"/>
+                        <TextBox x:Name="tbATotal"  Style ="{StaticResource paramTextBoxStyle}" Text="{Binding ATotal}"      
+                 Width="130" HorizontalAlignment="Center"/>
+                    </Grid>
+                </Grid>
+                <Grid Grid.Row="3" >
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="50*"/>
+                        <ColumnDefinition Width="50*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Grid.Column="0">
+                        <Label Content="{DynamicResource ParamSettings_eas_devid}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" Height="26" Margin="0,10,0,0" HorizontalContentAlignment="Center"/>
+                        <TextBox x:Name="tbDevId" Style ="{StaticResource paramTextBoxStyle}" Width="130" Text="{Binding DevId}" HorizontalAlignment="Center" />
+                    </Grid>
+                    <Grid Grid.Column="1">
+                        <Label Content="{DynamicResource ParamSettings_eas_easflag}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" Margin="0,10,0,0" HorizontalContentAlignment="Center"/>
+                        <TextBox x:Name="tbEasFlag"  Style ="{StaticResource paramTextBoxStyle}" Text="{Binding easFlag}"      
+                 Width="130" HorizontalAlignment="Stretch" VerticalAlignment="Center" VerticalContentAlignment="Stretch"/>
+                    </Grid>
+                </Grid>
+                <Grid Grid.Row="4" >
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="50*"/>
+                        <ColumnDefinition Width="50*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Grid.Column="0">
+                        <Label  Style="{StaticResource paramLabelStyle}" FontSize="13" Content="{DynamicResource ParamSettings_eas_leida}" HorizontalAlignment="Left" Margin="0,10,0,0" HorizontalContentAlignment="Center"  />
+                        <ComboBox x:Name="tbLeida" Style="{StaticResource paramComboBoxStyle}"  ItemsSource="{StaticResource range}" Width="130" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                    </Grid>
+                    <Grid Grid.Column="1">
+                        <Label  Style="{StaticResource paramLabelStyle}" FontSize="13" Content="{DynamicResource ParamSettings_eas_volume}" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0"  />
+                        <ComboBox x:Name="tbVolume" Style="{StaticResource paramComboBoxStyle}" ItemsSource="{StaticResource range1}" Width="130" VerticalAlignment="Top" HorizontalAlignment="Center" />
+                    </Grid>
+
+                </Grid>
+                <Grid Grid.Row="5" >
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="50*"/>
+                        <ColumnDefinition Width="50*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Grid.Column="0">
+                        <Label  Style="{StaticResource paramLabelStyle}" FontSize="13" Content="{DynamicResource ParamSettings_eas_alarmthreshold}" HorizontalAlignment="Left" Margin="0,10,0,0" HorizontalContentAlignment="Center"  />
+                        <ComboBox x:Name="tbThreshold" Style="{StaticResource paramComboBoxStyle}"  ItemsSource="{StaticResource range}" Width="130" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                    </Grid>
+                    <Grid Grid.Column="1">
+                        <Label  Style="{StaticResource paramLabelStyle}" FontSize="13" Content="{DynamicResource ParamSettings_eas_alarmlength}" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="0,10,0,0"  />
+                        <ComboBox x:Name="tbATime" Style="{StaticResource paramComboBoxStyle}" ItemsSource="{StaticResource range}" Width="130" VerticalAlignment="Top" HorizontalAlignment="Center" />
+                    </Grid>
+
+                </Grid>
+                <Grid Grid.Row="6" >
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="50*"/>
+                        <ColumnDefinition Width="50*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Grid.Column="0">
+                        <Label Content="{DynamicResource ParamSettings_eas_people}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" Margin="0,10,0,0" HorizontalContentAlignment="Center"/>
+                        <TextBox x:Name="tbPeople"  Style ="{StaticResource paramTextBoxStyle}" Text="{Binding People}"      
+                    Width="130" HorizontalAlignment="Stretch" VerticalAlignment="Center" VerticalContentAlignment="Stretch"/>
+                    </Grid>
+
+                    <Grid Grid.Column="1">
+                        <Label Content="{DynamicResource ParamSettings_eas_dtime}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" Margin="0,10,0,0" HorizontalContentAlignment="Center"/>
+                        <TextBox x:Name="tbCurTime"  Style ="{StaticResource paramTextBoxStyle}" Text="{Binding CurTime}"      
+            Width="130" HorizontalAlignment="Stretch" VerticalAlignment="Center" VerticalContentAlignment="Stretch"/>
+                    </Grid>
+                </Grid>
+                <Grid Grid.Row="7" >
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="50*"/>
+                        <ColumnDefinition Width="50*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Grid.Column="0">
+                        <Label Content="{DynamicResource ParamSettings_eas_stime}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" Margin="0,10,0,0" HorizontalContentAlignment="Center"/>
+                        <TextBox x:Name="tbTotalTime"  Style ="{StaticResource paramTextBoxStyle}"     
+            Width="130" HorizontalAlignment="Stretch" VerticalAlignment="Center" VerticalContentAlignment="Stretch"/>
+                    </Grid>
+
+                    <Grid Grid.Column="1">
+                        <Label Content="{DynamicResource ParamSettings_eas_scount}" Style="{StaticResource paramLabelStyle}"  FontSize="13" HorizontalAlignment="Left" Margin="0,10,0,0" HorizontalContentAlignment="Center"/>
+                        <TextBox x:Name="tbCount"  Style ="{StaticResource paramTextBoxStyle}"  Width="130" HorizontalAlignment="Stretch" VerticalAlignment="Center" VerticalContentAlignment="Stretch"/>
+                    </Grid>
+                </Grid>
+                <Grid Grid.Row="8" >
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="50*"/>
+                        <ColumnDefinition Width="50*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Grid.Column="0">
+                        <Label  Style="{StaticResource paramLabelStyle}" FontSize="13" Content="{DynamicResource ParamSettings_eas_starttime}" HorizontalAlignment="Left" Margin="0,10,0,0" HorizontalContentAlignment="Center"  />
+                        <ComboBox x:Name="tbStart" Style="{StaticResource paramComboBoxStyle}" ItemsSource="{DynamicResource trange}" SelectedIndex="8" Width="130" VerticalAlignment="Center" HorizontalAlignment="Center" IsEditable="True" />
+                    </Grid>
+
+                    <Grid Grid.Column="1">
+                        <Label  Style="{StaticResource paramLabelStyle}" FontSize="13" Content="{DynamicResource ParamSettings_eas_stoptime}" HorizontalAlignment="Left" Margin="0,10,0,0" HorizontalContentAlignment="Center"  />
+                        <ComboBox x:Name="tbStop" Style="{StaticResource paramComboBoxStyle}" ItemsSource="{DynamicResource trange}" SelectedIndex="19" Width="130" VerticalAlignment="Center" HorizontalAlignment="Center" IsEditable="True" />
+                    </Grid>
+                </Grid>
+                <Grid Grid.Row="9" >
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="50*"/>
+                        <ColumnDefinition Width="50*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Grid.Column="0">
+                        <Label  Style="{StaticResource paramLabelStyle}" FontSize="13" Content="{DynamicResource ParamSettings_eas_alarmswitch}" HorizontalAlignment="Left" Margin="0,10,0,0" HorizontalContentAlignment="Center"  />
+                        <ComboBox x:Name="tbSwitch" Style="{StaticResource paramComboBoxStyle}" ItemsSource="{DynamicResource List_DisableorEnable}"  Width="130" VerticalAlignment="Center" HorizontalAlignment="Center" IsEditable="True" />
+                     </Grid>
+                </Grid>
+                <Grid Grid.Row="10" >
+                    <TextBox x:Name="tbResult" Text="" VerticalAlignment="Bottom" Width="600" FontSize="19" BorderThickness="0,0,0,0" Margin="0,5,0,5" controlzex:KeyboardNavigationEx.AlwaysShowFocusVisual="True" HorizontalContentAlignment="Center" HorizontalAlignment="Center" />
+                </Grid>
+                <Grid Grid.Row="11" Margin="0,10,0,0" Cursor="">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="50*"/>
+                        <ColumnDefinition Width="50*"/>
+                        <ColumnDefinition Width="50*"/>
+                        <ColumnDefinition Width="50*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid Grid.Column="0">
+                        <Button x:Name="btnGet" Style="{StaticResource AccentSettingButtonStyle}" Content="{DynamicResource ParamSettings_button_get}" Grid.Column="0" VerticalAlignment="Center" Width="70" Click="btnGet_Click" FontWeight="Normal"/>
+                    </Grid>
+                    <Grid Grid.Column="1">
+                        <Button x:Name="btnSet" Style="{StaticResource AccentSettingButtonStyle}" Content="{DynamicResource ParamSettings_button_set}" Grid.Column="1"  VerticalAlignment="Center"  Width="70" Click="btnSet_Click" FontWeight="Normal"/>
+                    </Grid>
+                    <Grid Grid.Column="2">
+                        <Button x:Name="btnTest" Style="{DynamicResource AccentSettingButtonStyle}"  Content="{DynamicResource ParamSettings_button_test}" Cursor="" Click="btnTest_Click" />
+                    </Grid>
+                    <Grid Grid.Column="3">
+                        <Button x:Name="btnReboot" Style="{StaticResource AccentSettingButtonStyle}" Content="{DynamicResource ParamSettings_eas_restart}" Grid.Column="2"  VerticalAlignment="Center"  Width="70" Click="btnReboot_Click"/>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </Grid>
+    </ScrollViewer>
+</UserControl>
