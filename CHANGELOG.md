@@ -1,6 +1,6 @@
 ## [Unreleased]
 
-- `[hc32f460]` **feat(tools): 新增 `tools/merge_f460_image.py` —— 把 Boot + 槽 A/B 合成【一个整片 512KB bin】，产线一次烧录**。
+- `[hc32f460]` **feat(tools): 新增 `tools/merge_f460_image.py` —— 把 Boot + 槽 A/B 合成【一个整片 512KB bin】，产线一次烧录** —— **已上板实测：烧 `dist/radar_full_boot_A_B_release.bin` 正常**。
   - **动机**：此前没有一个可直接烧的合并镜像，产线得手工烧 Boot、槽 A、槽 B 三块，容易漏、容易错位；仓库里也确实没有任何合并产物与合并工具。
   - **分工**：`ota_pack_f460.py` 产出的是**给 OTA 用的 `.otapkg`**（单个槽的分发包）；本工具产出的是**给烧录器用的整片 `.bin`**（Boot + 两个槽一次铺好）。两者用途不同，别混。
   - **按 `ota_layout.h` 铺放**：Boot 32KB@`0x0`、槽 A 128KB@`0x8000`、槽 B 128KB@`0x28000`，其余填 `0xFF`（擦除态）。各段**越界即报错**（Boot 超 32KB、槽镜像超 128KB 都会被挡下）。
@@ -8,6 +8,7 @@
   - **标志区刻意留 `0xFF`**：首次上电 Boot 读标志失败 -> 走兜底路径 -> 按 `BOOT_DEFAULT_SLOT` 选槽（当前 = `OTA_SLOT_B`）。**刻意不预写标志** —— 预写会绕过兜底路径，也让「首次烧录不写标志」这条纪律失效。
   - **支持 `--slot-a-only`**（只合成 Boot + 槽 A）与自定义产物路径 / `--build debug|release`。
   - **产物**：`dist/radar_full_boot_A_B_release.bin`，524288 字节（整片 512KB）。
+  - **上板实测（2026-09-19）**：直接烧这一整个 bin，**正常** —— 红灯常亮 2 秒 -> 跳槽 B -> App 起来 -> 通信正常。即「一次烧一片」的产线路径打通。
   - **回读校验**：Boot@0 栈顶 `0x1FFFC470` / 复位向量 `0x0000031D`；槽 A@0x8000 栈顶 `0x1FFFB458` / 复位向量 `0x00008321`；槽 B@0x28000 栈顶 `0x1FFFB458` / 复位向量 `0x00028321`；**ICG@0x400 = `BF FF DF FF FF FE FF..`（32B 与已知值逐字节一致）**；标志区 8KB、保留区 ~216KB、Boot 尾部填充**均为 `0xFF`**。
 
 - `[hc32f4a0]` **feat(ota): 接通 F4A0 -> F460 报警板分发 —— MSC 的 FAT 卷放 `RADAR.BIN` 即自动下发** —— 工程构建 **0 Error / 1 Warning**（唯一警告是既有的 `ota_usb_stream.c(47)` 未使用变量），**待上板联调**。

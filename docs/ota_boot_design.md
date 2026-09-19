@@ -425,6 +425,7 @@ App 照旧自行 `BSP_CLK_Init()`。`DDL_DelayMS()` 无需改 —— `CLK_SetSys
 | App | 槽 A：`usart_uart_dma.hex` @0x8000；槽 B：`usart_uart_dma_b.hex` @0x28000；`RW_RAMCODE` 已在位 |
 | OTA | `OTA_APP_ENABLE = 0`（关闭）→ 标志区无效 → Boot 恒走兜底路径 → **恒跳槽 B**（`BOOT_DEFAULT_SLOT = OTA_SLOT_B`） |
 | 现象 | 上电 **红灯常亮 2 秒 → 跳槽 B → App 正常起来** ✓（App 侧通信正常，见 `fix(rs485)` 的 USART 发送超时修复） |
+| 烧录 | **整片一次烧 `dist/radar_full_boot_A_B_release.bin`**（Boot + 槽 A + 槽 B 合成，见 `tools/merge_f460_image.py`）—— **已上板实测正常** |
 
 **历史基线（2026-09-18）**：当时 Boot 不配时钟跑 HRC、兜底按 A→B 扫、恒跳槽 A，现象为「绿灯 2 秒 → 跳槽 A → App 起来」。
 该组合已被上表取代（Boot 配时钟 + 红灯 + 跳槽 B）。
