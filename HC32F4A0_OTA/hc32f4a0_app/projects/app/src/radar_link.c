@@ -40,7 +40,6 @@ typedef struct {
     uint16_t     plen;
     uint8_t      legacy;        /* 1 = 正在收 0xFF 定长 32B 帧 */
     uint32_t     next_query_ms;
-    uint32_t     led_seen_frames;   /* 上次驱动灯时的 rx_frames（用于判断"这一轮有新帧"） */
 } radar_ctx_t;
 
 static radar_ctx_t s_ctx[RADAR_LINK_NUM];
@@ -268,12 +267,13 @@ void radar_link_poll(void)
          *        Alarm_Output(BOARD_LED2 + i, 5, 5, 1);   // 50ms亮 / 50ms灭 / 1次
          *    即时间参数单位 10ms，第 4 参是重复次数。
          *
-         *    触发时机 = 本口这一轮收到了【新的合法帧】且该帧报了"有人"（radar_val）。
-         *    用 rx_frames 的增量判断"新帧"，否则每 10ms 一轮会把灯刷爆。 */
-        if ((p->st.rx_frames != p->led_seen_frames) && (p->st.radar_val != 0u)) {
+         *    只要有"有人"就直接调，不做任何计时/去重：
+         *      · 重复调用是安全的 —— GPIO_Start() 在 ucEnalbe==1（灯正在闪）时会直接返回，
+         *        等这一轮 50/50 走完、ucEnalbe 归 0，下一次调用自然重新起一轮，接着闪；
+         *      · 所以这里不需要任何延时、节流或"新帧"判断。 */
+        if (p->st.radar_val != 0u) {
             Alarm_Output((uint8_t)(BOARD_LED2 + i), 5u, 5u, 1u);
         }
-        p->led_seen_frames = p->st.rx_frames;
     }
 }
 
