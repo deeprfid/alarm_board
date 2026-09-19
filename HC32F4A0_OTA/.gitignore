@@ -1,4 +1,8 @@
 # ===== 并入 alarm_board 时排除的体积大头（源码保留，产物/厂商资料/C# 工程不入库） =====
+# 2026-09-19 决定：下面三个保持忽略（已逐个确认里面没有项目源码）
+#   release/         —— 可再生成的发布产物(.otapkg/.bin)
+#   _microboot_ref/  —— 第三方 MicroBoot 参考实现，35MB 里 31MB 是文档图片，代码仅 ~0.4MB
+#   .agents/         —— 空目录
 release/
 _microboot_ref/
 .agents/
