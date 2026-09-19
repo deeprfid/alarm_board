@@ -41,3 +41,8 @@ ReaderUI_v1_MCU/packages/
 ReaderUI_v1_MCU/obj/
 ReaderUI_v1_MCU/bin/
 ReaderUI_v1_MCU/.vs/
+# ReaderUI_v1_MCU/dll/ 里的 DLL 是 .csproj 用 <HintPath>dll\xxx.dll</HintPath> 直接引用的依赖：
+#   ControlzEx / MahApps.Metro / MaterialDesignColors / MaterialDesignThemes.Wpf /
+#   Microsoft.Xaml.Behaviors / ModuleAPI  —— 属"缺了就编不过"那类，放行入库。
+# （注意：这一行必须排在文件上面的 **/*.dll 之后；dll/ModuleAPI.dll.bak_20260122 这类备份仍被忽略）
+!ReaderUI_v1_MCU/dll/*.dll
