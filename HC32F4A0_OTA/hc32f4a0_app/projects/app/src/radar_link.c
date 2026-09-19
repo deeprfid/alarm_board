@@ -27,10 +27,13 @@ static const int s_link_fd[RADAR_LINK_NUM] = {
 #define QUERY_PERIOD_MS     50UL    /* 查询周期。STM32F0 侧 200ms 判超时，这里取 1/4 留余量 */
 #define RX_DRAIN_MAX        128     /* 每轮每口最多取多少字节，防饿死别的口 */
 
-/* 查询帧的 addr 字段。F460 侧会把收到的 addr 原样回填（common.c: frame_var_send(0x10u, buf[3], ...)），
- * 故这里用广播 0x00 —— 一条总线上多块板时，回帧的 addr 能用来区分是哪块。
- * 【待确认】若现场是"一板一地址"的寻址式轮询，改成逐地址轮发即可。 */
-#define QUERY_ADDR          0x00u
+/* 查询帧的 addr 字段 = 本链路对应的地址。
+ *
+ * 【照搬 STM32F0，别再自己发明】STM32F0 的轮询是
+ *     stmVarSend(sPortCom[i], 0x10u, (uint8_t)(i + 1u), 0, 0u);   // app.c:423
+ * 即 cmd=0x10、addr = 端口序号 + 1（1/2/3/4/5）。我之前发的是广播 0x00，
+ * 板子按地址过滤所以全都不应答 —— 三灯全灭就是这个原因。 */
+static const uint8_t s_link_addr[RADAR_LINK_NUM] = { 1u, 2u, 3u };
 
 typedef struct {
     radar_link_t st;
@@ -118,7 +121,7 @@ static int radar_send_query(uint8_t idx)
     fr[0] = FRAME_HDR_AA;
     fr[1] = 2u;             /* lenv = plen(0) + 2 */
     fr[2] = CMD_QUERY;
-    fr[3] = QUERY_ADDR;
+    fr[3] = s_link_addr[idx];   /* addr = 本链路地址（1/2/3），与 STM32F0 一致 */
     c = fr_crc16(fr, 4u);
     fr[4] = (uint8_t)(c & 0xFFu);
     fr[5] = (uint8_t)(c >> 8);
