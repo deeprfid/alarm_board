@@ -40,7 +40,7 @@ typedef struct {
     uint16_t     plen;
     uint8_t      legacy;        /* 1 = 正在收 0xFF 定长 32B 帧 */
     uint32_t     next_query_ms;
-    uint32_t     led_next_ms;   /* 下一次触发灯闪的时刻 */
+    uint32_t     led_seen_frames;   /* 上次驱动灯时的 rx_frames（用于判断"这一轮有新帧"） */
 } radar_ctx_t;
 
 static radar_ctx_t s_ctx[RADAR_LINK_NUM];
@@ -225,12 +225,6 @@ void radar_link_init(void)
         (void)ioctl(s_link_fd[i], COMMON_INTERFACE_CLEAR_REVBUF, NULL);
         s_ctx[i].next_query_ms = now_ms();
     }
-    /* 上电自检：三个灯各闪一次 —— 用来把"灯路不通"和"通信不通"分开。
-     * 若上电时这三个灯都没闪，说明是 LED/GPIO 的问题，与 RS485 无关。 */
-    for (i = 0u; i < RADAR_LINK_NUM; i++) {
-        Alarm_Output((uint8_t)(BOARD_LED2 + i), 20u, 20u, 1u);   /* 200ms 亮 / 200ms 灭 / 1 次 */
-        sleep_ms(450);
-    }
     TRACE("radar_link: 3 links up (485_1 ant1 / 485_2 ant2,3 / 485_3 ant4)\n");
 }
 
@@ -270,28 +264,16 @@ void radar_link_poll(void)
         /* 4) 雷达状态灯：BOARD_LED2/3/4 = 链路 485_1/485_2/485_3。
          *    【为什么从 LED2 起】BOARD_LED1 已被占用（现场确认），故依次用 2/3/4。
          *
-         *    【关键约束 —— 踩过的坑】Alarm_Output -> GPIO_Start() 的第一句是
-         *        if (_usBeepTime == 0 || g_tled->ucMute == 1 || g_tled->ucEnalbe == 1) return;
-         *    也就是说：
-         *      · 时间参数传 0 == 整个调用被丢弃（既不会亮也【不会灭】）；
-         *      · 灯已在跑（ucEnalbe==1）时再调同样被丢弃。
-         *    所以"离线就传 0"是错的（那是静默 no-op，灯会停在原状态、看起来像全灭），
-         *    也不能靠高频重复调用来维持闪烁。
+         *    口径（现场指定，不要再改）：收到雷达"有人"就调
+         *        Alarm_Output(BOARD_LED2 + i, 5, 5, 1);   // 50ms亮 / 50ms灭 / 1次
+         *    即时间参数单位 10ms，第 4 参是重复次数。
          *
-         *    口径（现场例 Alarm_Output(BOARD_LED2,5,5,1) = 50ms亮/50ms灭/1次）：
-         *      时间参数单位 10ms，第 4 参是【重复次数】。
-         *
-         *    做法：在线 -> 每 200ms 触发一次 (5,5,1) 的单次闪 —— 灯会持续 50ms 亮/50ms 灭地闪；
-         *          离线 -> 不触发，灯自然停在灭态。
-         *    这样每次触发都在上一轮（100ms）结束之后，不会撞上 ucEnalbe==1。 */
-        if (p->st.online != 0u) {
-            if ((int32_t)(t - p->led_next_ms) >= 0) {
-                Alarm_Output((uint8_t)(BOARD_LED2 + i), 5u, 5u, 1u);
-                p->led_next_ms = t + 200UL;
-            }
-        } else {
-            p->led_next_ms = t;     /* 恢复在线时立刻开始闪，不用等 */
+         *    触发时机 = 本口这一轮收到了【新的合法帧】且该帧报了"有人"（radar_val）。
+         *    用 rx_frames 的增量判断"新帧"，否则每 10ms 一轮会把灯刷爆。 */
+        if ((p->st.rx_frames != p->led_seen_frames) && (p->st.radar_val != 0u)) {
+            Alarm_Output((uint8_t)(BOARD_LED2 + i), 5u, 5u, 1u);
         }
+        p->led_seen_frames = p->st.rx_frames;
     }
 }
 
