@@ -233,6 +233,21 @@ void radar_link_poll(void)
     uint32_t t = now_ms();
     uint8_t  i;
     int      n, k;
+    static uint32_t s_hb_ms = 0UL;
+
+    /* ===== 【临时诊断】三级定位，验证完请删掉这一段 =====
+     *   LED2 —— 轮询线程活着：无条件每秒闪一次（只要线程在转就会闪）；
+     *   LED3 —— 查询帧发出去了：每次 radar_send_query 闪一次；
+     *   LED4 —— 收到了任何字节：read() 返回 >0 就闪（不管 CRC/帧格式对不对）。
+     * 判读：
+     *   三个都不闪        -> 线程没跑起来（wait_init_ok 未返回 / osThreadNew 失败 / 线程被饿死）
+     *   只有 LED2 闪      -> 线程活着，但查询发不出去（发送路径或端口问题）
+     *   LED2+LED3 闪      -> 发出去了但板子没回（方向控制/接线/波特率/帧格式）
+     *   LED2+LED3+LED4 闪 -> 收得到字节，问题在帧解析（CRC/长度/地址） */
+    if ((int32_t)(t - s_hb_ms) >= 0) {
+        Alarm_Output(BOARD_LED2, 5u, 5u, 1u);
+        s_hb_ms = t + 1000UL;
+    }
 
     for (i = 0u; i < RADAR_LINK_NUM; i++) {
         radar_ctx_t *p = &s_ctx[i];
@@ -241,6 +256,8 @@ void radar_link_poll(void)
         for (k = 0; k < 4; k++) {
             n = read(s_link_fd[i], buf, (uint32_t)sizeof(buf));
             if (n <= 0) { break; }
+            /* 【临时诊断】收到任何字节都闪 LED4（不管 CRC 对不对）——用来把"收不到"和"收得到但解析不过"分开 */
+            Alarm_Output(BOARD_LED4, 5u, 5u, 1u);
             {
                 int j;
                 for (j = 0; j < n; j++) { feed_byte(i, buf[j]); }
@@ -256,6 +273,8 @@ void radar_link_poll(void)
 
         /* 3) 周期发查询 */
         if ((int32_t)(t - p->next_query_ms) >= 0) {
+            /* 【临时诊断】每发一次查询闪 LED3 —— 用来确认发送路径真的被执行了 */
+            Alarm_Output(BOARD_LED3, 5u, 5u, 1u);
             (void)radar_send_query(i);
             p->next_query_ms = t + QUERY_PERIOD_MS;
         }
