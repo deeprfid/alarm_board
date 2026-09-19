@@ -582,8 +582,11 @@ void rd_idkey_fun(void)
     if (uuid != 0x423B6C6E)
     {
         Alarm_Output (BEEP_CTRL , 15, 15, 3);
-        Alarm_Output (BOARD_LED2, 15, 15, 0);
-        while (uuid);
+			  Alarm_Output (BOARD_LED1, 15, 15, 3); //green
+        Alarm_Output (BOARD_LED2, 15, 15, 3); //big-red
+				Alarm_Output (BOARD_LED3, 15, 15, 3); //blue
+        Alarm_Output (BOARD_LED4, 15, 15, 3);	//litte-red
+       // while (uuid);
 
     }
     else

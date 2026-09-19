@@ -1,0 +1,217 @@
+# F4A0 雷达板链路（radar_link）交接文档
+
+> 2026-09-19。写给下一个会话/下一个人的**断点续传**说明。
+> 状态：**未打通**。链路收发在驱动层就断了，详见 §3。
+
+---
+
+## 1. 背景与目标
+
+这是**项目 2**：**HC32F4A0 直接驱动 HC32F460 报警板**（没有 STM32 中继板）。
+项目 1 是 Linux -> STM32 -> HC32 雷达板，其中 STM32 只是 uart-hub（Linux 只剩 1 个串口）。
+
+要求：
+- **完全兼容项目 1 的协议**（新老两种帧都要认）；
+- 只是串口数量从 5 个变 3 个，**不要另起炉灶**；
+- 代码要**可移植到其它平台**（所以应拆成"协议纯逻辑" + "平台层"两层）。
+
+### 端口 -> 天线映射（现场确认）
+
+| F4A0 接口 | 宏值 | 底层 USART | 天线 |
+| --- | --- | --- | --- |
+| `COMMON_INTERFACE_RS485_1` | 104 | `CM_USART3` | 天线1 |
+| `COMMON_INTERFACE_RS485_2` | 105 | `CM_USART8` | 天线2,3 |
+| `COMMON_INTERFACE_RS485_3` | 106 | `CM_USART5` | 天线4 |
+
+**没有 `COMMON_INTERFACE_RS485_4`**（全树搜过，只有 1/2/3）。
+
+---
+
+## 2. 协议事实（已逐行核对，可直接用）
+
+### 2.1 下行查询帧（板子认这个）
+
+STM32F0 的轮询就一句（`STM32F0_linux_v4.31/BSP/app.c:423`）：
+
+```c
+(void)stmVarSend(sPortCom[i], 0x10u, (uint8_t)(i + 1u), 0, 0u);
+//                              cmd=0x10  addr = 端口序号 + 1
+```
+
+即 **`0xAA` 变长帧 + cmd `0x10` + addr = 本口序号+1（1/2/3）**。
+**addr 不能发广播 0x00** —— 板子按地址过滤，广播会全部不应答（这是我踩过的坑）。
+
+变长帧格式（与 F460 `common.c` 的 `frame_var_send` 逐字节一致）：
+
+```
+AA | lenv | cmd | addr | payload[lenv-2] | crc16_lo | crc16_hi
+lenv = plen + 2 ;  total = lenv + 4 ;  crc16 覆盖 total-2 字节
+CRC16 = CCITT，poly 0x1021，init 0xFFFF
+```
+
+### 2.2 定长帧（32B，量产验证过的）
+
+两个方向都用同一个 32 字节结构，定义在
+`STM32F0_linux_v4.31/BSP/app.h:20-45` 与 `Radar_V4.2.../projects/source/bsp_rs485.h:121-133`：
+
+```c
+// 下行 alarm_pdu
+FrameHead(0xFF) | Pdu_len(32) | DeviceID | AntID | Alarm_Duration[6]
+| Radarcfg[5]×2 | time_stamp(4) | random_forest(4) | reserved(2) | crc(2)
+
+// 上行 gpio_pdu
+FrameHead(0xFF) | Pdu_len(32) | DeviceID | AntID
+| Rad_Status[8] | Alarm_Done[8] | GPIO[10] | crc(2)
+```
+
+```c
+// 板子回给主机的定长帧（F460 main.h:82-92）
+alarm_confirm_package { framehead(0xFF), deviceID, alarm_done, unused[5],
+                        stc_radar_scan_data_t radar /*16B*/, rngkey(4), uidkey(2), crc(2) }
+```
+
+**重要**：项目 1 里 STM32F0 是**纯透传 hub** —— 它把 Linux 下发的 32B 帧原样转发到雷达口
+（`app.c:726-728`：`memcpy(&alarmboard, sIpcRx.buf, sizeof(alarm_pdu)); ipc_hpm_message(...)`），
+**自己不产生查询**。所以项目 2 里 F4A0 要自己生成下行帧。
+
+### 2.3 应答解析
+
+`0x10` 查询的应答 payload 3B：`[gpioIn][workMode][alarmDone]`
+- `gpioIn`：bit0..2 = 雷达1..3，bit3 = GPIO_IN1，bit4 = GPIO_IN2
+- `radarVal = (gpioIn & 0x07) != 0`（有人）
+
+---
+
+## 3. 【核心阻塞】驱动层三处断点 —— RX 通路根本没接
+
+现场日志刷屏：
+
+```
+read--invalid interface number
+read--invalid interface number
+...
+```
+
+追下来是**三处叠加**，缺一不可，**任何一处单独修都无效**：
+
+| # | 文件:位置 | 问题 |
+| --- | --- | --- |
+| ① | `hc32f4a0_driver/projects/user/src/rs485_1.c:34-39`（`rs485_2.c`/`rs485_3.c` 同构） | **RX 中断把字节读出来就扔了**：`// (void)BUF_Write(&Uart4RingBuf, &u8Data, 1UL);` 被注释掉 |
+| ② | `usart_driver.c:182 hc32f460_uart_get_bytes_cnt()` | 只处理 `uartid` 0..3；RS485 映射到下标 **4/5/6**，落到 `else return 0` |
+| ③ | `io_stream.c:797-800 read()` 的 switch | 只有 `UART0..3` + `USB*` + `SOCKET*`；**没有 `RS485_1/2/3`** → 掉 `default` |
+
+关键背景：`gUartParams` 按 **`id - COMMON_INTERFACE_UART_BASE(100)`** 索引
+（`io_stream.c:263, 288`），所以 RS485_1/2/3 = **下标 4/5/6**。
+
+对比：**发送是通的** —— `Uart_RS485_send()` 有自己独立的 switch（`usart_driver.c:115`），
+认 104/105/106。所以"能发不能收"。
+
+### 3.1 修法（驱动是自己写的，可以直接改）
+
+```c
+// ① rs485_1.c / rs485_2.c / rs485_3.c：各加一个环形缓冲，恢复写入
+static stc_ring_buf_t s_rs485_1_rx;                   // rs485_2/3 各自一个
+static void USART_RS485_RxFull_IrqCallback(void)      // rs485_2/3 里叫 USART8_ / USART5_
+{
+    uint8_t u8Data = (uint8_t)USART_ReadData(USART_RS485_1);
+    (void)BUF_Write(&s_rs485_1_rx, &u8Data, 1UL);     // ← 取消注释并接各自的口
+}
+
+// ② usart_driver.c hc32f460_uart_get_bytes_cnt()：加 3 个分支
+else if (uartid == 4) return (int)BUF_UsedSize(&s_rs485_1_rx);
+else if (uartid == 5) return (int)BUF_UsedSize(&s_rs485_2_rx);
+else if (uartid == 6) return (int)BUF_UsedSize(&s_rs485_3_rx);
+
+// ③ io_stream.c read()：与 UART0..3 合并进同一分支
+case COMMON_INTERFACE_RS485_1:
+case COMMON_INTERFACE_RS485_2:
+case COMMON_INTERFACE_RS485_3:
+case COMMON_INTERFACE_UART0:
+...
+```
+
+改完**重编 `hc32f46_driver.uvprojx` 生成 `hc32f4a_driver.lib`**，再链回 app。
+（注意 `read()` 的 UART 分支里用的是 `uart_recv()`，它读 `gUartParams[s-100].recvbuf`，
+所以 ①②里缓冲的接法要跟 `gUartParams[4/5/6].recvbuf` 对齐，别各写一套。）
+
+---
+
+## 4. 已落地的代码
+
+### 4.1 `radar_link.c/h`（F4A0 侧，已注册进 Keil 工程并接线程）
+
+- 帧核 `fr_crc16`（CCITT，与 F460 `common.c` 逐位一致）
+- `0xAA` 变长解析（cmd `0x10` 应答 / `0x81` 上报）+ `0xFF` 定长 32B 解析，**两者都校验 CRC**
+- 三口轮询：每 50ms 发一次查询；逐口 200ms 新鲜度超时（等价 STM32F0 的 `radarPortFresh`）
+- 丢帧计数 `bad_frames`、发送失败计数 `tx_err`
+- 状态灯 `BOARD_LED2/3/4`（**`BOARD_LED1` 被 app 占用**）
+- **不自己写 ISR**：RX 走驱动；TX 用 `Uart_RS485_send()` 并**自加按口互斥**（那个函数没有锁，
+  对比 `uart_send()` 有 `uart_tx_lock`）
+- **不做 `uart_open`**：三个口由 `ipc.c:271 Tag_update_thread -> Usart_RS485_init()` 打开，
+  且那里设的是 `O_BLOCK` —— 重复打开/被覆盖会让 `read()` 永久阻塞、线程卡死。
+  本模块只做 `ioctl(SET_ISBLOCK/SET_TIMEOUT/CLEAR_REVBUF)`，并照 `send_tags` 先 `wait_init_ok()`。
+
+### 4.2 ⚠️ 代码里有【临时诊断】必须删
+
+`radar_link.c` 中一段三级 LED 定位（搜 `【临时诊断】`）：
+
+| 灯 | 含义 |
+| --- | --- |
+| LED2 | 轮询线程活着（无条件每秒闪） |
+| LED3 | 查询帧已发出（每次闪） |
+| LED4 | `read()` 收到任何字节（不管 CRC） |
+
+**验证通过后请删掉这一段**（含 `radar_link_poll()` 开头的 `s_hb_ms` 心跳块、
+`read()` 后的 LED4 调用、查询前的 LED3 调用）。
+
+### 4.3 建议的重构方向（用户明确要求"将来要移植到其它平台"）
+
+现在 `radar_link.c` 是**逻辑与平台混在一起**的，应拆为：
+
+| 层 | 内容 | 平台相关 |
+| --- | --- | --- |
+| `radar_proto.c/h` | `frCrc16`、两种帧的解析/组帧、每口状态、新鲜度超时 | **否**，逐行照 `STM32F0/BSP/app.c:264-560` 搬 |
+| `radar_plat.h` + 各平台实现 | `send(port,buf,len)` / `recv(port,buf,len)` / `now_ms()` / 灯 | **是**，换平台只换这层 |
+
+---
+
+## 5. 排查历程（避免重走弯路）
+
+按时间顺序，每一步都是**被现场现象或日志否掉**的：
+
+1. 以为要自己写 USART ISR → 否：驱动已占用中断向量（`hc32f4a0_ll_interrupts_share.c`）
+2. 以为 `Uart_RS485_send()` TX 忙会丢帧 → 否：它是逐字节阻塞自旋，**不丢帧**（但无锁、无超时）
+3. 以为查询帧要用 32B 定长帧 → **部分对**：定长帧确实量产在用，但**轮询用的是 `0xAA`+`0x10`**
+4. 以为地址要广播 `0x00` → 否：**必须用本口序号+1**（`app.c:423`）
+5. 以为 LED 逻辑写错导致全灭 → 是错了一处（`Alarm_Output` 传 0 会被 `GPIO_Start` 静默丢弃），
+   **但那不是根因**
+6. 以为 `read()` 阻塞导致线程卡死 → 否（已修，但线程本来就活着，LED2 在闪）
+7. **真正根因**：`read--invalid interface number` → §3 的三处驱动断点
+
+**教训**：在拿到"LED2 在闪 + `read()` 报错"之前，每一步都是在猜。**先做可观测性，再改逻辑。**
+
+---
+
+## 6. 下一步（建议顺序）
+
+1. 按 §3.1 修驱动三处 + 重编 lib（这是唯一阻塞项）
+2. 上板验证：`LED4` 开始闪 = `read()` 能取到字节
+3. 再看 `LED3/LED4` 是否按预期闪 → 确认帧解析通过、`radar_val` 置位 → LED2/3/4 显示雷达"有人"
+4. 删掉 §4.2 的临时诊断
+5. 按 §4.3 拆成 `radar_proto` + `radar_plat`
+6. 数据上报去处（MQTT / HTTP / 现有 RFID 数据模型）**仍未定**
+
+---
+
+## 7. 常用命令
+
+```powershell
+# 编 F4A0 app
+Start-Process 'D:\Keil_v5\UV4\UV4.exe' -ArgumentList @('-r','J:\dsh\alarm_board\HC32F4A0_OTA\hc32f4a0_app\projects\MDK\hc32f4a0_app.uvprojx','-j0','-o',"$env:TEMP\f4a0.log") -Wait
+
+# 看 Code 是否变化（判断模块有没有被链接器回收）
+Select-String -Path '...\MDK\output\firmware.map' -Pattern 'Removing.*radar_link'
+
+# git（本地领先 origin 若干提交；推送需代理）
+git -c http.proxy=http://127.0.0.1:7890 -c http.sslBackend=openssl push origin main
+```

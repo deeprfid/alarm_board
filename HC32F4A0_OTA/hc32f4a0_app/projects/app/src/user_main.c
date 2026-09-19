@@ -431,8 +431,8 @@ void user_main_active(void)
     get_left_heap_size("after init_finish_active");
 
    // led_on();
-		Alarm_Disable(BOARD_LED2);
-    Alarm_Output (BOARD_LED2, 50, 50, 0);
+		Alarm_Disable(BOARD_LED1);
+    Alarm_Output (BOARD_LED1, 50, 50, 0);
     //////gpi trigger
     if (gRtSetting->gpi_trigger.is_gpi_trigger == 1)
     {
@@ -705,7 +705,7 @@ void user_main_active(void)
     }
 
 FIN:
-    Alarm_Disable(BOARD_LED2);
+    Alarm_Disable(BOARD_LED1);
     sleep_ms(1000);
     system_reset();
     // while(1);
