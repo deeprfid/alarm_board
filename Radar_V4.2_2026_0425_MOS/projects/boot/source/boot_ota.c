@@ -168,8 +168,7 @@ static int32_t boot_pick_valid(uint32_t *pu32Slot)
     return -1;
 }
 
-/* 找不到可启动槽：LED 反复闪 BOOT_LED_HALT 次（永不返回），并喂狗 */
-/* 找不到可启动槽：红灯一直闪（内部喂狗），不返回 */
+/* 找不到可启动槽：红灯一直闪（内部按 100ms 喂狗），不返回 */
 static void boot_halt(void)
 {
     boot_led_error();

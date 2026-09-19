@@ -1,20 +1,13 @@
-# CHANGELOG
-
-本仓库（alarm_board）以**单仓库**方式管理两套固件，对应同一套防盗报警链路的上下游：
-
-| 目录 | MCU | 角色 | 入口 |
-| --- | --- | --- | --- |
-| `STM32F0_linux_v4.31` | STM32F030CCTx | 通道中继板（桥接 Linux 主机 → 各报警板） | `BSP/app.c` |
-| `Radar_V4.2_2026_0425_MOS` | HC32F460 | 报警板（确认触发源并输出声光报警） | `projects/source/main.c` |
-
-**报警链路（基线已确认）：**
-Linux 主机 --IPC(UART1@115200)--> STM32F0 中继板 --CRC 校验、按 AntID/通道分发(COM2..COM6@460800)--> HC32F460 报警板 --读 雷达GPIO/摄像头输入/继电器输入 确认--> 输出声光报警（蜂鸣器 PWM/红绿蓝 LED/OPA/继电器 GPO）。
-
-修改记录约定：每次变更在对应版本条目下按
-`### [工程] 模块名` 加 `### Added / ### Changed / ### Fixed / ### Removed` 小节记录，随后提交并在必要时打 tag。
-
 ## [Unreleased]
 
+- `[hc32f460]` **fix(boot): 亮灯等待期间补喂看门狗 —— 消除「跳转前 2 秒不喂狗」的复位隐患** —— 源码改动 + 双 target 重编通过，**待上板复测**。
+  - **问题**：`boot_led_error()` 的死循环里专门写了 `SWDT_FeedDog()`（注释已说明 ICG 同时配了 `ICG_REG_WDT_CONFIG | ICG_REG_SWDT_CONFIG`，复位后可能已按 ICG 使能），但 `boot_led_slot()` 里一整段 `DDL_DelayMS(2000)` **一次狗都没喂** —— 而它正好占着跳转前的 2 秒窗口。**两只 LED 函数的喂狗策略不对称**，是这个隐患的直接来源；
+  - **为什么以前没暴露**：现场实测「绿灯亮 2 秒 → 跳槽 A → App 正常起」只能证明**当前这一颗 ICG 配置**下 SWDT 溢出周期 > 2s；一旦有人把 SWDT 超时改短、或换一版 ICG 烧进去，就会在亮灯中途被咬复位、循环重启 —— **症状与当初「上电不运行」几乎一样，极难定位**；
+  - **改法**：新增 `delay_fed_ms()`，把任意长延时切成 100ms 分片、**每片喂一次狗**，狗的溢出周期只要 > 100ms 就都安全；`boot_led_slot()` 与 `boot_led_error()` **统一走它**（后者去掉裸 `DDL_DelayMS`），从根上消除不对称；
+  - **顺带**：删掉 `boot_ota.c` 里 `boot_halt()` 上方两行内容重复的注释；
+  - **验证（编译/map 层，硬件未测）**：`iap_boot_Debug` / `iap_boot_Release` 均 **UV4 exit 0、0 Error / 0 Warning**；Code 5812 → **5892**（+80B，即新增的 `delay_fed_ms`）；构建后 `.uvprojx` 关键源文件注册数仍为 10（5 文件 × 2 target），未被 UV4 改坏；
+  - **RAMCODE 布局复核**（`docs/ota_boot_design.md` §15.5 那条安全规则）：Debug map 逐符号确认 —— `EFM_Program @0x200183ad`、`EFM_SectorErase @0x200185c9`、`FLASH_EraseSector @0x20018805`、`FLASH_WriteData @0x200188f1`、`ota_flag_write @0x20018c49`，**全部 0x20018xxx**；Release 无调试符号表，改按执行域核对 `Execution Region RW_RAMCODE (Exec base: 0x20018000)`，段内含 `boot_ota.o`/`hc32_ll_efm.o`/`flash.o`（`FLASH_EraseSector @0x20018524`、`EFM_Program @0x200182b8`）。两 target 均**无任何擦写函数落在 0x0000xxxx**。
+  - **仍未做**：上板复测（本次只做了编译与 map 验证）；§15.2 的量产时钟配置分步排查（Boot 现仍跑复位默认 HRC）。
 - `[hc32f460]` **feat(ota): 自检确认 + 打包工具 + F4A0 分发集成层（第 2、1、3 项一起做完）** — 至此升级闭环的每一环都有代码，只差真机联调。
   - **修两处我自己引入的严重缺陷**（都会让升级 100% 失败的级别）：
     - ① **槽镜像 CRC32 自指**：原设计「CRC32 覆盖整镜像（含 17B 槽头）」，而 CRC32 字段自身就在被覆盖范围内 —— 打包侧根本算不出、设备侧永远校验不过。改为 **CRC32 只覆盖槽头之后的 payload**；

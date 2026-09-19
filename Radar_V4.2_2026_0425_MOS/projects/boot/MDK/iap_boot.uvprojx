@@ -500,13 +500,6 @@
         </Group>
         <Group>
           <GroupName>Readme</GroupName>
-          <Files>
-            <File>
-              <FileName>Readme.txt</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Readme.txt</FilePath>
-            </File>
-          </Files>
         </Group>
       </Groups>
     </Target>
@@ -1004,13 +997,6 @@
         </Group>
         <Group>
           <GroupName>Readme</GroupName>
-          <Files>
-            <File>
-              <FileName>Readme.txt</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Readme.txt</FilePath>
-            </File>
-          </Files>
         </Group>
       </Groups>
     </Target>

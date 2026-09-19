@@ -430,6 +430,23 @@ App 自己 `BSP_CLK_Init()` 配到 PLL 200MHz；跳转前 `boot_jump()` 把时�
 
 **尚未做**：OTA 整链在真机上一次都没跑过（下载 / 激活 / 回退 / 槽 B）。
 
+### 15.6 亮灯等待的喂狗策略：原先不对称，已统一（2026-09-19）
+
+**问题**：Boot 的两个 LED 函数喂狗策略不一致 ——
+
+| 函数 | 原实现 | 是否喂狗 |
+| --- | --- | --- |
+| `boot_led_error()` | `for(;;){ SWDT_FeedDog(); 亮/灭各 1s }` | 喂 |
+| `boot_led_slot()` | `亮 → DDL_DelayMS(2000) → 灭` | **不喂** |
+
+而 `boot_led_slot()` 正好占着**跳转前的 2 秒窗口**。ICG 里同时配了 `ICG_REG_WDT_CONFIG | ICG_REG_SWDT_CONFIG`（见 `hc32_ll_icg.h: ICG_REG_CFG0_CONST`），复位后可能已按 ICG 使能 —— 只要 SWDT 溢出周期短于 2s，就会**在亮灯中途被咬复位、循环重启**，现场表现与 §15.2 里那个「上电不运行」**几乎一样**，极难定位。
+
+**为什么至今没暴露**：§15.5 的现场实测「绿灯亮 2 秒 → 跳槽 A」只能证明**当前这一颗 ICG 配置**下 SWDT 周期 > 2s，是「恰好没踩到」，不是「设计上安全」。
+
+**改法**：新增 `delay_fed_ms(u32Ms)`，把任意长延时切成 `BOOT_DELAY_SLICE_MS = 100` 的分片，**每片喂一次狗**；`boot_led_slot()` 与 `boot_led_error()` **统一走它**（后者去掉裸 `DDL_DelayMS`），从根上消除不对称。约束变成一句话：**狗的溢出周期只要 > 100ms 就都安全**。
+
+**验证**：双 target 重编 UV4 exit 0 / 0 Error / 0 Warning，Code 5812 → 5892；RAMCODE 布局复核见 §15.5 那条规则（Debug 逐符号、Release 按执行域，两 target 均无擦写函数落在 0x0000xxxx）。**上板复测未做。**
+
 ### 14.9 尚未接线
 
 - `ota_recv` 目前是**独立模块**，尚未挂到业务收帧入口 `Check_Uart_Pdu()`；「进入升级」请求的承载帧仍待定（§12）；
