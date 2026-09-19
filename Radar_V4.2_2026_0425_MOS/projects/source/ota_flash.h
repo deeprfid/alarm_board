@@ -48,7 +48,7 @@ int32_t ota_img_write_trailer(uint32_t slot, uint32_t img_len, uint32_t version)
  *     用途：先单独验证「Boot 能否跳到 App」，把 OTA 这条链路的变量整体排除。
  * 1 = 打开：完整 OTA（App 自检后写标志把本槽置 RUNNABLE）。 */
 #ifndef OTA_APP_ENABLE
-#define OTA_APP_ENABLE   0
+#define OTA_APP_ENABLE   1
 #endif
 
 /* App 自检确认：把本槽置 RUNNABLE、清 NEED_CONFIRM、boot_count 归零。slot 传本槽号。

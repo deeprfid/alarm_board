@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+- `[hc32f460]` **chore(ota): `OTA_APP_ENABLE` 置 1（打开 OTA 自检确认）** —— 上板实测**能启动**。
+  - 打开后 App 每次启动会调 `ota_app_boot_confirm(SCB->VTOR 反推的本槽)`：把本槽置 RUNNABLE、清 NEED_CONFIRM、boot_count 归零。
+  - 配合本笔之前补的**短路判断**，只有「本槽非 RUNNABLE / 带 NEED_CONFIRM / boot_count != 0 / active 不符」时才擦写标志扇区，正常运行态下不再每次上电都擦 8KB。
+
 - `[hc32f460]` **feat(ota): 补上 OTA 闭环缺的两处 —— 收完自动复位激活 + 自检确认短路** —— 4 个 App target 重编 0 Error / 0 Warning，**待上板复测**。
   - **缺口 1：下载完没有复位** —— `ota_recv_finish()` 只把标志写成「active = 新槽 + TRIAL + NEED_CONFIRM」并回最后一个 ACK，**设备不会自己重启**；全工程 grep 过，零个 `NVIC_SystemReset`、也没有任何地方调 `ota_recv_result()`，所以新槽永远不会被 Boot 拉起。
     新增 `OTA_Housekeeping()` 挂进 `main()` 主循环（开销仅读一个变量）：拿到 `OTA_RX_RESULT_OK` -> **直接复位**；拿到 `FAIL` -> 清结果并 `ota_recv_exit()` 退回业务态。
