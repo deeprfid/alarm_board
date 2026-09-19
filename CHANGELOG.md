@@ -1,5 +1,15 @@
 ## [Unreleased]
 
+- `[hc32f460]` **feat(tools): 新增 `tools/merge_f460_image.py` —— 把 Boot + 槽 A/B 合成【一个整片 512KB bin】，产线一次烧录**。
+  - **动机**：此前没有一个可直接烧的合并镜像，产线得手工烧 Boot、槽 A、槽 B 三块，容易漏、容易错位；仓库里也确实没有任何合并产物与合并工具。
+  - **分工**：`ota_pack_f460.py` 产出的是**给 OTA 用的 `.otapkg`**（单个槽的分发包）；本工具产出的是**给烧录器用的整片 `.bin`**（Boot + 两个槽一次铺好）。两者用途不同，别混。
+  - **按 `ota_layout.h` 铺放**：Boot 32KB@`0x0`、槽 A 128KB@`0x8000`、槽 B 128KB@`0x28000`，其余填 `0xFF`（擦除态）。各段**越界即报错**（Boot 超 32KB、槽镜像超 128KB 都会被挡下）。
+  - **硬校验 ICG**：要求 `0x400` 处 32 字节完整落在 Boot 内 —— 这是「ICG 归 Boot 独占」这条分工的机器检查，防止哪天 App 又把 ICG 编译回来、或 Boot 的 ICG 被裁掉。
+  - **标志区刻意留 `0xFF`**：首次上电 Boot 读标志失败 -> 走兜底路径 -> 按 `BOOT_DEFAULT_SLOT` 选槽（当前 = `OTA_SLOT_B`）。**刻意不预写标志** —— 预写会绕过兜底路径，也让「首次烧录不写标志」这条纪律失效。
+  - **支持 `--slot-a-only`**（只合成 Boot + 槽 A）与自定义产物路径 / `--build debug|release`。
+  - **产物**：`dist/radar_full_boot_A_B_release.bin`，524288 字节（整片 512KB）。
+  - **回读校验**：Boot@0 栈顶 `0x1FFFC470` / 复位向量 `0x0000031D`；槽 A@0x8000 栈顶 `0x1FFFB458` / 复位向量 `0x00008321`；槽 B@0x28000 栈顶 `0x1FFFB458` / 复位向量 `0x00028321`；**ICG@0x400 = `BF FF DF FF FF FE FF..`（32B 与已知值逐字节一致）**；标志区 8KB、保留区 ~216KB、Boot 尾部填充**均为 `0xFF`**。
+
 - `[hc32f4a0]` **feat(ota): 接通 F4A0 -> F460 报警板分发 —— MSC 的 FAT 卷放 `RADAR.BIN` 即自动下发** —— 工程构建 **0 Error / 1 Warning**（唯一警告是既有的 `ota_usb_stream.c(47)` 未使用变量），**待上板联调**。
   - **补齐了此前一直空着的触发入口**：`ota_dist_start()` / `ota_dist_poll()` 此前**零调用点**（发送器写好了但没人发起、也没人推进，被链接器整个回收）。
   - **新增 `radar_ota.c/h`**（L4 层）：挂载 FAT -> 打开 `RADAR.BIN` -> 整体读进堆 -> 校验包头与长度自洽 -> **卸载 FAT** -> `ota_dist_start()` 发起；`radar_ota_poll()` 负责周期推进，成功后删掉 `RADAR.BIN`（避免每次上电重复分发），**失败不删**（留着复位重试/排查）。
