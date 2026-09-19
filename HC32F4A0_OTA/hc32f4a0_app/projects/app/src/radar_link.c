@@ -40,6 +40,7 @@ typedef struct {
     uint16_t     plen;
     uint8_t      legacy;        /* 1 = 正在收 0xFF 定长 32B 帧 */
     uint32_t     next_query_ms;
+    uint8_t      led_on;        /* 本链路灯当前状态（只在变化时驱动 LED） */
 } radar_ctx_t;
 
 static radar_ctx_t s_ctx[RADAR_LINK_NUM];
@@ -259,6 +260,31 @@ void radar_link_poll(void)
             (void)radar_send_query(i);
             p->next_query_ms = t + QUERY_PERIOD_MS;
         }
+
+        /* 4) 灯：LED1/2/3 = 链路 485_1/485_2/485_3 的状态。
+         *    在线 -> 常亮；离线 -> 常灭。只在状态变化时下发，避免每轮都去写。
+         *    【待上板确认】Alarm_Output(gpoid, msON, msOFF, Cycle) 的语义按"常亮=ON 1000/OFF 0"给，
+         *    若 F4A0 的 LED 驱动不是这个口径，改这两行即可。 */
+        {
+            uint8_t want = (p->st.online != 0u) ? 1u : 0u;
+            if (want != p->led_on) {
+                p->led_on = want;
+                Alarm_Output((uint8_t)(BOARD_LED1 + i),
+                             (uint16_t)(want ? 1000u : 0u),
+                             (uint16_t)(want ? 0u : 1000u),
+                             0u);
+            }
+        }
+    }
+}
+
+void radar_link_task(void *arg)
+{
+    (void)arg;
+    radar_link_init();
+    for (;;) {
+        radar_link_poll();
+        sleep_ms(10);
     }
 }
 

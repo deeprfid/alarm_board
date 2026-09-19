@@ -14,6 +14,7 @@
 #include "ErrChecker.h"
 #include "event_mq.h"
 #include "ota_agent.h"
+#include "radar_link.h"    /* F4A0 <-> 报警板链路轮询 */
 #include "ota_storage.h"      /* OTA_QSPI_STAGE_BASE */
 #include "ota_state.h"        /* ota_set_progress */
 #include "ota_usb.h"
@@ -382,6 +383,10 @@ void user_main_active(void)
 
     init_osThreadAttr_t(&thAttr_t, 1024 * 4, osPriorityNormal);
     osThreadNew(send_tags, NULL, &thAttr_t);
+
+    /* 报警板链路轮询线程：三条 RS485 的收发、新鲜度、指示灯都在里面（10ms 一轮） */
+    init_osThreadAttr_t(&thAttr_t, 1024 * 4, osPriorityNormal);
+    osThreadNew(radar_link_task, NULL, &thAttr_t);
 
 //     init_usb(1);
     sleep_ms(100);

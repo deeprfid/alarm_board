@@ -62,4 +62,7 @@ void radar_link_poll(void);     /* 周期推进（建议 5~20ms）。放独立�
 /* 诊断：本口最近是否 fresh（200ms 内有应答） */
 #define RADAR_LINK_FRESH_MS   200UL
 
+/* RTOS 线程体：init 一次 + 每 10ms poll 一次。由 user_main.c 用 osThreadNew 拉起 */
+void radar_link_task(void *arg);
+
 #endif /* RADAR_LINK_H */
