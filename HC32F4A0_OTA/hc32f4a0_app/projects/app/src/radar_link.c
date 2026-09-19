@@ -206,19 +206,19 @@ static void feed_byte(uint8_t idx, uint8_t b)
 
 void radar_link_init(void)
 {
-    commonUartPara para;
-    int nb = 1;
+    int nb = 1;      /* 1 = 非阻塞（见 ota_integration.c 的同款用法） */
     int tmo = 10;
     uint8_t i;
 
     (void)memset(s_ctx, 0, sizeof(s_ctx));
 
-    (void)memset(&para, 0, sizeof(para));
-    para.isBlock  = O_NONBLOCK;
-    para.baudrate = 460800;
-    para.timeout  = 20;
+    /* 【不要在这里 uart_open】这三个口是驱动自己开的：
+     *   ipc.c:271  Tag_update_thread() -> Usart_RS485_init() -> uart_open(RS485_1/2/3, 460800)
+     * 我们再开一次是重复打开（可能失败或重配），更糟的是 Usart_RS485_init() 设的是
+     * 【O_BLOCK】—— 若它在本函数之后执行，端口会变回阻塞，radar_link_poll() 里的
+     * read(fd) 就会永久阻塞，整条轮询线程卡死（现象：既不发查询、灯也不亮）。
+     * 所以这里只做 ioctl 配置，把非阻塞和超时再钉一遍。 */
     for (i = 0u; i < RADAR_LINK_NUM; i++) {
-        (void)uart_open(s_link_fd[i], &para);
         (void)ioctl(s_link_fd[i], COMMON_INTERFACE_SET_ISBLOCK, &nb);
         (void)ioctl(s_link_fd[i], COMMON_INTERFACE_SET_TIMEOUT, &tmo);
         (void)ioctl(s_link_fd[i], COMMON_INTERFACE_CLEAR_REVBUF, NULL);
@@ -280,6 +280,11 @@ void radar_link_poll(void)
 void radar_link_task(void *arg)
 {
     (void)arg;
+
+    /* 与 send_tags 一致：等系统初始化完成再动外设。
+     * Usart_RS485_init() 是在 Tag_update_thread 里调的，早于它去配置这三个口会被覆盖。 */
+    wait_init_ok();
+
     radar_link_init();
     for (;;) {
         radar_link_poll();
