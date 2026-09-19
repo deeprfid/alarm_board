@@ -445,7 +445,11 @@ App 自己 `BSP_CLK_Init()` 配到 PLL 200MHz；跳转前 `boot_jump()` 把时�
 
 **改法**：新增 `delay_fed_ms(u32Ms)`，把任意长延时切成 `BOOT_DELAY_SLICE_MS = 100` 的分片，**每片喂一次狗**；`boot_led_slot()` 与 `boot_led_error()` **统一走它**（后者去掉裸 `DDL_DelayMS`），从根上消除不对称。约束变成一句话：**狗的溢出周期只要 > 100ms 就都安全**。
 
-**验证**：双 target 重编 UV4 exit 0 / 0 Error / 0 Warning，Code 5812 → 5892；RAMCODE 布局复核见 §15.5 那条规则（Debug 逐符号、Release 按执行域，两 target 均无擦写函数落在 0x0000xxxx）。**上板复测未做。**
+**验证**：
+
+- **编译/map**：双 target 重编 UV4 exit 0 / 0 Error / 0 Warning，Code 5812 → 5892；RAMCODE 布局复核见 §15.5 那条规则（Debug 逐符号、Release 按执行域，两 target 均无擦写函数落在 0x0000xxxx）。
+- **上板实测（2026-09-19，烧 `output\debug\iap_boot.hex`）**：行为与改动前**完全一致** —— 绿灯亮 2 秒 → 跳槽 A → App 正常起来，无复位重启、无异常灯态。**未引入回归**；同时把「SWDT 溢出周期 > 2s 才安全」这个隐式依赖，换成了「> 100ms 即可」的显式约束。
+- **未验证**：Release 产物（只烧了 Debug）。
 
 ### 14.9 尚未接线
 
