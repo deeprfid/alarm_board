@@ -353,29 +353,36 @@ EFM_REG_Lock();
 > App 曾因此缺 `RW_RAMCODE`，启动时擦标志扇区直接把 CPU 卡死（现象是「蜂鸣器长鸣 + 三灯常亮」）。
 > 复核方法：在 `.map` 里确认 `ota_flag_write` / `EFM_Program` / `EFM_SectorErase` 的地址是 `0x20018xxx` 而**不是** `0x0000xxxx`。
 
-### 15.2 Boot 的时钟配置：尝试过量产配置，但本板上电不运行 —— 已回退
+### 15.2 Boot 的时钟配置：XTAL 8MHz -> MPLL 200MHz（与量产 boot_iap 一致）
 
-**现状（现场实测可用）**：Boot **不配置时钟**，跑 ICG 决定的复位默认时钟（HRC，约 20MHz）。
-App 自己 `BSP_CLK_Init()` 配到 PLL 200MHz；跳转前 `boot_jump()` 把时钟退回默认态再交接。
+**现状（2026-09-19 现场实测可用）**：Boot 自己把时钟配到 **XTAL 8MHz -> MPLL 200MHz**。
+`SystemClockConfig()` 照搬量产 `boot_iap/source/main.c:43-96`，在 `main()` 里 `LL_PERIPH_WE()` 之后调用。
 
-**试过什么**：按扫描板量产 `boot_iap` 的 `SystemClockConfig()`（XTAL 8MHz → MPLL 200MHz）逐行恢复，
-唯一改动 `EFM_CacheRamReset` → `EFM_DataCacheResetCmd`。
-→ **本板上电 Boot 完全不运行（绿灯都不亮）**，已回退（见 commit `f1d3d0c`）。
+**与 boot_iap 的差异只有两处【平台适配】，参数/顺序一字未改**：
 
-**已排查、未找到差异的三项**：
+| # | boot_iap | 本工程 | 原因 |
+| --- | --- | --- | --- |
+| ① | `EFM_CacheRamReset(ENABLE/DISABLE)` | `EFM_DataCacheResetCmd(ENABLE/DISABLE)` | 新 DDL 改名 |
+| ② | `GPIO_AnalogCmd(BSP_XTAL_PORT, BSP_XTAL_PIN, ...)` | `...(BOOT_XTAL_PORT, BOOT_XTAL_IN_PIN \| BOOT_XTAL_OUT_PIN, ...)` | F460 晶振是 IN/OUT 两个脚，那颗芯片只有一个 `BSP_XTAL_PIN` |
 
-| 查什么 | 结果 |
-| --- | --- |
-| XTAL 引脚 | BSP 头文件：`GPIO_PORT_H` / `BSP_XTAL_IN_PIN=PIN_01` / `BSP_XTAL_OUT_PIN=PIN_00` —— 与 boot_iap 写法一致 |
-| 配置顺序 | 与 App 的 `BSP_CLK_Init()`（**本板实测能跑**）逐行同序 |
-| 参数 | `CLK_XTAL_MD_OSC/DRV_ULOW/ON/STB_2MS`、`PLLM=1/PLLN=50/PLLP=2/PLLQ=2/PLLR=2/PLLSRC=XTAL` —— 完全相同 |
+保留的细节：等 PLL 稳定前后的两处 `SWDT_FeedDog()`、总线分频、`PLLM=1/PLLN=50/PLLP=2/PLLQ=2/PLLR=2/PLLSRC=XTAL`、
+`SRAM_SetWaitCycle`、`EFM_SetWaitCycle(EFM_WAIT_CYCLE5)`、`GPIO_SetReadWaitCycle(GPIO_RD_WAIT3)`、
+`PWC_HighSpeedToHighPerformance()`、`CLK_SetSysClockSrc(PLL)`、cache 复位与 `EFM_CacheCmd(ENABLE)`。
 
-**同一套配置 App 能跑、Boot 不能** —— 至今无法从代码解释。**再试必须分步，每步上板验证**：
+引脚取值同 `ev_hc32f460_lqfp100_v2.h:238-240`（`GPIO_PORT_H` / `PIN_01` / `PIN_00`）。
+**没有 `#include` 那个 BSP 头** —— 其全部内容被 `#if (BSP_EV_HC32F460_LQFP100_V2 == BSP_EV_HC32F4XX)` 罩着而本工程未定义该宏；
+用 Keil `<Define>` 写 `NAME=VALUE` 又会被 armasm 拒绝（`A1137E`），故直接落值。
 
-1. 只加 `GPIO_AnalogCmd(PH0/PH1)` + `CLK_XtalInit`（**不开 PLL**）
-2. 再加 `CLK_PLLInit` + 等 PLL 稳定
-3. 再加 `SRAM/EFM/GPIO` 等待周期 + `PWC_HighSpeedToHighPerformance` + 切 PLL 源
-4. 最后加 cache 复位/开启
+**200MHz 只存在于 Boot 这一程**：跳转前 `boot_jump()` 仍调 `boot_clock_deinit()` 把时钟退回近复位态再交接，
+App 照旧自行 `BSP_CLK_Init()`。`DDL_DelayMS()` 无需改 —— `CLK_SetSysClockSrc` 内部会 `SystemClockUpdate()`，灯节拍自动跟新主频走。
+
+**上板现象**：**红灯常亮 2 秒 -> 跳槽 B -> App 起来** ✓
+
+**历史（失败过的那一版，成因仍未归因）**：早前按同一套配置加过一次，当时**本板上电 Boot 完全不运行（绿灯都不亮）**，
+遂回退（commit `f1d3d0c`）；当时比对了引脚/顺序/参数三项均一致，未能解释。
+2026-09-19 按同一份 boot_iap 代码重做后**上板正常** —— **那次失败的具体成因至今未归因，不再追**。
+（若将来又出现「上电不亮」，可参考的分步法：① 只加 `GPIO_AnalogCmd` + `CLK_XtalInit`；② 再加 `CLK_PLLInit` + 等稳定；
+③ 再加等待周期 + `PWC_HighSpeedToHighPerformance` + 切 PLL 源；④ 最后加 cache 复位/开启。）
 
 ### 15.2.1 （原 15.2 内容，已作废）
 
@@ -391,8 +398,11 @@ App 自己 `BSP_CLK_Init()` 配到 PLL 200MHz；跳转前 `boot_jump()` 把时�
 | 现象 | 含义 |
 | --- | --- |
 | 跳转前**绿灯常亮 2 秒** | Boot 判定跳**槽 A** |
-| 跳转前**蓝灯常亮 2 秒** | Boot 判定跳**槽 B** |
+| 跳转前**红灯常亮 2 秒** | Boot 判定跳**槽 B**（原为蓝灯，因与 App 的雷达信号指示混淆已改） |
 | **红灯** 1 秒亮 / 1 秒灭，一直闪 | 两槽都不可用，卡在 Boot |
+
+槽指示与卡住告警**同为红灯但形态不同，不会认错**：槽指示是「常亮 2 秒 -> 熄灭 -> 立刻跳转」，
+告警是「1 秒亮/1 秒灭**无限循环**、永不跳转」。
 | 三灯都不动 | Boot 没跑到 `main` |
 
 灯节拍用 `DDL_DelayMS()`（按 `SystemCoreClock` 实测值计时），**不要用按频率估算的忙等循环** ——
@@ -401,19 +411,23 @@ App 自己 `BSP_CLK_Init()` 配到 PLL 200MHz；跳转前 `boot_jump()` 把时�
 ### 15.4 OTA 总开关
 
 `ota_flash.h` 的 `OTA_APP_ENABLE`（默认 **0 = 关闭**）。
-关闭时 App 启动不写任何 Flash，Boot 恒走兜底路径（按 A→B 扫）→ **恒跳槽 A**。
+关闭时 App 启动不写任何 Flash，标志区始终无效，Boot 恒走兜底路径（按 `BOOT_DEFAULT_SLOT` 优先、另一个槽回退）
+→ **恒跳槽 B**（`boot_ota.c` 的 `BOOT_DEFAULT_SLOT = OTA_SLOT_B`）。
 用于把「Boot 能否跳到 App」与「OTA 整条链」这两件事分开验证。
 
-### 15.5 已验证基线（2026-09-18 现场实测）
+### 15.5 已验证基线（2026-09-19 现场实测）
 
 **可用的组合**：
 
 | 项 | 状态 |
 | --- | --- |
-| Boot | 不配时钟（HRC）＋ 跳转路径完整 `SystemClock_DeInit` 对齐 ＋ `flash.c` 原语层；Code 5812 |
+| Boot | **配时钟 XTAL 8MHz -> MPLL 200MHz**（与量产 boot_iap 一致，见 §15.2）＋ 跳转路径完整 `SystemClock_DeInit` 对齐 ＋ `flash.c` 原语层；Code Debug 8784 / Release 4992 |
 | App | 槽 A：`usart_uart_dma.hex` @0x8000；槽 B：`usart_uart_dma_b.hex` @0x28000；`RW_RAMCODE` 已在位 |
-| OTA | `OTA_APP_ENABLE = 0`（关闭）→ Boot 恒走兜底路径按 A→B 扫 → **恒跳槽 A** |
-| 现象 | 上电 **绿灯常亮 2 秒 → 跳槽 A → App 正常起来** ✓ |
+| OTA | `OTA_APP_ENABLE = 0`（关闭）→ 标志区无效 → Boot 恒走兜底路径 → **恒跳槽 B**（`BOOT_DEFAULT_SLOT = OTA_SLOT_B`） |
+| 现象 | 上电 **红灯常亮 2 秒 → 跳槽 B → App 正常起来** ✓（App 侧通信正常，见 `fix(rs485)` 的 USART 发送超时修复） |
+
+**历史基线（2026-09-18）**：当时 Boot 不配时钟跑 HRC、兜底按 A→B 扫、恒跳槽 A，现象为「绿灯 2 秒 → 跳槽 A → App 起来」。
+该组合已被上表取代（Boot 配时钟 + 红灯 + 跳槽 B）。
 
 **已确认修掉的真 bug**（仅 1 条有硬证据，其余为真 bug 但未逐一实测对应现象）：
 

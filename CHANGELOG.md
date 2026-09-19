@@ -1,6 +1,6 @@
 ## [Unreleased]
 
-- `[hc32f460]` **feat(boot): Boot 配时钟 XTAL 8MHz -> MPLL 200MHz，与量产 boot_iap 一致** —— 双 target 重编 0 Error / 0 Warning，**待上板复测**。
+- `[hc32f460]` **feat(boot): Boot 配时钟 XTAL 8MHz -> MPLL 200MHz，与量产 boot_iap 一致** —— 双 target 重编 0 Error / 0 Warning，**已上板实测：红灯常亮 2 秒 -> 跳槽 B -> App 起来**。
   - **来源**：`Scanner_20260901/boot_iap/source/main.c:43-96` 的 `SystemClockConfig()`，在 `main()` 里 `LL_PERIPH_WE()` 之后、引导之前调用，位置与 boot_iap 相同。
   - **与 boot_iap 的差异只有两处【平台适配】，参数/顺序一字未改**：① 新 DDL 里 `EFM_CacheRamReset(ENABLE/DISABLE)` -> `EFM_DataCacheResetCmd(ENABLE/DISABLE)`；② F460 晶振是 IN/OUT 两个脚，`GPIO_AnalogCmd` 用 `BOOT_XTAL_IN_PIN | BOOT_XTAL_OUT_PIN`（boot_iap 那颗芯片只有单个 `BSP_XTAL_PIN`）。
   - **保留全部细节**：等 PLL 稳定前后的两处 `SWDT_FeedDog()`、总线分频、`PLLM=1/PLLN=50/PLLP=2/PLLQ=2/PLLR=2/PLLSRC=XTAL`、`SRAM_SetWaitCycle`、`EFM_SetWaitCycle(EFM_WAIT_CYCLE5)`、`GPIO_SetReadWaitCycle(GPIO_RD_WAIT3)`、`PWC_HighSpeedToHighPerformance()`、`CLK_SetSysClockSrc(PLL)`、cache 复位与 `EFM_CacheCmd(ENABLE)`。
