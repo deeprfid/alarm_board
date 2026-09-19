@@ -830,6 +830,11 @@
               <FilePath>..\app\src\radar_ota.c</FilePath>
             </File>
             <File>
+              <FileName>radar_link.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\app\src\radar_link.c</FilePath>
+            </File>
+            <File>
               <FileName>ota_dist.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\app\src\ota_dist.c</FilePath>
