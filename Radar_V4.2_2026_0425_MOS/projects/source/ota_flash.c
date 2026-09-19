@@ -18,12 +18,33 @@ int32_t ota_app_boot_confirm(uint32_t slot)
     ota_flag_t flag;
 
     if (0 != ota_flag_read(&flag)) {
-        /* 标志无效（首次烧录未写标志区）：建一份，直接把本槽置 RUNNABLE */
+        /* 标志无效（首次烧录未写标志区）：建一份，直接把本槽置 RUNNABLE。这一支必须写。 */
         (void)memset(&flag, 0, sizeof(flag));
         flag.magic   = OTA_FLAG_MAGIC;
         flag.active  = slot & 1UL;
         flag.state_a = (uint32_t)OTA_SLOT_EMPTY;
         flag.state_b = (uint32_t)OTA_SLOT_EMPTY;
+    }
+    else
+    {
+        /* 【短路】标志本来就已经是「本槽已确认的运行态」时，直接返回、不写。
+         *
+         * 这不是优化而是语义修正：ota_flag_write() 要整扇区擦 8KB（EFM 扇区 = 8KB，约 20~30ms），
+         * 原实现每次上电都无条件写一遍 —— 白耗 EFM 寿命（万次量级），还平白拖慢每次启动。
+         *
+         * 真正需要确认的只有三种情况，凡命中其一就往下去写：
+         *   · 本槽状态还不是 RUNNABLE（典型：刚升上来，处于 TRIAL）
+         *   · 还带着 NEED_CONFIRM（升级后被要求自检确认）
+         *   · boot_count 非 0（Boot 已在数试运行次数，必须归零，否则数满会被判 FAILED 回退）
+         * 另外 active 指向别的槽时也必须写 —— 说明 Boot 眼中的活动槽与本槽不一致。 */
+        uint32_t u32Mine = (((slot & 1UL) == OTA_SLOT_A) ? flag.state_a : flag.state_b);
+
+        if (((slot & 1UL) == flag.active) &&
+            (u32Mine == (uint32_t)OTA_SLOT_RUNNABLE) &&
+            (0UL == (flag.flags & OTA_FLAG_NEED_CONFIRM)) &&
+            (0UL == flag.boot_count)) {
+            return 0;   /* 已是确认过的运行态：不擦不写 */
+        }
     }
 
     flag.active = slot & 1UL;

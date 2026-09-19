@@ -1,5 +1,14 @@
 ## [Unreleased]
 
+- `[hc32f460]` **feat(ota): 补上 OTA 闭环缺的两处 —— 收完自动复位激活 + 自检确认短路** —— 4 个 App target 重编 0 Error / 0 Warning，**待上板复测**。
+  - **缺口 1：下载完没有复位** —— `ota_recv_finish()` 只把标志写成「active = 新槽 + TRIAL + NEED_CONFIRM」并回最后一个 ACK，**设备不会自己重启**；全工程 grep 过，零个 `NVIC_SystemReset`、也没有任何地方调 `ota_recv_result()`，所以新槽永远不会被 Boot 拉起。
+    新增 `OTA_Housekeeping()` 挂进 `main()` 主循环（开销仅读一个变量）：拿到 `OTA_RX_RESULT_OK` -> **直接复位**；拿到 `FAIL` -> 清结果并 `ota_recv_exit()` 退回业务态。
+    **不复位前延时**：ACK 是 `ota_recv_finish()` 里用阻塞发送发完的（字节已在线），而 `DDL_DelayMS` 在 DDL 里是用 **SysTick** 实现的、本 App 自己也拿 SysTick 做 1ms 心跳（`bsp_timer.c`），两者会打架 —— 为一次复位前的等待去动心跳计时不值得。
+  - **缺口 2：`ota_app_boot_confirm()` 每次上电都无条件擦写** —— `ota_flag_write()` 要整扇区擦 8KB（EFM 扇区 = 8KB，约 20~30ms），原实现**每次上电都写一遍**，既白耗 EFM 寿命（万次量级）又拖慢启动。现加短路：仅当「本槽不是 RUNNABLE / 带 NEED_CONFIRM / `boot_count != 0` / `active` 指向别的槽」才写，否则直接返回。
+  - **顺带修掉一个我上次引入的隐患**：上一笔把 `claim_byte()` 收紧成 `s_state != OTA_RX_OFF`，那对业务态是对的，但**在 `DONE` / `FAIL` 状态下仍返回 1** —— 而 `ota_recv_busy()` 此时已是 0，`Check_Uart_Pdu` 不再把字节转给 `ota_recv_feed`，于是每个字节都走 `sniff()` 被吞；`FAIL` 之后又没有别的地方会自动回 OFF（只有 tick 的空闲超时那条路会 exit），**链路会被永久占死、业务通信再也回不来**。现改为与 `ota_recv_busy()` 同判据：只在 `WAIT_HDR` / `DATA` 独占。
+  - **验证**：4 个 target 均 **UV4 exit 0、0 Error / 0 Warning**；Code Debug 38446 -> **38582**、Release 29322 -> **29458**；RAMCODE 复核 `ota_app_boot_confirm` / `EFM_Program` / `EFM_SectorErase` / `ota_flag_write` / `FLASH_EraseSector` 全在 `0x20018xxx`。
+  - **仍未做**：OTA 整链真机联调（下载 / 激活 / 回退 / 换槽）；`OTA_APP_ENABLE` 仍为 **0**（打开后新槽才会被自检确认成 RUNNABLE，否则 Boot 数满 3 次会判 FAILED 回退）。
+
 - `[hc32f460]` **feat(boot): Boot 配时钟 XTAL 8MHz -> MPLL 200MHz，与量产 boot_iap 一致** —— 双 target 重编 0 Error / 0 Warning，**已上板实测：红灯常亮 2 秒 -> 跳槽 B -> App 起来**。
   - **来源**：`Scanner_20260901/boot_iap/source/main.c:43-96` 的 `SystemClockConfig()`，在 `main()` 里 `LL_PERIPH_WE()` 之后、引导之前调用，位置与 boot_iap 相同。
   - **与 boot_iap 的差异只有两处【平台适配】，参数/顺序一字未改**：① 新 DDL 里 `EFM_CacheRamReset(ENABLE/DISABLE)` -> `EFM_DataCacheResetCmd(ENABLE/DISABLE)`；② F460 晶振是 IN/OUT 两个脚，`GPIO_AnalogCmd` 用 `BOOT_XTAL_IN_PIN | BOOT_XTAL_OUT_PIN`（boot_iap 那颗芯片只有单个 `BSP_XTAL_PIN`）。

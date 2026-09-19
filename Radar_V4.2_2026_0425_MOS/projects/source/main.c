@@ -3,8 +3,41 @@
  * Include files
  ******************************************************************************/
 #include "main.h"
-#include "ota_layout.h"   /* OTA_SLOT_SIZE（槽对齐尺寸） */
+#include "ota_layout.h"     /* OTA_SLOT_SIZE（槽对齐尺寸）/ SCB->VTOR 反推槽号 */
 #include "ota_flash.h"      /* ota_app_boot_confirm / OTA_APP_ENABLE */
+#include "ota_recv.h"       /* ota_recv_result / ota_recv_exit */
+
+/**
+ * @brief  OTA 收完后的落地动作（每轮主循环调一次，开销仅读一个变量）
+ *
+ *   ota_recv_finish() 已把标志写成「active = 新槽 + TRIAL + NEED_CONFIRM」并阻塞发完最后一个 ACK，
+ *   但设备【不会自己重启】—— 复位必须在这里做，否则新槽永远不会被 Boot 拉起。
+ *   ACK 是 ota_recv_finish() 里用阻塞发送发完的（字节已经在线上了），所以这里【不等】直接复位：
+ *   DDL_DelayMS 在 DDL 里是用 SysTick 实现的，而本 App 自己也拿 SysTick 做 1ms 心跳
+ *   （bsp_timer.c），两者会打架 —— 为一次复位前的等待去动心跳计时不值得。
+ *
+ *   失败则清结果并【退出升级态】，业务通信才回得来。
+ *
+ * 【不受 OTA_APP_ENABLE 门控】下载链路本身是无条件接线的（见 common.c 的 ota_recv_sniff/feed），
+ *   所以落地动作也必须无条件在，否则一次下载会卡在 DONE 状态、既不激活也不回业务。
+ */
+static void OTA_Housekeeping(void)
+{
+    switch (ota_recv_result())
+    {
+        case OTA_RX_RESULT_OK:
+            NVIC_SystemReset();     /* 复位 -> Boot 读标志 -> 拉起新槽（TRIAL） */
+            break;
+
+        case OTA_RX_RESULT_FAIL:
+            ota_recv_result_clear();
+            ota_recv_exit();
+            break;
+
+        default:
+            break;
+    }
+}
 
 /*******************************************************************************
  * Local variable definitions ('static')
@@ -59,6 +92,7 @@ int32_t main(void)
         Check_alarm_state();
         radar_poll();            /* 雷达字节->分帧->解析(非阻塞) */
         Check_UidKey();
+        OTA_Housekeeping();      /* OTA 收完 -> 复位激活；失败 -> 退回业务态 */
 
     }
 }

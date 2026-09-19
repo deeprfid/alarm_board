@@ -327,16 +327,21 @@ void           ota_recv_result_clear(void) { s_result = OTA_RX_RESULT_NONE; }
 
 /* 本字节是否由 OTA 独占（调用方据此跳过业务解析）。
  *
- * 【关键不变式 · 上板实测抓到的问题】业务态（s_state == OTA_RX_OFF）下嗅探必须【无损】：
- *   只有真正确认进入升级态（handle_frame 里 CRC16 合法的 DATA 帧触发 enter_mode_only）之后，
- *   OTA 才配独占这条链路。在业务态就返回 1，后果是业务流里任何一个 0x4F（'O'）都会被吞掉 ——
- *   OTA1 的 magic 是 "OTA1" = 4F 54 41 31，而 0x4F 是再普通不过的载荷字节。
- *   业务帧因此少一个字节，整帧 CRC16 校验失败被丢弃：N 字节的帧命中概率约 1-(255/256)^N，
- *   20~40 字节载荷就是 8~15% 丢帧，表现为「能启动、但通信时好时坏/丢帧」；
- *   若载荷里恰好出现 4F 54 41 31 连串，则整帧剩余部分都会被吞。 */
+ * 【关键不变式】只有【真的处于一次升级会话中】(OTA_RX_WAIT_HDR / OTA_RX_DATA) 才独占线路。
+ * 判据与 ota_recv_busy() 完全一致，两端必须一致 —— 否则会出两类事故，都踩过：
+ *
+ *   ① 业务态（OTA_RX_OFF）返回 1 → 吞字节：业务流里任何一个 0x4F（'O'）都会被吞掉
+ *      （OTA1 的 magic 是 "OTA1" = 4F 54 41 31，0x4F 是再普通不过的载荷字节）。
+ *      业务帧因此少一个字节，整帧 CRC16 失败被丢弃：N 字节的帧命中概率约 1-(255/256)^N，
+ *      20~40 字节载荷就是 8~15% 丢帧；若载荷里恰好出现 4F 54 41 31 连串，则整帧剩余全被吞。
+ *
+ *   ② 会话【结束后】(OTA_RX_DONE / OTA_RX_FAIL) 返回 1 → 链路被永久占死：
+ *      ota_recv_busy() 此时已是 0，Check_Uart_Pdu 不会再把字节转给 ota_recv_feed，
+ *      于是每个字节都走 sniff() 被吞 —— 而 FAIL 之后没有任何地方会自动回到 OFF
+ *      （只有 tick 里的空闲超时那条路会 exit），业务通信就再也回不来了。 */
 static uint8_t claim_byte(void)
 {
-    return (s_state != OTA_RX_OFF) ? 1u : 0u;
+    return ((s_state == OTA_RX_WAIT_HDR) || (s_state == OTA_RX_DATA)) ? 1u : 0u;
 }
 
 /* 消费 1 字节。
