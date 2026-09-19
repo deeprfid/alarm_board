@@ -316,7 +316,23 @@ uint32_t       ota_recv_total(void)        { return s_total; }
 int            ota_recv_result(void)       { return s_result; }
 void           ota_recv_result_clear(void) { s_result = OTA_RX_RESULT_NONE; }
 
-/* 消费 1 字节。返回 1 = 本字节属于 OTA1（调用方跳过业务解析），0 = 与 OTA 无关 */
+/* 本字节是否由 OTA 独占（调用方据此跳过业务解析）。
+ *
+ * 【关键不变式 · 上板实测抓到的问题】业务态（s_state == OTA_RX_OFF）下嗅探必须【无损】：
+ *   只有真正确认进入升级态（handle_frame 里 CRC16 合法的 DATA 帧触发 enter_mode_only）之后，
+ *   OTA 才配独占这条链路。在业务态就返回 1，后果是业务流里任何一个 0x4F（'O'）都会被吞掉 ——
+ *   OTA1 的 magic 是 "OTA1" = 4F 54 41 31，而 0x4F 是再普通不过的载荷字节。
+ *   业务帧因此少一个字节，整帧 CRC16 校验失败被丢弃：N 字节的帧命中概率约 1-(255/256)^N，
+ *   20~40 字节载荷就是 8~15% 丢帧，表现为「能启动、但通信时好时坏/丢帧」；
+ *   若载荷里恰好出现 4F 54 41 31 连串，则整帧剩余部分都会被吞。 */
+static uint8_t claim_byte(void)
+{
+    return (s_state != OTA_RX_OFF) ? 1u : 0u;
+}
+
+/* 消费 1 字节。
+ * 返回值由 claim_byte() 决定 —— 业务态一律返回 0（字节照样喂给业务解析器），
+ * 升级态返回 1（本链路只跑 OTA1）。缓冲与 CRC 判定不受影响，仍照常推进。 */
 static uint8_t consume_byte(uint8_t b)
 {
     static const uint8_t magic[4] = {
@@ -338,24 +354,24 @@ static uint8_t consume_byte(uint8_t b)
         {
             s_have = 0u;
         }
-        /* 部分匹配中或已对齐：算 OTA 相关；否则交给业务 */
-        return ((s_have > 0u) || (s_state != OTA_RX_OFF)) ? 1u : 0u;
+        /* 部分匹配中也照常返回 claim_byte()：业务态下这字节必须继续交给业务解析器 */
+        return claim_byte();
     }
 
-    if (s_rxlen >= (uint16_t)sizeof(s_rx)) { rx_reset(); return 1u; }
+    if (s_rxlen >= (uint16_t)sizeof(s_rx)) { rx_reset(); return claim_byte(); }
     s_rx[s_rxlen++] = b;
 
     if (s_rxlen == 9u)
     {
         s_plen = (uint16_t)(s_rx[7] | ((uint16_t)s_rx[8] << 8));
-        if (s_plen > (uint16_t)OTA_RX_MAX_PAYLOAD) { rx_reset(); return 1u; }
+        if (s_plen > (uint16_t)OTA_RX_MAX_PAYLOAD) { rx_reset(); return claim_byte(); }
     }
     else if ((s_rxlen >= 11u) && (s_rxlen == (uint16_t)(9u + s_plen + 2u)))
     {
-        handle_frame();
+        handle_frame();   /* 合法 DATA 帧会在这里把 s_state 切出 OTA_RX_OFF */
         rx_reset();
     }
-    return 1u;
+    return claim_byte();
 }
 
 uint8_t ota_recv_sniff(uint8_t byte)
