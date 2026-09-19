@@ -1,7 +1,5 @@
 # ===== 并入 alarm_board 时排除的体积大头（源码保留，产物/厂商资料/C# 工程不入库） =====
-doc/
 release/
-_archive_deadcode/
 _microboot_ref/
 .agents/
 **/output/
@@ -27,7 +25,12 @@ _microboot_ref/
 **/*.apk
 **/*.exe
 **/*.dll
-**/*.lib
+# **/*.lib —— 自 2026-09-19 起【不再忽略】。原来这条把链接必需的库全挡在库外，clone 下来链不上：
+#   HC32F4A0_OTA/driver_lib/hc32f4a_driver.lib      ← app 链（本仓库自研驱动，随源码一起走）
+#   HC32F4A0_OTA/driver_lib/ModuleAPI_C_ARM.lib     ← app + driver 链
+#   HC32F4A0_OTA/driver_lib/RTX_CM4F.lib            ← app 链
+#   HC32F4A0_OTA/hc32f4a0_driver/projects/rtos2_help/RTX_CM4F.lib  ← driver 工程链
+#   （构建产物里的同名 .lib 仍被上面的 **/output/ 忽略，不会重复入库）
 **/*.pdb
 ReaderUI_v2_linux/
 ReaderUI_v1_MCU/

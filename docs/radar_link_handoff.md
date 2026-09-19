@@ -310,7 +310,8 @@ case COMMON_INTERFACE_UART0:
 | **查询周期 `QUERY_PERIOD_MS = 50`** | 我估的（STM32F0 是 200ms 判超时，取 1/4）。**现场合适值未实测** |
 | **RS485 方向控制** | `uart_rs485_Init()` 里**没有任何 DE/RE 切换**（`RS485_set_send/rec` 只用在 USART4 那条路）。**推测 CM_USART3/8/5 是自动方向收发器 —— 未验证**。若 LED3 在闪（发了）但 LED4 不闪（收不到），这一条要优先怀疑 |
 | **`DeviceID` / `Alarm_Duration` / `Radarcfg` 字段取值** | 现阶段只做"在线探测"，相关字段留 0；真要下发报警命令时需按项目 1 的定义填 |
-| **驱动 `.lib` 的构建产物路径** | ✅ **已确认**（2026-09-19 晚）：工程 `hc32f4a0_driver.uvprojx`（**不是** `hc32f46_driver.uvprojx`，那是 F460 的）自带 AfterMake `xcopy .\output\hc32f4a_driver.lib ..\..\..\driver_lib /Y`，编完自动覆盖 app 链的那份；只编 driver 就够，**不用手工拷贝**。⚠️ 但 `.lib` 被 `HC32F4A0_OTA/.gitignore:30 (**/*.lib)` 忽略、**不入库** → **clone/换机后必须先重编 driver 工程**，否则 app 链的是旧逻辑 |
+| **驱动 `.lib` 的构建产物路径** | ✅ **已确认**（2026-09-19 晚）：工程 `hc32f4a0_driver.uvprojx`（**不是** `hc32f46_driver.uvprojx`，那是 F460 的）自带 AfterMake `xcopy .\output\hc32f4a_driver.lib ..\..\..\driver_lib /Y`，编完自动覆盖 app 链的那份；只编 driver 就够，**不用手工拷贝**。⚠️ 但 `.lib` 当时被 `HC32F4A0_OTA/.gitignore` 的 `**/*.lib` 忽略、**不入库** → clone/换机后必须先重编 driver。
+   > ✅ **已修（2026-09-19）**：该规则已删除，链接必需的库全部入库（见 §8.5），clone 下来不再需要先重编；不过 `driver_lib/hc32f4a_driver.lib` 现在会随每次驱动改动产生二进制 diff，属预期 |
 
 ### 9.3 改动风险（改驱动前必须知道）
 
@@ -381,6 +382,21 @@ case COMMON_INTERFACE_UART0:
 | --- | --- |
 | `tools/merge_f460_image.py` | Boot + 槽A/B 合成整片 512KB bin（烧录用） |
 | `tools/ota_pack_f460.py` | 生成 `radar_slot{A,B}_v*.otapkg`（OTA 用，改名 `RADAR.BIN` 丢进 MSC） |
+
+**入库策略（2026-09-19 修订）**：`HC32F4A0_OTA/.gitignore` 里的 `**/*.lib` 已删除 ——
+原来那条把**链接必需的库**全挡在库外，clone 下来根本链不上。现已入库：
+
+| 文件 | 谁链它 |
+| --- | --- |
+| `HC32F4A0_OTA/driver_lib/hc32f4a_driver.lib` | app |
+| `HC32F4A0_OTA/driver_lib/ModuleAPI_C_ARM.lib` | app + driver |
+| `HC32F4A0_OTA/driver_lib/RTX_CM4F.lib` | app |
+| `HC32F4A0_OTA/driver_lib/json_parser.lib` | 当前工程没引用（留档） |
+| `HC32F4A0_OTA/hc32f4a0_driver/projects/rtos2_help/RTX_CM4F.lib` | driver 工程 |
+
+同时 `doc/`（18 篇工程/OTA 文档）与 `_archive_deadcode/`（14 个源文件存档）取消忽略并入库。
+**仍然忽略**（都是产物或体量待定，注意 `**/output/` 里那份 `hc32f4a_driver.lib` 是构建产物，不入库）：
+`release/`、`dist/`、`stm32f300cct6/`、`_microboot_ref/`、`ReaderUI_v1_MCU/`、`Scanner_20260901/`（独立仓库，自带远端）。
 
 ### 8.6 一个反复踩的坑：模块被链接器回收
 

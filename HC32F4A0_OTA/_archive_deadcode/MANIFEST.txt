@@ -1,0 +1,13 @@
+hc32f4a0_driver\projects\user\src\sysinit.c  ->  _archive_deadcode/driver/user/src/sysinit.c
+hc32f4a0_driver\projects\user\src\hwport.c  ->  _archive_deadcode/driver/user/src/hwport.c
+hc32f4a0_driver\projects\user\src\adc.c  ->  _archive_deadcode/driver/user/src/adc.c
+hc32f4a0_driver\projects\user\src\flash.c  ->  _archive_deadcode/driver/user/src/flash.c
+hc32f4a0_driver\projects\user\src\flash_op.c  ->  _archive_deadcode/driver/user/src/flash_op.c
+hc32f4a0_driver\projects\user\src\hpm6340.c  ->  _archive_deadcode/driver/user/src/hpm6340.c
+hc32f4a0_driver\projects\user\src\qspi_flash.c  ->  _archive_deadcode/driver/user/src/qspi_flash.c
+hc32f4a0_driver\projects\user\src\Retarget.c  ->  _archive_deadcode/driver/user/src/Retarget.c
+hc32f4a0_driver\projects\source\usart.c  ->  _archive_deadcode/driver/source/usart.c
+hc32f4a0_app\projects\app\src\EASConfigHandler.cpp  ->  _archive_deadcode/app/src/EASConfigHandler.cpp
+hc32f4a0_app\projects\app\inc\EASConfigHandler.h  ->  _archive_deadcode/app/inc/EASConfigHandler.h
+hc32f4a0_app\projects\app\src\hpm6340.c  ->  _archive_deadcode/app/src/hpm6340.c
+hc32f4a0_app\projects\app\src\w25qxx.c  ->  _archive_deadcode/app/src/w25qxx.c
