@@ -1,7 +1,8 @@
 # F4A0 雷达板链路（radar_link）交接文档
 
 > 2026-09-19。写给下一个会话/下一个人的**断点续传**说明。
-> 状态：**未打通**。链路收发在驱动层就断了，详见 §3。
+> 状态：**RX 已打通**（2026-09-19 晚第二次会话，提交 `4258f30`）：驱动三处断点已修，
+> LED2/3/4 有人常亮；上板复核见 §9.1。
 
 ---
 
@@ -118,7 +119,7 @@ alarm_confirm_package { framehead(0xFF), deviceID, alarm_done, unused[5],
 
 ---
 
-## 3. 【核心阻塞】驱动层三处断点 —— RX 通路根本没接
+## 3. 【核心阻塞】驱动层三处断点 —— RX 通路根本没接　【已修复，见 §3.2】
 
 现场日志刷屏：
 
@@ -170,6 +171,32 @@ case COMMON_INTERFACE_UART0:
 （注意 `read()` 的 UART 分支里用的是 `uart_recv()`，它读 `gUartParams[s-100].recvbuf`，
 所以 ①②里缓冲的接法要跟 `gUartParams[4/5/6].recvbuf` 对齐，别各写一套。）
 
+### 3.2 实际修法（2026-09-19 晚，提交 `4258f30`）——比 §3.1 草图多 3 处配套
+
+**① 没照 §3.1 的 `BUF_Write/BUF_UsedSize` 抄**：`read()` 走的是 `uart_recv()` →
+`gUartParams[s-100].recvbuf`，而 `BUF_UsedSize()` 给的是"已用字节数"、不是写指针；
+且 4/5/6 的 `recvbuf` 原本是 **NULL / recvbufsize=0**（照草图写会从 NULL 读）。
+所以 ①②按 §3.1 括号那句要求，用与 UART0..3 **完全相同**的模型：
+
+| # | 位置 | 做法 |
+| --- | --- | --- |
+| ① | `rs485_1/2/3.c` RX 中断 | 字节写入 `gRs485_NRecvBuf`，写指针 `rs485_Nreccount`（2K/口，静态数组不进堆） |
+| ② | `usart_driver.c` | `hc32f460_uart_get_bytes_cnt()` 补 4/5/6 返回写指针；`uart_err_clear()` 按**实际串口**下标（RS485_1/2/3 = 4/5/6；`uart4.c` 原来误清下标 2） |
+| ③ | `io_stream.c` | `read()` 补 `RS485_1/2/3` case，与 UART0..3 合并进同一分支 |
+| **配套 1** | `usart_driver.c hc32f460_uart_init()` | 给 4/5/6 **先挂 `recvbuf/recvbufsize`、再 `uart_rs485_Init()`**（中断在里面才使能）；`clear_buf`/`init_uart_close` 一并补 4/5/6 |
+| **配套 2** | `io_stream.c ioctl()` | 补 RS485 —— **不补这条 §9.3.3 必然发生**：`radar_link` 的 `SET_ISBLOCK(1)` 会静默失败，`read()` 一直走 `O_BLOCK` |
+| **配套 3** | `io_stream.c write()` | 补 RS485 转 `Uart_RS485_send()`（`radar_ota.c`→`ota_dist.c` 的 `write(104)` 原来必定失败）；`uart_close()` 也补 |
+
+另：`hc32f46_driver.h` 补 `wait_init_ok()` 声明（消掉 `radar_link.c` 的隐式声明 warning）。
+
+**`radar_link.c` 侧同步改了 3 处**：
+1. `radar_link_init()` 改**先 `uart_open()` 再 `ioctl`**（`io_stream.c:291` 的 `uart_open()` 对已打开的口是
+   no-op，所以两个打开时序都收敛到"非阻塞"，§9.3.3 的洞消掉）；
+2. 删掉 §4.2 的三级临时诊断闪灯；
+3. 状态灯口径 = **有人常亮 / 无人释放**，走共用 `Alarm_Output(LED,1,0,0)` + `Alarm_Disable()`
+   （不用 `(5,5,1)`：那是 50ms 亮/50ms 灭**连续闪**；`OFF` 传 0 时 `GPIO_Pro()` 直接 return，
+   通道保持占用且引脚不翻转 —— `bsp_led.c:223`）。
+
 ---
 
 ## 4. 已落地的代码
@@ -187,7 +214,7 @@ case COMMON_INTERFACE_UART0:
   且那里设的是 `O_BLOCK` —— 重复打开/被覆盖会让 `read()` 永久阻塞、线程卡死。
   本模块只做 `ioctl(SET_ISBLOCK/SET_TIMEOUT/CLEAR_REVBUF)`，并照 `send_tags` 先 `wait_init_ok()`。
 
-### 4.2 ⚠️ 代码里有【临时诊断】必须删
+### 4.2 ⚠️ 代码里有【临时诊断】必须删　【已删，2026-09-19 晚 / 4258f30】
 
 `radar_link.c` 中一段三级 LED 定位（搜 `【临时诊断】`）：
 
@@ -230,12 +257,21 @@ case COMMON_INTERFACE_UART0:
 
 ## 6. 下一步（建议顺序）
 
-1. 按 §3.1 修驱动三处 + 重编 lib（这是唯一阻塞项）
-2. 上板验证：`LED4` 开始闪 = `read()` 能取到字节
-3. 再看 `LED3/LED4` 是否按预期闪 → 确认帧解析通过、`radar_val` 置位 → LED2/3/4 显示雷达"有人"
-4. 删掉 §4.2 的临时诊断
-5. 按 §4.3 拆成 `radar_proto` + `radar_plat`
-6. 数据上报去处（MQTT / HTTP / 现有 RFID 数据模型）**仍未定**
+1. ~~按 §3.1 修驱动三处 + 重编 lib（这是唯一阻塞项）~~ → ✅ **已完成**（`4258f30`，见 §3.2）
+2. ~~上板验证：`LED4` 开始闪~~ → 诊断灯已删；改为**看 LED2/3/4 有人常亮**（现场已反馈正常）
+3. 上板复核：人走开后灯是否**灭**、多久灭（见下方"灭灯延迟"这条待确认）
+4. ~~删掉 §4.2 的临时诊断~~ → ✅ 已删
+5. 按 §4.3 拆成 `radar_proto` + `radar_plat` —— **未做**
+6. 数据上报去处（MQTT / HTTP / 现有 RFID 数据模型）→ 用户 2026-09-19 明确：**暂时不上传**
+
+**待确认（下次上板第一件事）**：灭灯延迟到底是 50ms 还是 200ms —— 这能区分 F460 的两种行为：
+- 现象 A：无人时板子**照常应答**且 `gpioIn=0` → `handle_var_frame`（`radar_link.c:148`）当场清零
+  `radar_val` → 灭灯 ≈ **一个查询周期（`QUERY_PERIOD_MS`=50ms）+ 轮询粒度 10ms**；
+- 现象 B：无人时板子**静默不答** → 只能等新鲜度超时（`RADAR_LINK_FRESH_MS`=200ms，`radar_link.c:280`）
+  才灭，且此时 `online` 会被打成 0。
+
+分辨方法：无人时看 `rx_frames` 还在不在涨（涨 = A，不涨 = B）。两个旋钮都在明面上，
+确认现象后再决定调哪个。
 
 ---
 
@@ -254,6 +290,17 @@ case COMMON_INTERFACE_UART0:
 **第 2 步是分水岭**：在 LED4 闪起来之前，**不要再去调帧格式、地址、周期** ——
 链路根本收不到任何字节，调上层全是白费（本次就是这么浪费了四轮）。
 
+**2026-09-19 晚复核（提交 `4258f30`）**：
+
+| # | 结果 | 证据 |
+| --- | --- | --- |
+| 1 | ✅ 已达成 | 驱动 log `0 Error(s)`；app log `0 Error(s)`，`Code=383164 RO=24336 RW=14296 ZI=166440` |
+| 2 | ⏳ **待上板** | —— |
+| 3 | ⏳ 待上板 | —— |
+| 4 | ⏳ 待上板（现场反馈 LED 已按"有人"点亮） | —— |
+| 5 | ✅ 已删（§4.2 三段全删） | `grep Alarm_Output radar_link.c` 只剩状态灯那一处，且走的是 `Alarm_Output(LED,1,0,0)` |
+| 附 | `radar_link` 未被链接器回收 | `firmware.map` 只 `Removing` 了 `radar_link_get/of_antenna/antenna_alarm` 三个没人调的访问器；`radar_link_poll` refers to `read`/`Alarm_Output`/`Alarm_Disable` |
+
 ### 9.2 开放项（还没定，别自行假设）
 
 | 项 | 状态 |
@@ -263,7 +310,7 @@ case COMMON_INTERFACE_UART0:
 | **查询周期 `QUERY_PERIOD_MS = 50`** | 我估的（STM32F0 是 200ms 判超时，取 1/4）。**现场合适值未实测** |
 | **RS485 方向控制** | `uart_rs485_Init()` 里**没有任何 DE/RE 切换**（`RS485_set_send/rec` 只用在 USART4 那条路）。**推测 CM_USART3/8/5 是自动方向收发器 —— 未验证**。若 LED3 在闪（发了）但 LED4 不闪（收不到），这一条要优先怀疑 |
 | **`DeviceID` / `Alarm_Duration` / `Radarcfg` 字段取值** | 现阶段只做"在线探测"，相关字段留 0；真要下发报警命令时需按项目 1 的定义填 |
-| **驱动 `.lib` 的构建产物路径** | 需新会话**先确认**：`hc32f4a0_driver` 工程编出的 `.lib` 要落到 `HC32F4A0_OTA/driver_lib/hc32f4a_driver.lib`（app 就是链这个）。改完必须**替换该文件**再重链 app，否则改动不生效 |
+| **驱动 `.lib` 的构建产物路径** | ✅ **已确认**（2026-09-19 晚）：工程 `hc32f4a0_driver.uvprojx`（**不是** `hc32f46_driver.uvprojx`，那是 F460 的）自带 AfterMake `xcopy .\output\hc32f4a_driver.lib ..\..\..\driver_lib /Y`，编完自动覆盖 app 链的那份；只编 driver 就够，**不用手工拷贝**。⚠️ 但 `.lib` 被 `HC32F4A0_OTA/.gitignore:30 (**/*.lib)` 忽略、**不入库** → **clone/换机后必须先重编 driver 工程**，否则 app 链的是旧逻辑 |
 
 ### 9.3 改动风险（改驱动前必须知道）
 
@@ -276,6 +323,12 @@ case COMMON_INTERFACE_UART0:
 3. **`Usart_RS485_init()` 里设的是 `O_BLOCK`** —— 若 `read()` 补上 case 后仍按
    `isBlock == O_BLOCK` 走阻塞分支，而 `radar_link` 又没有把端口设成非阻塞，
    **轮询线程会被 `read()` 卡死**（本次已踩过一次）。平台层务必确保 `SET_ISBLOCK(1)` 生效。
+   > **已消除（`4258f30`）**：一是 `ioctl()` 补了 RS485，`SET_ISBLOCK(1)` 才真正生效（此前静默失败）；
+   > 二是顺序洞也补了 —— `radar_link_init()` 改为**先 `uart_open()` 再 `ioctl`**，
+   > 而 `uart_open()` 对已打开的口是 no-op（`io_stream.c:291`），所以"它先开/我们先开"两种时序
+   > 都收敛到非阻塞，不再依赖谁先跑。
+   > 另：即使真落到 `O_BLOCK`，`Usart_RS485_init()` 给的 `timeout=20` 也只会 ~25ms 后返回 `-2`，
+   > **不会死等**（会拖慢轮询节奏、可能踩到 200ms 新鲜度，但不会卡死线程）。
 4. **驱动 `.lib` 是共享的** —— 它不只服务本次功能，改错了影响面是整个 F4A0 产品。
    改完**至少回归一次 RFID 主链路**（检测标签 + 报警）。
 
@@ -347,6 +400,9 @@ Select-String -Path '<build log>' -Pattern 'Program Size'
 ## 7. 常用命令
 
 ```powershell
+# 编 F4A0 driver（生成 hc32f4a_driver.lib，AfterMake 自动 xcopy 到 driver_lib）
+Start-Process 'D:\Keil_v5\UV4\UV4.exe' -ArgumentList @('-r','J:\dsh\alarm_board\HC32F4A0_OTA\hc32f4a0_driver\projects\MDK\hc32f4a0_driver.uvprojx','-j0','-o',"$env:TEMP\drv.log") -Wait
+
 # 编 F4A0 app
 Start-Process 'D:\Keil_v5\UV4\UV4.exe' -ArgumentList @('-r','J:\dsh\alarm_board\HC32F4A0_OTA\hc32f4a0_app\projects\MDK\hc32f4a0_app.uvprojx','-j0','-o',"$env:TEMP\f4a0.log") -Wait
 
